@@ -1,0 +1,15 @@
+repos:
+  - repo: local
+    hooks:
+      - id: verify-fast
+        name: verify-fast
+        entry: make verify-fast
+        language: system
+        pass_filenames: false
+      - id: verify-security
+        name: verify-security
+        entry: make verify-security
+        language: system
+        pass_filenames: false
+        stages:
+          - pre-push

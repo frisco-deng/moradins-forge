@@ -1,0 +1,6 @@
+manager_schema_version: 2
+template_schema_version: 2
+template_id: base_app
+template_version: 0.1.0-alpha
+release_stage: alpha
+path_graph: canonical_only

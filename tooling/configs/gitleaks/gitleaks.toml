@@ -1,0 +1,20 @@
+title = "workspace-tooling-gitleaks"
+
+[allowlist]
+description = "Ignore archive and generated workspace trees"
+paths = [
+  '''artifacts/''',
+  '''archive/''',
+  '''.data/''',
+  '''outputs/''',
+  '''packs/''',
+  '''projects/_repo_backups/''',
+  '''projects/moradin_tmp_runs/''',
+  '''node_modules/''',
+  '''.venv/''',
+  '''.pytest_cache/''',
+  '''.ruff_cache/''',
+  '''dist/''',
+  '''build/''',
+  '''coverage/''',
+]

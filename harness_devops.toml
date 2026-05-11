@@ -1,0 +1,4 @@
+[launcher]
+ui_port = 5273
+ui_host = "auto"
+api_port = 8787

@@ -1,0 +1,22 @@
+version: 1
+routes:
+  - route_id: manager_bootstrap
+    source: AGENTS.md
+    target: Harness/entrypoints/agent.md
+    priority: 10
+  - route_id: engineer_entry
+    source: Harness/entrypoints/agent.md
+    target: docs/engineer_entry/index.md
+    priority: 20
+  - route_id: overview_truth
+    source: Harness/views/project_brief.md
+    target: docs/00_overview/index.md
+    priority: 30
+  - route_id: ops_truth
+    source: Harness/views/ops_brief.md
+    target: docs/11_ops/index.md
+    priority: 40
+  - route_id: canonical_paths
+    source: Harness/entrypoints/agent.md
+    target: Harness/schemas/canonical_paths.yaml
+    priority: 50
