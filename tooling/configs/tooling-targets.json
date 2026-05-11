@@ -1,0 +1,412 @@
+{
+  "schema_version": 1,
+  "repo": {
+    "repo_id": "moradins-forge",
+    "path": ".",
+    "archetype": "uv-forge",
+    "scan_tier": "hardened",
+    "containerized": false,
+    "default_branch": "main",
+    "git_policy_profile": "public-forge",
+    "github_flow_profile": "public-candidate",
+    "integration_branch": "",
+    "production_branch": "",
+    "dockerfiles": [],
+    "compose_files": [],
+    "npm_directories": [
+      "dev_tracker/ui"
+    ],
+    "bootstrap": {
+      "ci": {
+        "commands": [
+          "uv sync --group dev"
+        ],
+        "tools": []
+      },
+      "security": {
+        "commands": [
+          "uv sync --group dev"
+        ],
+        "tools": [
+          "gitleaks",
+          "trivy",
+          "actionlint",
+          "zizmor",
+          "conftest",
+          "yamllint",
+          "semgrep",
+          "pip-audit",
+          "syft",
+          "grype",
+          "osv-scanner"
+        ]
+      },
+      "container": {
+        "commands": [
+          "uv sync --group dev"
+        ],
+        "tools": [
+          "gitleaks",
+          "trivy",
+          "actionlint",
+          "zizmor",
+          "conftest",
+          "yamllint",
+          "semgrep",
+          "pip-audit",
+          "syft",
+          "grype",
+          "osv-scanner"
+        ]
+      }
+    },
+    "ui_cli": {
+      "enabled": true,
+      "mode": "headless",
+      "commands": [
+        "make ui-test-browser"
+      ]
+    },
+    "lane_policy": {
+      "active_lane_marker": "Harness/artifacts/task_lanes/active_lane.json",
+      "domain_lanes": {
+        "builder": {
+          "brief_target": "builder-brief",
+          "fast_target": "verify-fast",
+          "repair_target": "verify",
+          "ci_target": "verify-ci",
+          "heavy_targets": [
+            "verify",
+            "verify-ci",
+            "review-ready"
+          ],
+          "status_targets": [
+            "builder-brief",
+            "verify-fast",
+            "verify"
+          ],
+          "brief_artifact": "Harness/artifacts/task_lanes/builder-brief/latest/summary.json"
+        },
+        "adoption": {
+          "brief_target": "adoption-brief",
+          "fast_target": "verify-fast",
+          "repair_target": "verify",
+          "ci_target": "verify-ci",
+          "heavy_targets": [
+            "verify",
+            "verify-ci",
+            "review-ready"
+          ],
+          "status_targets": [
+            "adoption-brief",
+            "new-repo-brief",
+            "onboarding-brief",
+            "verify-fast",
+            "verify"
+          ],
+          "brief_artifact": "Harness/artifacts/task_lanes/adoption-brief/latest/summary.json"
+        },
+        "release": {
+          "brief_target": "release-brief",
+          "fast_target": "verify",
+          "repair_target": "review-ready",
+          "ci_target": "verify-ci",
+          "heavy_targets": [
+            "verify-ci",
+            "review-ready"
+          ],
+          "status_targets": [
+            "release-brief",
+            "verify",
+            "review-ready",
+            "verify-ci"
+          ],
+          "brief_artifact": "Harness/artifacts/task_lanes/release-brief/latest/summary.json"
+        }
+      }
+    }
+  },
+  "targets": {
+    "repo-brief": {
+      "kind": "brief",
+      "steps": [
+        {
+          "name": "brief-check-01",
+          "required": false,
+          "category": "brief-check",
+          "command": "make engineer-entry-guard"
+        }
+      ]
+    },
+    "bootstrap-ci": {
+      "kind": "commands",
+      "steps": [
+        {
+          "name": "bootstrap-ci",
+          "required": true,
+          "category": "bootstrap",
+          "command": "python3 tooling/bin/bootstrap_env.py bootstrap-ci"
+        }
+      ]
+    },
+    "bootstrap-security": {
+      "kind": "commands",
+      "steps": [
+        {
+          "name": "bootstrap-security",
+          "required": true,
+          "category": "bootstrap",
+          "command": "python3 tooling/bin/bootstrap_env.py bootstrap-security"
+        }
+      ]
+    },
+    "verify-paths": {
+      "kind": "commands",
+      "steps": [
+        {
+          "name": "verify-paths",
+          "required": true,
+          "category": "path-hygiene",
+          "command": "python3 tooling/bin/repo_path_hygiene.py --check --refresh-report"
+        }
+      ]
+    },
+    "fix-paths-safe": {
+      "kind": "commands",
+      "steps": [
+        {
+          "name": "fix-paths-safe",
+          "required": false,
+          "category": "path-hygiene",
+          "command": "python3 tooling/bin/repo_path_hygiene.py --rewrite-safe --refresh-report"
+        }
+      ]
+    },
+    "verify-fast": {
+      "kind": "commands",
+      "steps": [
+        {
+          "name": "verify-fast-01",
+          "required": true,
+          "category": "verify-fast",
+          "command": "make quick-check"
+        }
+      ]
+    },
+    "verify": {
+      "kind": "commands",
+      "steps": [
+        {
+          "name": "verify-01",
+          "required": true,
+          "category": "verify",
+          "command": "make review-check"
+        }
+      ]
+    },
+    "verify-security": {
+      "kind": "commands",
+      "steps": [
+        {
+          "name": "repo-security-01",
+          "required": true,
+          "category": "repo-security",
+          "command": "make lint"
+        },
+        {
+          "name": "gitleaks",
+          "required": true,
+          "category": "secret-scan",
+          "command": "gitleaks detect --no-git --no-banner --redact --max-target-megabytes 10 --report-format json --report-path \"{artifact_root}/gitleaks.json\" --config tooling/configs/gitleaks/gitleaks.toml --source .",
+          "tool": "gitleaks"
+        },
+        {
+          "name": "trivy-fs",
+          "required": true,
+          "category": "security-scan",
+          "command": "trivy fs --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed --scanners vuln,secret,misconfig,license --skip-dirs artifacts --skip-dirs archive --skip-dirs _archive --skip-dirs .data --skip-dirs outputs --skip-dirs packs --skip-dirs node_modules --skip-dirs .venv --skip-dirs .pytest_cache --skip-dirs .ruff_cache --skip-dirs .mypy_cache --skip-dirs .nox --skip-dirs .tox --skip-dirs .uv-cache --skip-dirs dist --skip-dirs build --skip-dirs coverage .",
+          "tool": "trivy"
+        },
+        {
+          "name": "workflow-actionlint",
+          "required": true,
+          "category": "workflow",
+          "command": "if compgen -G \".github/workflows/tooling-*.yml\" > /dev/null; then actionlint .github/workflows/tooling-*.yml; elif compgen -G \".github/workflows/*.yml\" > /dev/null; then actionlint .github/workflows/*.yml; else echo \"no workflows detected\"; fi",
+          "tool": "actionlint"
+        },
+        {
+          "name": "workflow-zizmor",
+          "required": true,
+          "category": "workflow",
+          "command": "if compgen -G \".github/workflows/tooling-*.yml\" > /dev/null; then zizmor .github/workflows/tooling-*.yml; elif compgen -G \".github/workflows/*.yml\" > /dev/null; then zizmor .github/workflows/*.yml; else echo \"no workflows detected\"; fi",
+          "tool": "zizmor"
+        },
+        {
+          "name": "workflow-conftest",
+          "required": true,
+          "category": "workflow",
+          "command": "if compgen -G \".github/workflows/tooling-*.yml\" > /dev/null; then conftest test --all-namespaces -p tooling/policies/conftest/github-actions .github/workflows/tooling-*.yml; elif compgen -G \".github/workflows/*.yml\" > /dev/null; then conftest test --all-namespaces -p tooling/policies/conftest/github-actions .github/workflows/*.yml; else echo \"no workflows detected\"; fi",
+          "tool": "conftest"
+        },
+        {
+          "name": "workflow-yamllint",
+          "required": true,
+          "category": "workflow",
+          "command": "if compgen -G \".github/workflows/tooling-*.yml\" > /dev/null; then yamllint -c tooling/configs/yamllint/yamllint.yaml .github/workflows/tooling-*.yml; elif compgen -G \".github/workflows/*.yml\" > /dev/null; then yamllint -c tooling/configs/yamllint/yamllint.yaml .github/workflows/*.yml; else echo \"no workflows detected\"; fi",
+          "tool": "yamllint"
+        },
+        {
+          "name": "semgrep",
+          "required": false,
+          "category": "security-scan",
+          "command": "semgrep scan --config auto --error --exclude artifacts --exclude archive --exclude _archive --exclude .data --exclude outputs --exclude packs --exclude node_modules --exclude .venv --exclude .pytest_cache --exclude .ruff_cache --exclude .mypy_cache --exclude .nox --exclude .tox --exclude build --exclude dist --exclude coverage .",
+          "tool": "semgrep"
+        },
+        {
+          "name": "pip-audit",
+          "required": false,
+          "category": "dependency-scan",
+          "command": "if [ -f pyproject.toml ]; then uv export --format requirements-txt --no-hashes > \"{artifact_root}/python-requirements.txt\" && pip-audit -r \"{artifact_root}/python-requirements.txt\" --no-deps --disable-pip; else echo \"python dependency audit not applicable\"; fi",
+          "tool": "pip-audit"
+        },
+        {
+          "name": "syft",
+          "required": true,
+          "category": "sbom",
+          "command": "syft dir:. --exclude './artifacts/**' --exclude '**/artifacts/**' --exclude './archive/**' --exclude '**/archive/**' --exclude './_archive/**' --exclude '**/_archive/**' --exclude './.data/**' --exclude '**/.data/**' --exclude './outputs/**' --exclude '**/outputs/**' --exclude './packs/**' --exclude '**/packs/**' --exclude './node_modules/**' --exclude '**/node_modules/**' --exclude './.venv/**' --exclude '**/.venv/**' --exclude './.pytest_cache/**' --exclude '**/.pytest_cache/**' --exclude './.ruff_cache/**' --exclude '**/.ruff_cache/**' --exclude './.mypy_cache/**' --exclude '**/.mypy_cache/**' --exclude './.nox/**' --exclude '**/.nox/**' --exclude './.tox/**' --exclude '**/.tox/**' --exclude './.uv-cache/**' --exclude '**/.uv-cache/**' --exclude './dist/**' --exclude '**/dist/**' --exclude './build/**' --exclude '**/build/**' --exclude './coverage/**' --exclude '**/coverage/**' -o json > \"{artifact_root}/syft-sbom.json\"",
+          "tool": "syft"
+        },
+        {
+          "name": "grype",
+          "required": true,
+          "category": "security-scan",
+          "command": "grype dir:. --exclude './artifacts/**' --exclude '**/artifacts/**' --exclude './archive/**' --exclude '**/archive/**' --exclude './_archive/**' --exclude '**/_archive/**' --exclude './.data/**' --exclude '**/.data/**' --exclude './outputs/**' --exclude '**/outputs/**' --exclude './packs/**' --exclude '**/packs/**' --exclude './node_modules/**' --exclude '**/node_modules/**' --exclude './.venv/**' --exclude '**/.venv/**' --exclude './.pytest_cache/**' --exclude '**/.pytest_cache/**' --exclude './.ruff_cache/**' --exclude '**/.ruff_cache/**' --exclude './.mypy_cache/**' --exclude '**/.mypy_cache/**' --exclude './.nox/**' --exclude '**/.nox/**' --exclude './.tox/**' --exclude '**/.tox/**' --exclude './.uv-cache/**' --exclude '**/.uv-cache/**' --exclude './dist/**' --exclude '**/dist/**' --exclude './build/**' --exclude '**/build/**' --exclude './coverage/**' --exclude '**/coverage/**' --fail-on high",
+          "tool": "grype"
+        },
+        {
+          "name": "osv-scanner",
+          "required": false,
+          "category": "dependency-scan",
+          "command": "osv-scanner scan source -r . --format json > \"{artifact_root}/osv-scanner.json\"",
+          "tool": "osv-scanner"
+        }
+      ]
+    },
+    "verify-ui-cli": {
+      "kind": "commands",
+      "steps": [
+        {
+          "name": "verify-ui-cli-01",
+          "required": true,
+          "category": "ui-cli",
+          "command": "CI=1 make ui-test-browser"
+        }
+      ]
+    },
+    "builder-brief": {
+      "kind": "commands",
+      "steps": [
+        {
+          "name": "builder-brief-01",
+          "required": true,
+          "category": "repo-native brief/status",
+          "command": "uv run python scripts/domain_briefs.py builder-brief"
+        }
+      ]
+    },
+    "adoption-brief": {
+      "kind": "commands",
+      "steps": [
+        {
+          "name": "adoption-brief-01",
+          "required": true,
+          "category": "repo-native brief/status",
+          "command": "uv run python scripts/domain_briefs.py adoption-brief"
+        }
+      ]
+    },
+    "release-brief": {
+      "kind": "commands",
+      "steps": [
+        {
+          "name": "release-brief-01",
+          "required": true,
+          "category": "repo-native brief/status",
+          "command": "uv run python scripts/domain_briefs.py release-brief"
+        }
+      ]
+    },
+    "new-repo-brief": {
+      "kind": "commands",
+      "steps": [
+        {
+          "name": "new-repo-brief-01",
+          "required": true,
+          "category": "repo-native brief/status",
+          "command": "uv run python scripts/new_repo_onboarding.py new-repo-brief"
+        }
+      ]
+    },
+    "onboarding-brief": {
+      "kind": "commands",
+      "steps": [
+        {
+          "name": "onboarding-brief-01",
+          "required": true,
+          "category": "repo-native brief/status",
+          "command": "uv run python scripts/new_repo_onboarding.py onboarding-brief"
+        }
+      ]
+    },
+    "review-ready": {
+      "kind": "review-ready",
+      "prep_steps": [
+        {
+          "name": "review-ready-prep-01",
+          "required": true,
+          "category": "prep",
+          "command": "make sync-engineer-entry"
+        }
+      ],
+      "core_targets": [
+        "repo-brief",
+        "verify-paths",
+        "verify-fast",
+        "verify",
+        "verify-security"
+      ],
+      "full_targets": [
+        "repo-brief",
+        "verify-paths",
+        "verify-fast",
+        "verify",
+        "verify-security",
+        "verify-ui-cli",
+        "ci-local"
+      ],
+      "advisory_targets": [
+        "ci-local"
+      ]
+    },
+    "verify-ci": {
+      "kind": "commands",
+      "steps": [
+        {
+          "name": "verify-paths",
+          "required": true,
+          "category": "path-hygiene",
+          "command": "python3 tooling/bin/repo_path_hygiene.py --check --refresh-report"
+        },
+        {
+          "name": "verify-ci-01",
+          "required": true,
+          "category": "verify-ci",
+          "command": "make alpha-check"
+        }
+      ]
+    },
+    "ci-local": {
+      "kind": "ci-local"
+    }
+  }
+}

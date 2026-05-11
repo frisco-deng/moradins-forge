@@ -1,0 +1,101 @@
+manifest_version: 1
+name: moradin_harness_payload
+kind: moradin_payload
+payload_id: moradin_harness_payload
+payload_version: 0.2.0-alpha
+source_root: .
+compatibility_template_root: .harness_template
+materialization_target: target_repo_root
+sidecar_default_dir: .moradins-harness
+compatibility_window: bridge_first
+include_paths:
+  - AGENTS.md
+  - FORGE.md
+  - ARCHITECTURE.md
+  - DESIGN.md
+  - FRONTEND.md
+  - PLANS.md
+  - PRODUCT_SENSE.md
+  - QUALITY_SCORE.md
+  - RELIABILITY.md
+  - SECURITY.md
+  - README.md
+  - Makefile
+  - pyproject.toml
+  - uv.lock
+  - Harness/moradin_payload/manifest.yaml
+  - docs/engineer_entry
+  - docs/00_overview
+  - docs/02_contracts
+  - docs/03_architecture
+  - docs/11_ops
+  - docs/13_style_guides
+  - docs/15_checklists
+  - docs/entrypoint_guide
+  - docs/design_docs
+  - docs/product_specs
+  - Harness/entrypoints
+  - Harness/artifacts/control/current_guidance.md
+  - Harness/artifacts/control/current_features.md
+  - Harness/artifacts/control/compatibility_window_status.md
+  - Harness/artifacts/control/changelog.md
+  - Harness/artifacts/control/loop_state.md
+  - Harness/artifacts/schemas
+  - docs/references
+  - skills
+  - scripts/moradin_forge.py
+  - scripts/moradin_forge.sh
+  - scripts/moradin_forge.ps1
+  - scripts/manage_moradin_payload.py
+  - scripts/manage_harness_template.py
+  - scripts/public_export.py
+  - scripts/check_contract_compatibility.py
+  - scripts/generate_openapi_snapshots.py
+  - scripts/validate_repo_skills.py
+  - scripts/validate_capture_contract.py
+  - dev_tracker/ui/src
+  - dev_tracker/ui/scripts
+  - dev_tracker/ui/tests
+  - dev_tracker/ui/package.json
+  - dev_tracker/ui/package-lock.json
+  - dev_tracker/ui/tsconfig.json
+  - dev_tracker/ui/tsconfig.app.json
+  - dev_tracker/ui/vite.config.ts
+  - dev_tracker/ui/index.html
+  - tests/conftest.py
+  - tests/contracts/test_compatibility.py
+  - tests/contracts/test_validators.py
+  - tests/scripts/test_harness_devops.py
+  - tests/scripts/test_moradin_forge.py
+  - tests/scripts/test_public_export.py
+  - tests/scripts/test_validate_capture_contract.py
+exclude_paths:
+  - Harness/artifacts/reports/beta
+  - public_audit/release_reports_excluded
+  - public_audit/release_evidence_excluded
+  - Harness/artifacts/control/project_status_history
+  - Harness/artifacts/control/branch_hygiene_exception.json
+  - Harness/artifacts/control/branch_hygiene_exception.md
+  - Harness/artifacts/control/forge_runs
+  - Harness/artifacts/control/install_requests
+  - Harness/artifacts/control/migration_start
+  - Harness/artifacts/control/migration_waves
+  - Harness/artifacts/control/review_hardening
+  - Harness/artifacts/control/public_export
+  - Harness/artifacts/control/repo_registry
+  - docs/archive
+  - docs/exec_plans
+  - docs/exec_plans/implementation/completed
+  - docs/exec_plans/updates
+  - Harness/artifacts/openapi
+  - Harness/generated
+  - dev_tracker/ui/public/generated
+  - dev_tracker/ui/dist
+  - dev_tracker/ui/node_modules
+  - dev_tracker/ui/.vite
+  - node_modules
+  - .venv
+  - .git
+  - artifacts
+  - public_audit
+  - .harness_devops

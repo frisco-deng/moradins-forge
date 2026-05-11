@@ -1,0 +1,36 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+node_modules/
+
+# Tracker UI build/runtime artifacts
+dev_tracker/ui/node_modules/
+dev_tracker/ui/dist/
+dev_tracker/ui/public/generated/
+dev_tracker/ui/.vite/
+dev_tracker/ui/*.tsbuildinfo
+dev_tracker/ui/.review_evidence/
+dev_tracker/ui/tests/__screenshots__/
+.harness_devops/
+public_exports/
+moradin-forge-public-export/
+public_audit/
+
+# Forge-generated local artifacts
+Harness/artifacts/control/forge_runs/
+Harness/artifacts/control/install_requests/
+Harness/artifacts/control/public_export/
+Harness/artifacts/control/repo_registry/
+Harness/artifacts/task_lanes/
+
+# BEGIN workspace-tooling
+# Generated tooling artifacts
+/artifacts/
+# END workspace-tooling

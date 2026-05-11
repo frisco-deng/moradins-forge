@@ -1,0 +1,70 @@
+name: Tooling / Security Core
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        # v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Setup Python
+        if: ${{ hashFiles('pyproject.toml') != '' }}
+        # v5.6.0
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        # v4
+        uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a
+      - name: Setup Node.js
+        if: ${{ hashFiles('package.json', 'frontend/package.json', 'ui/package.json', 'ui/frontend/package.json', 'dev_tracker/ui/package.json', 'apps/ui/frontend/package.json') != '' }}
+        # v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "20"
+      - name: Install Node dependencies
+        if: ${{ hashFiles('package.json', 'frontend/package.json', 'ui/package.json', 'ui/frontend/package.json', 'dev_tracker/ui/package.json', 'apps/ui/frontend/package.json') != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          install_dir() {
+            local dir="$1"
+            if [ ! -f "${dir}/package.json" ]; then
+              return 0
+            fi
+            if [ -f "${dir}/package-lock.json" ]; then
+              npm ci --prefix "${dir}"
+            else
+              npm install --prefix "${dir}"
+            fi
+          }
+
+          install_dir "."
+          for dir in frontend ui ui/frontend dev_tracker/ui apps/ui/frontend; do
+            if [ "${dir}" = "." ]; then
+              continue
+            fi
+            install_dir "${dir}"
+          done
+      - name: Bootstrap repo security dependencies
+        run: uv sync --group dev
+      - name: Run public portability security gate
+        run: make public-portability-check
+      - name: Validate payload contract
+        run: make payload-validate

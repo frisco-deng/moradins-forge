@@ -1,0 +1,14 @@
+manifest_version: 1
+name: moradins_harness_manager
+kind: manager_repo
+project_type: manager_repo
+docs_truth_root: docs
+control_plane_root: Harness
+entrypoint: Harness/entrypoints/agent.md
+template_root: .harness_template
+template_id: base_app
+template_version: 0.1.0-alpha
+path_convention: snake_case
+release_stage: alpha
+compatibility_mode: canonical_only
+template_materialization_mode: expand_contents_into_target_root

@@ -1,0 +1,52 @@
+{
+  "name": "moradin-forge-workbench",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sync-docs": "node ./scripts/sync-docs.mjs",
+    "sync:engineer-entry": "node ./scripts/generate-engineer-entry-index.mjs",
+    "check:engineer-entry": "node ./scripts/check-engineer-entry-frontmatter.mjs",
+    "qa:pass": "node ./scripts/qa-pass.mjs",
+    "watch-docs": "node ./scripts/watch-docs.mjs",
+    "control-api": "node ./scripts/control-api.mjs",
+    "dev": "vite",
+    "dev:ops": "node ./scripts/dev-ops.mjs",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "lint": "biome lint ./src ./tests ./scripts",
+    "format": "biome format --write ./src ./tests ./scripts",
+    "test": "vitest run --pool=forks --maxWorkers=1 --no-file-parallelism",
+    "test:browser": "vitest run --config ./vite.browser.config.ts",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@xyflow/react": "^12.10.1",
+    "framer-motion": "^11.18.2",
+    "gsap": "^3.14.2",
+    "lucide-react": "^0.469.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^9.0.1",
+    "react-router-dom": "^6.30.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.6",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@vitest/browser-playwright": "^4.0.18",
+    "@vitest/coverage-v8": "^4.0.18",
+    "@types/node": "^22.15.30",
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.4.1",
+    "jsdom": "^26.1.0",
+    "playwright": "^1.58.2",
+    "typescript": "^5.8.3",
+    "vite": "^7.3.1",
+    "vitest": "^4.0.18",
+    "vitest-browser-react": "^2.0.5"
+  }
+}
