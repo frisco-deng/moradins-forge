@@ -26,7 +26,7 @@
     "framer-motion": "^11.18.2",
     "gsap": "^3.14.2",
     "lucide-react": "^0.469.0",
-    "react": "^18.3.1",
+    "react": "^19.2.6",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.1",
     "react-router-dom": "^6.30.1"
@@ -39,7 +39,7 @@
     "@vitest/browser-playwright": "^4.0.18",
     "@vitest/coverage-v8": "^4.0.18",
     "@types/node": "^22.15.30",
-    "@types/react": "^18.3.23",
+    "@types/react": "^19.2.14",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.4.1",
     "jsdom": "^26.1.0",
