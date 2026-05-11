@@ -30,7 +30,7 @@ jobs:
           python-version: "3.12"
       - name: Install uv
         # v4
-        uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
       - name: Setup Node.js
         if: ${{ hashFiles('package.json', 'frontend/package.json', 'ui/package.json', 'ui/frontend/package.json', 'dev_tracker/ui/package.json', 'apps/ui/frontend/package.json') != '' }}
         # v4
