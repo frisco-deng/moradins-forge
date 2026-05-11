@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HarnessManifest",
+  "type": "object",
+  "required": [
+    "manifest_version",
+    "name",
+    "kind",
+    "project_type",
+    "docs_truth_root",
+    "control_plane_root",
+    "entrypoint",
+    "template_id",
+    "template_version",
+    "path_convention",
+    "release_stage"
+  ],
+  "properties": {
+    "manifest_version": {
+      "type": "integer"
+    },
+    "name": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string"
+    },
+    "project_type": {
+      "type": "string"
+    },
+    "docs_truth_root": {
+      "type": "string"
+    },
+    "control_plane_root": {
+      "type": "string"
+    },
+    "entrypoint": {
+      "type": "string"
+    },
+    "template_root": {
+      "type": "string"
+    },
+    "template_id": {
+      "type": "string"
+    },
+    "template_version": {
+      "type": "string"
+    },
+    "path_convention": {
+      "type": "string"
+    },
+    "release_stage": {
+      "type": "string"
+    },
+    "compatibility_mode": {
+      "type": "string"
+    }
+  }
+}

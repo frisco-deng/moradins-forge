@@ -1,0 +1,299 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RAG Platform Contracts Bundle",
+  "version": "1.0.0",
+  "generated": true,
+  "schemas": [
+    {
+      "name": "DocumentEnvelopeV1",
+      "schema": {
+        "type": "object",
+        "required": [
+          "document_id",
+          "source",
+          "content_uri",
+          "policy_context"
+        ],
+        "properties": {
+          "document_id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "content_uri": {
+            "type": "string"
+          },
+          "policy_context": {
+            "$ref": "#/schemas/2/schema"
+          }
+        }
+      }
+    },
+    {
+      "name": "ChunkEnvelopeV1",
+      "schema": {
+        "type": "object",
+        "required": [
+          "chunk_id",
+          "document_id",
+          "text",
+          "metadata"
+        ],
+        "properties": {
+          "chunk_id": {
+            "type": "string"
+          },
+          "document_id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "PolicyContextV1",
+      "schema": {
+        "type": "object",
+        "required": [
+          "subject",
+          "roles",
+          "attributes"
+        ],
+        "properties": {
+          "subject": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "attributes": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "RetrievalRequestV1",
+      "schema": {
+        "type": "object",
+        "required": [
+          "request_id",
+          "query",
+          "policy_context"
+        ],
+        "properties": {
+          "request_id": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "filters": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "policy_context": {
+            "$ref": "#/schemas/2/schema"
+          }
+        }
+      }
+    },
+    {
+      "name": "RetrievalPlanV1",
+      "schema": {
+        "type": "object",
+        "required": [
+          "plan_id",
+          "request_id",
+          "stages"
+        ],
+        "properties": {
+          "plan_id": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "RetrievalCandidateV1",
+      "schema": {
+        "type": "object",
+        "required": [
+          "candidate_id",
+          "chunk_id",
+          "score",
+          "provenance"
+        ],
+        "properties": {
+          "candidate_id": {
+            "type": "string"
+          },
+          "chunk_id": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          },
+          "provenance": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "EvidencePackV1",
+      "schema": {
+        "type": "object",
+        "required": [
+          "request_id",
+          "evidence_items"
+        ],
+        "properties": {
+          "request_id": {
+            "type": "string"
+          },
+          "evidence_items": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "GroundedAnswerV1",
+      "schema": {
+        "type": "object",
+        "required": [
+          "request_id",
+          "answer",
+          "citations"
+        ],
+        "properties": {
+          "request_id": {
+            "type": "string"
+          },
+          "answer": {
+            "type": "string"
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "IngestionJobEventV1",
+      "schema": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "job_id",
+          "status",
+          "event_time"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "job_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "event_time": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    {
+      "name": "ReindexJobEventV1",
+      "schema": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "index_name",
+          "from_version",
+          "to_version",
+          "event_time"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "index_name": {
+            "type": "string"
+          },
+          "from_version": {
+            "type": "string"
+          },
+          "to_version": {
+            "type": "string"
+          },
+          "event_time": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    {
+      "name": "AuditEventV1",
+      "schema": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "actor",
+          "action",
+          "resource",
+          "event_time"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "event_time": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    }
+  ]
+}

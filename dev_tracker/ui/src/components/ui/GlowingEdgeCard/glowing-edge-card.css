@@ -1,0 +1,164 @@
+.gec-card {
+  --gec-surface: linear-gradient(160deg, rgba(8, 18, 36, 0.9), rgba(6, 12, 28, 0.88));
+  --gec-border: rgba(148, 163, 184, 0.24);
+  --gec-fg: inherit;
+  --gec-glow-rgb: 59, 130, 246;
+  --gec-glow-alpha: 0.22;
+  --gec-glow-strength: 1;
+  --gec-edge-alpha: 0.58;
+  --gec-edge-hotspot-alpha: 0.92;
+  --gec-cone-size-deg: 52deg;
+  --gec-hotspot-size: 76px;
+  --gec-radius-px: 240px;
+  --gec-x: 50%;
+  --gec-y: 50%;
+  --gec-edge-x: 50%;
+  --gec-edge-y: 50%;
+  --gec-deg: 45deg;
+  --gec-d: 0;
+  --gec-sens: 22;
+  position: relative;
+  border-radius: inherit;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--gec-surface);
+  border: 1px solid var(--gec-border);
+  color: var(--gec-fg);
+}
+
+.gec-layer {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  z-index: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease-out;
+}
+
+.gec-content {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.gec-border-layer {
+  opacity: clamp(0, calc((var(--gec-d) - var(--gec-sens)) / (100 - var(--gec-sens))), 1);
+}
+
+.gec-border-layer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background:
+    conic-gradient(
+      from calc(var(--gec-deg) - var(--gec-cone-size-deg)) at 50% 50%,
+      rgba(var(--gec-glow-rgb), 0) 0deg,
+      rgba(var(--gec-glow-rgb), calc(var(--gec-edge-alpha) * 0.48 * var(--gec-glow-strength))) 12deg,
+      rgba(var(--gec-glow-rgb), calc(var(--gec-edge-alpha) * var(--gec-glow-strength)))
+        calc(var(--gec-cone-size-deg) - 12deg),
+      rgba(var(--gec-glow-rgb), calc(var(--gec-edge-alpha) * 0.64 * var(--gec-glow-strength))) var(--gec-cone-size-deg),
+      rgba(var(--gec-glow-rgb), 0) calc(var(--gec-cone-size-deg) + 20deg),
+      rgba(var(--gec-glow-rgb), 0) 360deg
+    ),
+    conic-gradient(
+      from var(--gec-deg) at 50% 50%,
+      rgba(var(--gec-glow-rgb), calc(var(--gec-edge-alpha) * 0.16 * var(--gec-glow-strength))),
+      rgba(var(--gec-glow-rgb), calc(var(--gec-edge-alpha) * 0.08 * var(--gec-glow-strength)))
+    );
+}
+
+.gec-border-layer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: radial-gradient(
+    circle var(--gec-hotspot-size) at var(--gec-edge-x) var(--gec-edge-y),
+    rgba(var(--gec-glow-rgb), calc(var(--gec-edge-hotspot-alpha) * var(--gec-glow-strength))) 0%,
+    rgba(var(--gec-glow-rgb), calc(var(--gec-edge-hotspot-alpha) * 0.62 * var(--gec-glow-strength))) 40%,
+    rgba(var(--gec-glow-rgb), 0) 100%
+  );
+  opacity: clamp(0, calc((var(--gec-d) - 6) / 94), 1);
+}
+
+.gec-mesh-layer {
+  opacity: clamp(0, calc((var(--gec-d) - 18) / 82), 1);
+  mix-blend-mode: screen;
+  background:
+    radial-gradient(
+      circle var(--gec-radius-px) at var(--gec-x) var(--gec-y),
+      rgba(var(--gec-glow-rgb), calc(var(--gec-glow-alpha) * 0.26 * var(--gec-glow-strength))) 0%,
+      rgba(var(--gec-glow-rgb), calc(var(--gec-glow-alpha) * 0.1 * var(--gec-glow-strength))) 34%,
+      rgba(var(--gec-glow-rgb), 0) 72%
+    ),
+    radial-gradient(
+      circle calc(var(--gec-radius-px) * 0.6) at var(--gec-x) var(--gec-y),
+      rgba(var(--gec-glow-rgb), calc(var(--gec-glow-alpha) * 0.12 * var(--gec-glow-strength))) 0%,
+      rgba(var(--gec-glow-rgb), 0) 78%
+    );
+}
+
+.gec-halo-layer {
+  inset: -24px;
+  opacity: clamp(0, calc((var(--gec-d) - 36) / 64), 1);
+  background: radial-gradient(
+    circle calc(var(--gec-radius-px) * 0.86) at var(--gec-x) var(--gec-y),
+    rgba(var(--gec-glow-rgb), calc(var(--gec-glow-alpha) * 0.18 * var(--gec-glow-strength))) 0%,
+    rgba(var(--gec-glow-rgb), 0) 74%
+  );
+  filter: blur(12px);
+}
+
+@supports ((-webkit-mask-composite: xor) or (mask-composite: exclude)) {
+  .gec-border-layer::before,
+  .gec-border-layer::after {
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask-composite: exclude;
+  }
+}
+
+@supports not ((-webkit-mask-composite: xor) or (mask-composite: exclude)) {
+  .gec-border-layer::before {
+    padding: 0;
+    border: 1px solid rgba(var(--gec-glow-rgb), calc(var(--gec-edge-alpha) * var(--gec-glow-strength)));
+    background: radial-gradient(
+      circle calc(var(--gec-hotspot-size) * 1.35) at var(--gec-edge-x) var(--gec-edge-y),
+      rgba(var(--gec-glow-rgb), calc(var(--gec-edge-hotspot-alpha) * var(--gec-glow-strength))) 0%,
+      rgba(var(--gec-glow-rgb), calc(var(--gec-edge-alpha) * 0.6 * var(--gec-glow-strength))) 42%,
+      rgba(var(--gec-glow-rgb), 0) 72%
+    );
+    box-shadow: 0 0 0 1px rgba(var(--gec-glow-rgb), calc(var(--gec-edge-alpha) * 0.4 * var(--gec-glow-strength)));
+  }
+
+  .gec-border-layer::after {
+    display: none;
+  }
+}
+
+.gec-card.gec-static .gec-border-layer {
+  opacity: 0.24;
+}
+
+.gec-card.gec-static .gec-mesh-layer,
+.gec-card.gec-static .gec-halo-layer {
+  opacity: 0;
+}
+
+.gec-card.gec-static .gec-border-layer::after {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gec-layer {
+    transition: none;
+  }
+}

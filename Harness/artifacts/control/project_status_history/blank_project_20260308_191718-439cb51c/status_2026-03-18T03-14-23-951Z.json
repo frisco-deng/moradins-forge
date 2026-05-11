@@ -1,0 +1,197 @@
+{
+  "version": "ProjectStatusReportV1",
+  "generated_at": "2026-03-18T03:14:23.951Z",
+  "target_repo": "blank_project_20260308_191718",
+  "session_id": "",
+  "target_mode": "local",
+  "remote_target": null,
+  "target_path": "<LOCAL_PROJECTS_ROOT>/blank_project_20260308_191718",
+  "summary": {
+    "overall_status": "attention",
+    "critical_count": 0,
+    "high_count": 5,
+    "medium_count": 6,
+    "low_count": 1,
+    "action_total": 12
+  },
+  "critical_focus": [
+    "Fill missing Governance and Execution surface",
+    "Fill missing Harness Foundations surface",
+    "Resolve baseline project gap",
+    "Resolve baseline project gap",
+    "Resolve baseline project gap"
+  ],
+  "domain_health": [
+    {
+      "domain_id": "codebase",
+      "label": "Codebase Signals",
+      "status": "attention",
+      "summary": "No language signals detected in scanned project files."
+    },
+    {
+      "domain_id": "delivery",
+      "label": "Delivery Pipeline",
+      "status": "risk",
+      "summary": "No CI pipeline configuration detected."
+    },
+    {
+      "domain_id": "quality",
+      "label": "Quality and Tests",
+      "status": "attention",
+      "summary": "No test surface hint detected."
+    },
+    {
+      "domain_id": "governance",
+      "label": "Harness Governance Readiness",
+      "status": "attention",
+      "summary": "8 harness baseline check(s) are missing."
+    }
+  ],
+  "actions": [
+    {
+      "action_id": "repo-gap-governance-changelog",
+      "severity": "high",
+      "title": "Fill missing Governance and Execution surface",
+      "description": "Control changelog exists",
+      "route": "/builder",
+      "depends_on": [],
+      "source": "repo_completeness.governance.governance-changelog"
+    },
+    {
+      "action_id": "repo-gap-foundation-readme",
+      "severity": "high",
+      "title": "Fill missing Harness Foundations surface",
+      "description": "README exists",
+      "route": "/builder",
+      "depends_on": [],
+      "source": "repo_completeness.foundations.foundation-readme"
+    },
+    {
+      "action_id": "scan-gap-1",
+      "severity": "high",
+      "title": "Resolve baseline project gap",
+      "description": "No CI pipeline definition detected. Add a CI surface before execution-heavy integration work.",
+      "route": "/project-topology",
+      "depends_on": [],
+      "source": "project_scan.critical_gaps"
+    },
+    {
+      "action_id": "scan-gap-2",
+      "severity": "high",
+      "title": "Resolve baseline project gap",
+      "description": "No test surface detected. Add baseline tests before enabling aggressive implementation loops.",
+      "route": "/project-topology",
+      "depends_on": [],
+      "source": "project_scan.critical_gaps"
+    },
+    {
+      "action_id": "scan-gap-3",
+      "severity": "high",
+      "title": "Resolve baseline project gap",
+      "description": "Missing README.md. Add baseline project orientation for maintainers and reviewers.",
+      "route": "/project-topology",
+      "depends_on": [],
+      "source": "project_scan.critical_gaps"
+    },
+    {
+      "action_id": "repo-gap-goal-project-spec",
+      "severity": "medium",
+      "title": "Fill missing Goal Coverage surface",
+      "description": "Project goal artifact exists",
+      "route": "/builder",
+      "depends_on": [],
+      "source": "repo_completeness.goal.goal-project-spec"
+    },
+    {
+      "action_id": "repo-gap-integration-tooling-runbook",
+      "severity": "medium",
+      "title": "Fill missing Integration Coverage surface",
+      "description": "Tooling pipeline guide exists",
+      "route": "/builder",
+      "depends_on": [],
+      "source": "repo_completeness.integrations.integration-tooling-runbook"
+    },
+    {
+      "action_id": "repo-gap-integration-configuration-guide",
+      "severity": "medium",
+      "title": "Fill missing Integration Coverage surface",
+      "description": "Configuration guide exists",
+      "route": "/builder",
+      "depends_on": [],
+      "source": "repo_completeness.integrations.integration-configuration-guide"
+    },
+    {
+      "action_id": "repo-gap-tools-branch-hygiene",
+      "severity": "medium",
+      "title": "Fill missing Tooling Surface surface",
+      "description": "Branch hygiene script exists",
+      "route": "/builder",
+      "depends_on": [],
+      "source": "repo_completeness.tools.tools-branch-hygiene"
+    },
+    {
+      "action_id": "repo-gap-tools-control-api",
+      "severity": "medium",
+      "title": "Fill missing Tooling Surface surface",
+      "description": "Control API script exists",
+      "route": "/builder",
+      "depends_on": [],
+      "source": "repo_completeness.tools.tools-control-api"
+    },
+    {
+      "action_id": "repo-gap-tools-skills-index",
+      "severity": "medium",
+      "title": "Fill missing Tooling Surface surface",
+      "description": "Skills index exists",
+      "route": "/builder",
+      "depends_on": [],
+      "source": "repo_completeness.tools.tools-skills-index"
+    },
+    {
+      "action_id": "queue-suggestions",
+      "severity": "low",
+      "title": "Review actionable suggestions items",
+      "description": "1 actionable item(s) detected in Suggestions.",
+      "route": "/exchange",
+      "depends_on": [],
+      "source": "review_queue.suggestions.actionable_docs"
+    }
+  ],
+  "project_scan": {
+    "version": "ProjectBaselineScanV1",
+    "scanned_at": "2026-03-18T03:14:23.945Z",
+    "target_repo": "blank_project_20260308_191718",
+    "target_path": "<LOCAL_PROJECTS_ROOT>/blank_project_20260308_191718",
+    "file_count": 52,
+    "scan_limits_effective": {
+      "max_depth": 6,
+      "max_files": 5000
+    },
+    "scan_truncated": false,
+    "scan_truncation_reason": "",
+    "detected": {
+      "languages": [],
+      "package_managers": [],
+      "lockfiles": [],
+      "ci_surfaces": [],
+      "test_surfaces": [],
+      "deployment_surfaces": [],
+      "infra_surfaces": [],
+      "governance_surfaces": [
+        "AGENTS.md"
+      ]
+    },
+    "critical_gaps": [
+      "No CI pipeline definition detected. Add a CI surface before execution-heavy integration work.",
+      "No test surface detected. Add baseline tests before enabling aggressive implementation loops.",
+      "Missing README.md. Add baseline project orientation for maintainers and reviewers."
+    ],
+    "summary": {
+      "language_count": 0,
+      "package_manager_count": 0,
+      "ci_surface_count": 0,
+      "test_surface_count": 0,
+      "critical_gap_count": 3
+    }
+  }
+}

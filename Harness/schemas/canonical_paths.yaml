@@ -1,0 +1,32 @@
+version: 1
+path_convention: snake_case
+manager_repo:
+  bootstrap: AGENTS.md
+  control_plane_root: Harness
+  docs_truth_root: docs
+  template_root: .harness_template
+canonical_paths:
+  - Harness/README.md
+  - Harness/manifest.yaml
+  - Harness/version.lock
+  - Harness/entrypoints/agent.md
+  - Harness/routing/context_routes.yaml
+  - Harness/routing/load_order.md
+  - Harness/views/project_brief.md
+  - Harness/artifacts/control
+  - Harness/artifacts/openapi
+  - Harness/artifacts/reports
+  - Harness/artifacts/schemas
+  - docs/index.md
+  - docs/design_docs
+  - docs/entrypoint_guide
+  - docs/exec_plans
+  - docs/product_specs
+  - docs/generated
+  - docs/archive
+legacy_aliases_removed:
+  - docs/Entrypoint_guide
+  - docs/design-docs
+  - docs/exec-plans
+  - docs/product-specs
+  - docs/harness_artifacts

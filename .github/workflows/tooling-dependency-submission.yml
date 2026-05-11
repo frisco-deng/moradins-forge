@@ -1,0 +1,26 @@
+name: Tooling / Dependency Submission
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  submit-dependencies:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        # v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Submit dependency graph
+        # v0.0.7
+        uses: advanced-security/component-detection-dependency-submission-action@64db6d9d15fd76171b996ad40766f64ae4abae9a
+        with:
+          detectors: UvLock=EnableIfDefaultOff
