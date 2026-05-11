@@ -21,6 +21,6 @@ jobs:
           persist-credentials: false
       - name: Submit dependency graph
         # v0.0.7
-        uses: advanced-security/component-detection-dependency-submission-action@64db6d9d15fd76171b996ad40766f64ae4abae9a
+        uses: advanced-security/component-detection-dependency-submission-action@9c110eb34dee187cd9eca76a652b9f6a0ed22927
         with:
           detectors: UvLock=EnableIfDefaultOff
