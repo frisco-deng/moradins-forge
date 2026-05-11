@@ -43,6 +43,21 @@ explicit consent, and only then applies a bounded local sidecar.
 Forge is local by default. It does not install host tools, publish repo content,
 replace existing workflows, or require the browser workbench.
 
+## Repo Operating Model
+
+This public repo is the active product source for Moradin's Forge. Normal
+features, fixes, docs, tests, and releases should happen here on public
+branches.
+
+Private staging/control history is provenance only. Do not copy private commits,
+branches, release evidence, generated sessions, local governance artifacts,
+private host paths, or private usernames into this repo, public PRs, releases,
+or generated sidecars.
+
+Before public PRs or releases, run the deterministic gates in
+`docs/references/repo_operating_model_v1.md` and confirm the generated sidecar
+contains no private references.
+
 ## Agent-First Flow
 
 1. Clone or pull Forge into a local `<forge-root>`.

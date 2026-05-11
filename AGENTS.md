@@ -23,6 +23,7 @@ Profile: local agent-first integration kit
 - `docs/references/moradin_payload_contract_v1.md`
 - `docs/references/moradin_forge_agent_integration_contract_v1.md`
 - `docs/references/moradin_forge_public_export_contract_v1.md`
+- `docs/references/repo_operating_model_v1.md`
 - `docs/references/tooling_readiness_install_request_contract_v1.md`
 - `Harness/README.md`
 
@@ -58,6 +59,10 @@ those as the target repo's source of truth.
 
 ## Operating Rules
 
+- Treat this public repo as the active product source for normal Forge work.
+- Create feature, docs, fix, and release branches from public `main`.
+- Do not import private staging commits, branches, release evidence, generated
+  sessions, or local governance artifacts.
 - `Harness/moradin_payload/manifest.yaml` is the canonical sidecar payload
   contract.
 - `FORGE.md` and `Harness/entrypoints/forge.md` are the canonical agent-first
@@ -68,6 +73,9 @@ those as the target repo's source of truth.
 - Manager-only release evidence, branch waivers, PR hardening artifacts,
   generated discovery history, caches, and absolute local paths must not appear
   in public exports or generated sidecars.
+- Before public PRs or releases, run `make public-portability-check` and the
+  repo-local deterministic gates listed in
+  `docs/references/repo_operating_model_v1.md`.
 
 ## Secure Coding Baseline
 
