@@ -12,6 +12,7 @@ related_docs:
   - generic_harness_capture_manifest_v1.md
   - generic_harness_bootstrap_sequence.md
   - discovery_prompt_contract.md
+  - agent_context_profiles.md
   - project_builder_prompt_catalog.md
   - redeployable_harness_contract_v1.md
   - moradin_payload_contract_v1.md
@@ -43,6 +44,7 @@ Reference assets and external/tooling reference pointers.
 - [Generic Harness Capture Manifest V1](generic_harness_capture_manifest_v1.md)
 - [Generic Harness Bootstrap Sequence](generic_harness_bootstrap_sequence.md)
 - [Discovery Prompt Contract](discovery_prompt_contract.md)
+- [Agent Context Profiles](agent_context_profiles.md)
 - [Project Builder Prompt Catalog](project_builder_prompt_catalog.md)
 - [Redeployable Harness Contract V1](redeployable_harness_contract_v1.md)
 - [Moradin Payload Contract V1](moradin_payload_contract_v1.md)
