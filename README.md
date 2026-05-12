@@ -1,9 +1,10 @@
 # Moradin's Forge
 
-Moradin's Forge is an agent-first, local-only integration kit for Codex,
-Claude Code, and similar coding agents. A user points an agent at Forge, the
-agent inspects Forge and the target repo, explains the proposed integration,
-asks for explicit approval, and only then writes a bounded sidecar.
+Moradin's Forge is an agent-first integration forge for Codex, Claude Code,
+and similar coding agents. A user points an agent at Forge, the agent inspects
+Forge and the target repo, explains the proposed local-only integration, asks
+for explicit approval, and only then writes a bounded `.moradins-harness/`
+sidecar through a deterministic workflow.
 
 Forge is designed to reduce repeated agent inference by giving agents a small,
 deterministic reflex layer: read the same entrypoints, run the same readiness
@@ -66,6 +67,10 @@ unless the user requests a specific root patch.
 7. After approval, Forge writes the local sidecar and adaptive snippets.
 8. The agent runs verification and reports changed paths.
 
+For lower-token starts, use the task-specific load profiles in
+`docs/references/agent_context_profiles.md` before opening deeper contracts or
+UI files.
+
 Linux and macOS:
 
 ```sh
@@ -122,6 +127,8 @@ workbench loopback-only unless the user explicitly asks for broader exposure.
 ## Key Contracts
 
 - Moradin payload contract: `docs/references/moradin_payload_contract_v1.md`
+- Agent context profiles:
+  `docs/references/agent_context_profiles.md`
 - Forge agent integration contract:
   `docs/references/moradin_forge_agent_integration_contract_v1.md`
 - Public portability contract:

@@ -4,18 +4,20 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..", "..");
-const engineerEntryRoot = path.join(repoRoot, "docs", "engineer_entry");
-const engineerEntrypointPath = path.join(repoRoot, "docs", "00_overview", "engineer_entrypoint.md");
-const indexPath = path.join(engineerEntryRoot, "index.md");
 
-export async function listEngineerEntryDocs(baseDir = engineerEntryRoot) {
+export async function listEngineerEntryDocs(options = {}) {
+  const normalizedOptions = typeof options === "string" ? { baseDir: options } : options;
+  const normalizedRepoRoot = path.resolve(normalizedOptions.repoRootPath ?? repoRoot);
+  const baseDir = path.resolve(
+    normalizedOptions.baseDir ?? normalizedOptions.engineerEntryPath ?? path.join(normalizedRepoRoot, "docs", "engineer_entry"),
+  );
   const entries = await fs.readdir(baseDir, { withFileTypes: true });
   const files = [];
 
   for (const entry of entries) {
     const fullPath = path.join(baseDir, entry.name);
     if (entry.isDirectory()) {
-      files.push(...(await listEngineerEntryDocs(fullPath)));
+      files.push(...(await listEngineerEntryDocs({ baseDir: fullPath, repoRootPath: normalizedRepoRoot })));
       continue;
     }
     if (entry.isFile() && entry.name.endsWith(".md")) {
@@ -24,7 +26,7 @@ export async function listEngineerEntryDocs(baseDir = engineerEntryRoot) {
   }
 
   return files
-    .map((filePath) => path.relative(repoRoot, filePath).split(path.sep).join("/"))
+    .map((filePath) => path.relative(normalizedRepoRoot, filePath).split(path.sep).join("/"))
     .sort((left, right) => left.localeCompare(right));
 }
 
@@ -58,12 +60,20 @@ function firstHeading(body, fallback) {
   return match ? match[1].trim() : fallback;
 }
 
-export async function buildEngineerEntryIndexMarkdown() {
-  const docs = (await listEngineerEntryDocs()).filter((relativePath) => relativePath !== "docs/engineer_entry/index.md");
+export async function buildEngineerEntryIndexMarkdown(options = {}) {
+  const normalizedRepoRoot = path.resolve(options.repoRootPath ?? repoRoot);
+  const normalizedEngineerEntryRoot = path.resolve(options.engineerEntryPath ?? path.join(normalizedRepoRoot, "docs", "engineer_entry"));
+  const lastReviewedDate = options.lastReviewedDate ?? new Date().toISOString().slice(0, 10);
+  const docs = (
+    await listEngineerEntryDocs({
+      baseDir: normalizedEngineerEntryRoot,
+      repoRootPath: normalizedRepoRoot,
+    })
+  ).filter((relativePath) => relativePath !== "docs/engineer_entry/index.md");
   const rows = [];
 
   for (const relativePath of docs) {
-    const raw = await fs.readFile(path.join(repoRoot, relativePath), "utf8");
+    const raw = await fs.readFile(path.join(normalizedRepoRoot, relativePath), "utf8");
     const { frontMatter, body } = parseFrontmatter(raw);
     rows.push({
       title: String(frontMatter.title ?? firstHeading(body, path.basename(relativePath, ".md"))),
@@ -85,7 +95,7 @@ export async function buildEngineerEntryIndexMarkdown() {
     'title: "Engineer Entry Index"',
     "status: generated-reference",
     "owner: docs-build-pipeline",
-    `last_reviewed: ${new Date().toISOString().slice(0, 10)}`,
+    `last_reviewed: ${lastReviewedDate}`,
     "source_refs: []",
     "related_docs:",
     ...Array.from(new Set(relatedDocs)).map((entry) => `  - ${entry}`),
@@ -125,9 +135,11 @@ export async function buildEngineerEntryIndexMarkdown() {
   ].join("\n");
 }
 
-export async function writeEngineerEntryIndex() {
-  const markdown = await buildEngineerEntryIndexMarkdown();
-  await fs.writeFile(indexPath, `${markdown}\n`, "utf8");
+export async function writeEngineerEntryIndex(options = {}) {
+  const normalizedRepoRoot = path.resolve(options.repoRootPath ?? repoRoot);
+  const normalizedEngineerEntryRoot = path.resolve(options.engineerEntryPath ?? path.join(normalizedRepoRoot, "docs", "engineer_entry"));
+  const markdown = await buildEngineerEntryIndexMarkdown(options);
+  await fs.writeFile(path.join(normalizedEngineerEntryRoot, "index.md"), `${markdown}\n`, "utf8");
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

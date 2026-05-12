@@ -5,40 +5,55 @@ import { fileURLToPath } from "node:url";
 
 import { buildEngineerEntryIndexMarkdown } from "./generate-engineer-entry-index.mjs";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const scriptPath = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(scriptPath);
 const repoRoot = path.resolve(__dirname, "..", "..", "..");
-const engineerEntryRoot = path.join(repoRoot, "docs", "engineer_entry");
-const capabilityGapReportPaths = [path.join(repoRoot, "Harness", "artifacts", "control", "capability_gap_register.md")];
 const allowedBootstrapWrites = new Set(["docs/engineer_entry/index.md"]);
 const requiredFrontmatterKeys = ["title", "status", "owner", "last_reviewed", "source_refs", "related_docs"];
 const engineerEntryGapTarget = "engineer-entry guard automation";
 const generatedIndexPath = "docs/engineer_entry/index.md";
 const humanOwnerPattern = /^person:[a-z0-9][a-z0-9_-]*$/;
 
-async function main() {
-  const files = await listMarkdownFiles(engineerEntryRoot);
-  const errors = await validateEngineerEntry();
+export async function runEngineerEntryGuard({
+  repoRootPath = repoRoot,
+  engineerEntryPath = null,
+  args = process.argv.slice(2),
+  env = process.env,
+  stdout = process.stdout,
+  stderr = process.stderr,
+} = {}) {
+  const normalizedRepoRoot = path.resolve(repoRootPath);
+  const normalizedEngineerEntryRoot = path.resolve(engineerEntryPath ?? path.join(normalizedRepoRoot, "docs", "engineer_entry"));
+  const files = await listMarkdownFiles(normalizedEngineerEntryRoot);
+  const errors = await validateEngineerEntry({
+    repoRootPath: normalizedRepoRoot,
+    engineerEntryPath: normalizedEngineerEntryRoot,
+  });
 
   if (errors.length > 0) {
-    await ensureEngineerEntryGapOpened();
-    process.stderr.write("[engineer-entry] guard failed\n");
-    for (const error of errors) {
-      process.stderr.write(`- ${error}\n`);
+    if (shouldOpenCapabilityGap(args, env)) {
+      await ensureEngineerEntryGapOpened({ repoRootPath: normalizedRepoRoot, env });
     }
-    process.exitCode = 1;
-    return;
+    stderr.write("[engineer-entry] guard failed\n");
+    for (const error of errors) {
+      stderr.write(`- ${error}\n`);
+    }
+    return 1;
   }
 
-  process.stdout.write(`[engineer-entry] guard pass (${files.length} files validated)\n`);
+  stdout.write(`[engineer-entry] guard pass (${files.length} files validated)\n`);
+  return 0;
 }
 
 export async function validateEngineerEntry({
   repoRootPath = repoRoot,
-  engineerEntryPath = engineerEntryRoot,
+  engineerEntryPath = null,
   changedPaths = null,
   expectedIndexMarkdown = null,
 } = {}) {
-  const files = await listMarkdownFiles(engineerEntryPath);
+  const normalizedRepoRoot = path.resolve(repoRootPath);
+  const normalizedEngineerEntryPath = path.resolve(engineerEntryPath ?? path.join(normalizedRepoRoot, "docs", "engineer_entry"));
+  const files = await listMarkdownFiles(normalizedEngineerEntryPath);
   const errors = [];
 
   if (files.length === 0) {
@@ -46,8 +61,12 @@ export async function validateEngineerEntry({
     return errors;
   }
 
-  const normalizedRepoRoot = path.resolve(repoRootPath);
-  const expectedIndex = expectedIndexMarkdown ?? (await buildEngineerEntryIndexMarkdown());
+  const expectedIndex =
+    expectedIndexMarkdown ??
+    (await buildExpectedEngineerEntryIndexMarkdown({
+      repoRootPath: normalizedRepoRoot,
+      engineerEntryPath: normalizedEngineerEntryPath,
+    }));
 
   for (const filePath of files) {
     const relativePath = normalizePath(path.relative(normalizedRepoRoot, filePath));
@@ -99,6 +118,27 @@ export async function validateEngineerEntry({
   return errors;
 }
 
+async function buildExpectedEngineerEntryIndexMarkdown({ repoRootPath, engineerEntryPath }) {
+  const indexFilePath = path.join(engineerEntryPath, "index.md");
+  const lastReviewedDate = await readCurrentGeneratedIndexDate(indexFilePath);
+  return buildEngineerEntryIndexMarkdown({
+    repoRootPath,
+    engineerEntryPath,
+    lastReviewedDate,
+  });
+}
+
+async function readCurrentGeneratedIndexDate(indexFilePath) {
+  try {
+    const raw = await fs.readFile(indexFilePath, "utf8");
+    const parsed = parseFrontmatter(raw);
+    const value = parsed?.values.get("last_reviewed");
+    return value ? String(value).trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function listMarkdownFiles(baseDir) {
   try {
     const entries = await fs.readdir(baseDir, { withFileTypes: true });
@@ -122,12 +162,19 @@ async function listMarkdownFiles(baseDir) {
   }
 }
 
-async function ensureEngineerEntryGapOpened() {
-  if (process.env.ENGINEER_ENTRY_AUTOGAP === "0") {
+function shouldOpenCapabilityGap(args, env) {
+  if (env.ENGINEER_ENTRY_AUTOGAP === "0") {
+    return false;
+  }
+  return args.includes("--open-gap") || env.ENGINEER_ENTRY_AUTOGAP === "1";
+}
+
+async function ensureEngineerEntryGapOpened({ repoRootPath = repoRoot, env = process.env } = {}) {
+  if (env.ENGINEER_ENTRY_AUTOGAP === "0") {
     return;
   }
 
-  const capabilityGapReportPath = await resolveCapabilityGapReportPath();
+  const capabilityGapReportPath = await resolveCapabilityGapReportPath(repoRootPath);
   if (!capabilityGapReportPath) {
     return;
   }
@@ -159,7 +206,8 @@ async function ensureEngineerEntryGapOpened() {
   await fs.writeFile(capabilityGapReportPath, markdown, "utf8");
 }
 
-async function resolveCapabilityGapReportPath() {
+async function resolveCapabilityGapReportPath(repoRootPath = repoRoot) {
+  const capabilityGapReportPaths = [path.join(repoRootPath, "Harness", "artifacts", "control", "capability_gap_register.md")];
   for (const candidatePath of capabilityGapReportPaths) {
     try {
       const stat = await fs.stat(candidatePath);
@@ -214,6 +262,7 @@ function readChangedEngineerEntryPaths(repoRoot) {
   try {
     const output = execFileSync("git", ["-C", repoRoot, "status", "--porcelain=v1", "--", "docs/engineer_entry"], {
       encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
     });
 
     const rawPaths = output
@@ -262,7 +311,13 @@ function normalizeLineEndings(input) {
   return String(input).replace(/\r\n/g, "\n");
 }
 
-main().catch((error) => {
-  process.stderr.write(`[engineer-entry] guard failed: ${String(error.stack || error)}\n`);
-  process.exitCode = 1;
-});
+async function main() {
+  process.exitCode = await runEngineerEntryGuard();
+}
+
+if (process.argv[1] === scriptPath) {
+  main().catch((error) => {
+    process.stderr.write(`[engineer-entry] guard failed: ${String(error.stack || error)}\n`);
+    process.exitCode = 1;
+  });
+}

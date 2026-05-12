@@ -16,6 +16,7 @@ Profile: local agent-first integration kit.
 
 - `README.md`
 - `FORGE.md`
+- `docs/references/agent_context_profiles.md`
 - `Harness/entrypoints/forge.md`
 - `Harness/entrypoints/forge_agent_handoff.md`
 - `Harness/entrypoints/agent.md`
@@ -60,6 +61,8 @@ those as the target repo's source of truth.
 
 - Treat this public repo as the active product source for normal Forge work.
 - Create feature, docs, fix, and release branches from public `main`.
+- Use `docs/references/agent_context_profiles.md` to choose the smallest
+  task-specific context profile before loading deeper contracts.
 - Keep compatibility language out of first-read docs; compatibility details
   belong in contracts and payload manifests.
 - `Harness/moradin_payload/manifest.yaml` is the canonical sidecar payload
