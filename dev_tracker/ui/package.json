@@ -38,7 +38,7 @@
     "@testing-library/user-event": "^14.6.1",
     "@vitest/browser-playwright": "^4.0.18",
     "@vitest/coverage-v8": "^4.0.18",
-    "@types/node": "^22.15.30",
+    "@types/node": "^25.9.0",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.4.1",
