@@ -32,5 +32,5 @@ Harness/artifacts/task_lanes/
 
 # BEGIN workspace-tooling
 # Generated tooling artifacts
-/artifacts/
+artifacts/
 # END workspace-tooling

@@ -41,6 +41,12 @@ Profile: local agent-first integration kit.
 
 ## Deterministic Commands
 
+- `make repo-brief`
+- `make verify-paths`
+- `make verify-fast`
+- `make verify-security`
+- `make review-ready`
+- `make push-gate`
 - `make forge-explain`
 - `make forge-readiness`
 - `make forge-plan TARGET=<target-repo>`
@@ -56,6 +62,22 @@ Use repo-local commands before ad hoc shell chains. If a target repo has its own
 `AGENTS.md`, `CONTRIBUTING.md`, Makefile, package scripts, or CI docs, treat
 those as the target repo's source of truth.
 
+## Baseline Workflow
+
+- Start Forge maintenance with `make repo-brief` before broad exploration.
+- Run `tpl context-primer --latest-session --repo moradins-forge` after session
+  start, compaction, long resume, or repeated broad reads.
+- Run `tpl session-supervisor --live --latest-session --repo moradins-forge`
+  when a session starts polling, rereading the same evidence, or patching
+  through the same failure.
+- Run `tpl rerun-advice moradins-forge -- <command>` before repeating
+  deterministic commands or re-ingesting long logs.
+- Run `tpl-ui-review-brief --repo moradins-forge --mode auto --prompt <prompt>`
+  before UI page creation, component additions, existing-surface refinements,
+  screenshot critiques, or formatting/readability fixes.
+- Use `make verify-paths` before public docs, generated sidecars, export
+  outputs, or release-facing evidence leave the repo.
+
 ## Operating Rules
 
 - Treat this public repo as the active product source for normal Forge work.
@@ -67,6 +89,11 @@ those as the target repo's source of truth.
 - `FORGE.md` and `Harness/entrypoints/forge.md` are the canonical agent-first
   adoption entrypoints.
 - The browser UI is optional diagnostics, not the primary install path.
+- Keep UI visual measurement opt-in until Forge has a repo-local screenshot and
+  DOM-box capture wrapper.
+- Do not add release-platform readiness until Forge has a stable release
+  artifact path, build summary, SBOM/security evidence, signing or smoke
+  evidence, and release-candidate manifest.
 - Before public PRs or releases, run `make public-portability-check` and the
   deterministic gates listed in `docs/references/repo_operating_model_v1.md`.
 
@@ -83,6 +110,11 @@ those as the target repo's source of truth.
 - Document behavior changes in the relevant contract or runbook.
 - Keep public-facing docs generic: use `<forge-root>`, `<target-repo>`,
   `<temp-dir>`, and `<workbench-port>` placeholders.
+- Do not publish raw home paths, usernames, hostnames, Windows user paths, WSL
+  UNC paths, or machine-origin markers in source, docs, tests, generated
+  sidecars, public exports, or release-facing artifacts.
+- Use neutral fixture values or scoped allowlist comments for intentional
+  redaction tests.
 - Use descriptive commit messages and ISO 8601 dates (`YYYY-MM-DD`) when dates
   matter.
 - Do not merge or promote protected branches without the required human gate.

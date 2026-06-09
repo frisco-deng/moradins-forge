@@ -37,10 +37,14 @@ RESERVED_SHELL_WORDS = {
     "[[",
     "time",
 }
-WORKSPACE_ROOT_PLACEHOLDER = "<workspace-root>"
+WORKSPACE_ROOT_PLACEHOLDER = "${WORKSPACE_ROOT}"
 LOCAL_BIN_DIR = Path.home() / ".local" / "bin"
 DOMAIN_LANE_HINTS = {
-    "moradins-forge": "for Forge work, start with `make forge-explain`, `make payload-validate`, or `make public-portability-check` before broader verification",
+    "meta-rag": "for demo and status work, start with `make demo-brief`, then `make verify-demo-fast`",
+    "waifu-stack": "for Plan V2 start with `make v2-brief`; for harvest work start with `make sample-library-brief`",
+    "aiproject": "for runtime and profile work, start with `make runtime-brief`, then `make verify-profile-small`",
+    "waifu-ui": "for repo state, prefer `make repo-brief` and `npm run status:dev` before raw dashboard polling",
+    "moradins-forge": "for Forge work, start with `make forge-explain`, then `make payload-validate` or `make public-portability-check` before broader gates",
 }
 HEAVY_RERUN_TARGETS = {"review-bundle", "review-ready", "verify-fast", "verify", "verify-ci"}
 CACHEABLE_STEP_TARGETS = {"verify-security"}
@@ -553,6 +557,41 @@ def ui_cli_info(root: Path, repo_cfg: dict[str, Any], targets: dict[str, Any]) -
     }
 
 
+def ui_review_info(root: Path, repo_cfg: dict[str, Any], targets: dict[str, Any]) -> dict[str, Any]:
+    review_cfg = repo_cfg.get("ui_review", {})
+    if not isinstance(review_cfg, dict):
+        review_cfg = {}
+    declared_targets = [str(target) for target in review_cfg.get("targets", []) if isinstance(target, str)]
+    summary_rel = str(review_cfg.get("summary") or "artifacts/ui-review/latest/summary.md")
+    screenshots_rel = str(review_cfg.get("screenshots") or "artifacts/ui-review/latest/screenshots")
+    lighthouse_rel = str(review_cfg.get("lighthouse") or "artifacts/ui-review/latest/lighthouse")
+    summary_path = root / summary_rel
+    screenshots_dir = root / screenshots_rel
+    lighthouse_dir = root / lighthouse_rel
+    screenshot_count = (
+        sum(1 for path in screenshots_dir.rglob("*") if path.is_file() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"})
+        if screenshots_dir.exists()
+        else 0
+    )
+    lighthouse_report_count = (
+        sum(1 for path in lighthouse_dir.rglob("*.json") if path.is_file())
+        if lighthouse_dir.exists()
+        else 0
+    )
+    return {
+        "enabled": bool(review_cfg.get("enabled") or declared_targets),
+        "rendered_targets": [target for target in declared_targets if target in targets],
+        "declared_targets": declared_targets,
+        "declared_commands": dict(review_cfg.get("commands", {})) if isinstance(review_cfg.get("commands"), dict) else {},
+        "artifact_summary": summary_rel,
+        "artifact_summary_exists": summary_path.exists(),
+        "screenshots_dir": screenshots_rel,
+        "screenshot_count": screenshot_count,
+        "lighthouse_dir": lighthouse_rel,
+        "lighthouse_report_count": lighthouse_report_count,
+    }
+
+
 def last_artifacts(log_root: Path, current_target: str) -> list[dict[str, Any]]:
     if not log_root.exists():
         return []
@@ -620,6 +659,18 @@ def resolve_tool(binary: str) -> str | None:
     return shutil.which(binary)
 
 
+def missing_tool_note(summary: dict[str, Any], tool: str) -> str:
+    target = str(summary.get("target") or "")
+    available_targets = set(summary.get("targets", {}).get("available", []))
+    if target == "verify-security" and "bootstrap-security" in available_targets:
+        return f"missing tool: {tool}; run `make bootstrap-security` before rerunning security checks on a fresh runner"
+    if target in {"verify-ci", "verify"} and "bootstrap-ci" in available_targets:
+        return f"missing tool: {tool}; run `make bootstrap-ci` before rerunning verification on a fresh runner"
+    if target == "verify-container" and "bootstrap-container" in available_targets:
+        return f"missing tool: {tool}; run `make bootstrap-container` before rerunning container checks on a fresh runner"
+    return f"missing tool: {tool}; run the matching bootstrap target before rerunning this generated lane"
+
+
 def docker_ready(binary: str) -> bool:
     probe = subprocess.run(
         [binary, "info"],
@@ -655,7 +706,7 @@ def rewrite_command(binary: str, launcher: str, command: str) -> str:
 
 def discover_workspace_root(root: Path) -> Path:
     for candidate in (root, *root.parents):
-        if (candidate / "shared-tooling-source").exists():
+        if (candidate / ".templates").exists():
             return candidate
     return root
 
@@ -1042,6 +1093,7 @@ def collect_base_summary(root: Path, config: dict[str, Any], target: str, artifa
             "root": str(root),
             "manifests": manifest_info(root, repo_cfg),
             "ui_cli": ui_cli_info(root, repo_cfg, config["targets"]),
+            "ui_review": ui_review_info(root, repo_cfg, config["targets"]),
             "repo_local_agents": repo_agents_path.exists(),
             "repo_local_agents_path": str(repo_agents_path) if repo_agents_path.exists() else "",
         },
@@ -1170,6 +1222,20 @@ def populate_brief_findings(summary: dict[str, Any]) -> None:
             summary["findings"].append("ui-cli: Playwright detected; install repo-managed browsers with `npx playwright install chromium` when browser binaries are missing")
     if ui_cli.get("mode") == "xvfb" and not ui_cli.get("tools", {}).get("xvfb-run"):
         summary["findings"].append("unavailable: verify-ui-cli requires `xvfb-run`; install the optional UI/browser tooling pack")
+    ui_review = repo.get("ui_review", {})
+    if ui_review.get("enabled"):
+        rendered_targets = ui_review.get("rendered_targets", [])
+        summary_state = "available" if ui_review.get("artifact_summary_exists") else "missing"
+        summary["findings"].append(
+            "ui-review: "
+            + f"{', '.join(rendered_targets) if rendered_targets else 'no rendered targets'}; "
+            + f"summary {summary_state} at `{ui_review.get('artifact_summary')}`; "
+            + f"screenshots={ui_review.get('screenshot_count', 0)} lighthouse_json={ui_review.get('lighthouse_report_count', 0)}"
+        )
+        if "ui-review-pack" in rendered_targets and not ui_review.get("artifact_summary_exists"):
+            summary["findings"].append(
+                "ui-review: run `make ui-review-pack` for visual changes when screenshot, accessibility, mobile, reduced-motion, large-text, or Lighthouse evidence is missing"
+            )
     previous_summary = summary["analysis"].get("previous_summary")
     if previous_summary and previous_summary.get("state_fingerprint") == summary["git"].get("state_fingerprint"):
         summary["findings"].append(
@@ -1270,7 +1336,7 @@ def run_step(
                 log_path=None,
                 required=required,
                 category=category,
-                note=f"missing tool: {tool}",
+                note=missing_tool_note(summary, str(tool)),
             )
             return
         resolved_command = rewrite_command(tool, launcher, resolved_command)
@@ -1922,7 +1988,7 @@ def run_review_ready(
                     log_path=None,
                     required=required,
                     category=category,
-                    note=f"missing tool: {tool}",
+                    note=missing_tool_note(summary, str(tool)),
                     bucket="prep_steps",
                 )
                 prep_failed = prep_failed or status == "fail"

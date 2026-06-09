@@ -65,3 +65,7 @@ public-export:
 
 public-portability-check:
 	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/public_export.py check --output "$(PUBLIC_EXPORT_DIR)" --sidecar-output "$(PUBLIC_SIDECAR_SMOKE_DIR)" --force --init-git
+
+# BEGIN workspace-tooling
+-include tooling/make/tooling.mk
+# END workspace-tooling

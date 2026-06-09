@@ -2,13 +2,13 @@
   "schema_version": 1,
   "repo": {
     "repo_id": "moradins-forge",
-    "path": ".",
-    "archetype": "uv-forge",
+    "path": "projects/moradins-forge",
+    "archetype": "uv-harness",
     "scan_tier": "hardened",
     "containerized": false,
     "default_branch": "main",
-    "git_policy_profile": "public-forge",
-    "github_flow_profile": "public-candidate",
+    "git_policy_profile": "main-only",
+    "github_flow_profile": "free-public",
     "integration_branch": "",
     "production_branch": "",
     "dockerfiles": [],
@@ -64,66 +64,42 @@
       "enabled": true,
       "mode": "headless",
       "commands": [
-        "make ui-test-browser"
+        "npm --prefix dev_tracker/ui run test"
       ]
     },
-    "lane_policy": {
-      "active_lane_marker": "Harness/artifacts/task_lanes/active_lane.json",
-      "domain_lanes": {
-        "builder": {
-          "brief_target": "builder-brief",
-          "fast_target": "verify-fast",
-          "repair_target": "verify",
-          "ci_target": "verify-ci",
-          "heavy_targets": [
-            "verify",
-            "verify-ci",
-            "review-ready"
-          ],
-          "status_targets": [
-            "builder-brief",
-            "verify-fast",
-            "verify"
-          ],
-          "brief_artifact": "Harness/artifacts/task_lanes/builder-brief/latest/summary.json"
-        },
-        "adoption": {
-          "brief_target": "adoption-brief",
-          "fast_target": "verify-fast",
-          "repair_target": "verify",
-          "ci_target": "verify-ci",
-          "heavy_targets": [
-            "verify",
-            "verify-ci",
-            "review-ready"
-          ],
-          "status_targets": [
-            "adoption-brief",
-            "new-repo-brief",
-            "onboarding-brief",
-            "verify-fast",
-            "verify"
-          ],
-          "brief_artifact": "Harness/artifacts/task_lanes/adoption-brief/latest/summary.json"
-        },
-        "release": {
-          "brief_target": "release-brief",
-          "fast_target": "verify",
-          "repair_target": "review-ready",
-          "ci_target": "verify-ci",
-          "heavy_targets": [
-            "verify-ci",
-            "review-ready"
-          ],
-          "status_targets": [
-            "release-brief",
-            "verify",
-            "review-ready",
-            "verify-ci"
-          ],
-          "brief_artifact": "Harness/artifacts/task_lanes/release-brief/latest/summary.json"
-        }
-      }
+    "ui_review": {
+      "enabled": false,
+      "targets": [],
+      "commands": {},
+      "summary": "artifacts/ui-review/latest/summary.md",
+      "screenshots": "artifacts/ui-review/latest/screenshots",
+      "lighthouse": "artifacts/ui-review/latest/lighthouse",
+      "review_schema": [
+        "screenshot_inventory",
+        "viewport_state_coverage",
+        "visual_issue_inventory",
+        "component_semantics",
+        "absence_checks",
+        "before_after_expectation",
+        "next_diagnostic",
+        "full_log_path"
+      ]
+    },
+    "ui_visual": {
+      "enabled": false,
+      "targets": [],
+      "commands": {},
+      "reference_manifest": "artifacts/ui-reference-renders/latest/manifest.json",
+      "reference_image": "artifacts/ui-reference-renders/latest/reference.png",
+      "measure_summary": "artifacts/ui-visual-measure/latest/summary.json",
+      "measurements": "artifacts/ui-visual-measure/latest/measurements.csv"
+    },
+    "release": {
+      "platforms": [],
+      "targets": [],
+      "windows_native_proof_classes": [],
+      "manifest": "artifacts/release-candidate/latest/manifest.json",
+      "summary": "artifacts/release-candidate/latest/summary.json"
     }
   },
   "targets": {
@@ -134,7 +110,7 @@
           "name": "brief-check-01",
           "required": false,
           "category": "brief-check",
-          "command": "make engineer-entry-guard"
+          "command": "make forge-explain"
         }
       ]
     },
@@ -167,7 +143,7 @@
           "name": "verify-paths",
           "required": true,
           "category": "path-hygiene",
-          "command": "python3 tooling/bin/repo_path_hygiene.py --check --refresh-report"
+          "command": "python3 tooling/bin/repo_path_hygiene.py --check --refresh-report --strict-origin --strict-mode public_candidate"
         }
       ]
     },
@@ -189,7 +165,13 @@
           "name": "verify-fast-01",
           "required": true,
           "category": "verify-fast",
-          "command": "make quick-check"
+          "command": "make test"
+        },
+        {
+          "name": "verify-fast-02",
+          "required": true,
+          "category": "verify-fast",
+          "command": "make payload-validate"
         }
       ]
     },
@@ -200,7 +182,13 @@
           "name": "verify-01",
           "required": true,
           "category": "verify",
-          "command": "make review-check"
+          "command": "make payload-smoke"
+        },
+        {
+          "name": "verify-02",
+          "required": true,
+          "category": "verify",
+          "command": "make forge-smoke"
         }
       ]
     },
@@ -211,7 +199,7 @@
           "name": "repo-security-01",
           "required": true,
           "category": "repo-security",
-          "command": "make lint"
+          "command": "npm --prefix dev_tracker/ui audit --audit-level=moderate"
         },
         {
           "name": "gitleaks",
@@ -299,75 +287,68 @@
           "name": "verify-ui-cli-01",
           "required": true,
           "category": "ui-cli",
-          "command": "CI=1 make ui-test-browser"
+          "command": "CI=1 npm --prefix dev_tracker/ui run test"
         }
       ]
     },
-    "builder-brief": {
+    "forge-explain": {
       "kind": "commands",
       "steps": [
         {
-          "name": "builder-brief-01",
+          "name": "forge-explain-01",
           "required": true,
           "category": "repo-native brief/status",
-          "command": "uv run python scripts/domain_briefs.py builder-brief"
+          "command": "make forge-explain"
         }
       ]
     },
-    "adoption-brief": {
+    "payload-validate": {
       "kind": "commands",
       "steps": [
         {
-          "name": "adoption-brief-01",
+          "name": "payload-validate-01",
           "required": true,
-          "category": "repo-native brief/status",
-          "command": "uv run python scripts/domain_briefs.py adoption-brief"
+          "category": "payload-validation",
+          "command": "make payload-validate"
         }
       ]
     },
-    "release-brief": {
+    "payload-smoke": {
       "kind": "commands",
       "steps": [
         {
-          "name": "release-brief-01",
+          "name": "payload-smoke-01",
           "required": true,
-          "category": "repo-native brief/status",
-          "command": "uv run python scripts/domain_briefs.py release-brief"
+          "category": "payload-smoke",
+          "command": "make payload-smoke"
         }
       ]
     },
-    "new-repo-brief": {
+    "forge-smoke": {
       "kind": "commands",
       "steps": [
         {
-          "name": "new-repo-brief-01",
+          "name": "forge-smoke-01",
           "required": true,
-          "category": "repo-native brief/status",
-          "command": "uv run python scripts/new_repo_onboarding.py new-repo-brief"
+          "category": "forge-smoke",
+          "command": "make forge-smoke"
         }
       ]
     },
-    "onboarding-brief": {
+    "public-portability-check": {
       "kind": "commands",
       "steps": [
         {
-          "name": "onboarding-brief-01",
+          "name": "public-portability-check-01",
           "required": true,
-          "category": "repo-native brief/status",
-          "command": "uv run python scripts/new_repo_onboarding.py onboarding-brief"
+          "category": "public-portability",
+          "command": "make public-portability-check"
         }
       ]
     },
     "review-ready": {
       "kind": "review-ready",
-      "prep_steps": [
-        {
-          "name": "review-ready-prep-01",
-          "required": true,
-          "category": "prep",
-          "command": "make sync-engineer-entry"
-        }
-      ],
+      "prep_steps": [],
       "core_targets": [
         "repo-brief",
         "verify-paths",
@@ -395,13 +376,37 @@
           "name": "verify-paths",
           "required": true,
           "category": "path-hygiene",
-          "command": "python3 tooling/bin/repo_path_hygiene.py --check --refresh-report"
+          "command": "python3 tooling/bin/repo_path_hygiene.py --check --refresh-report --strict-origin --strict-mode public_candidate"
         },
         {
           "name": "verify-ci-01",
           "required": true,
           "category": "verify-ci",
-          "command": "make alpha-check"
+          "command": "make public-portability-check"
+        },
+        {
+          "name": "verify-ci-02",
+          "required": true,
+          "category": "verify-ci",
+          "command": "make lint-py"
+        },
+        {
+          "name": "verify-ci-03",
+          "required": true,
+          "category": "verify-ci",
+          "command": "make lint-md"
+        },
+        {
+          "name": "verify-ci-04",
+          "required": true,
+          "category": "verify-ci",
+          "command": "npm --prefix dev_tracker/ui run test"
+        },
+        {
+          "name": "verify-ci-05",
+          "required": true,
+          "category": "verify-ci",
+          "command": "npm --prefix dev_tracker/ui run build"
         }
       ]
     },

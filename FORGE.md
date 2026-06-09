@@ -29,6 +29,21 @@ scripts/moradin_forge.sh apply --target <target-repo> --approve
 scripts/moradin_forge.sh verify --target <target-repo>
 ```
 
+For Forge repo maintenance, start with:
+
+```sh
+make repo-brief
+make verify-paths
+make verify-fast
+make review-ready
+```
+
+Use `tpl context-primer --latest-session --repo moradins-forge` after a new
+session, compaction, long resume, or repeated broad reads. Use
+`tpl session-supervisor --live --latest-session --repo moradins-forge` when work
+starts looping, and `tpl rerun-advice moradins-forge -- <command>` before
+repeating long deterministic commands.
+
 On Windows PowerShell, use:
 
 ```powershell
@@ -44,3 +59,8 @@ validation commands, rollback path, and any action the user must take manually.
 
 Root `AGENTS.md` patching is opt-in. Use `--patch-agents` only after explaining
 the marked block and receiving explicit user approval.
+
+Forge is a public-candidate repo. Public docs, sidecars, exports, and release
+evidence must not contain raw home paths, usernames, hostnames, Windows user
+paths, WSL UNC paths, or machine-origin markers. Use placeholders such as
+`<forge-root>`, `<target-repo>`, `<temp-dir>`, and `<workbench-port>`.

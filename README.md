@@ -91,6 +91,12 @@ Root repo patching is off by default. To add a marked Moradin block to a target
 
 ## Public Command Surface
 
+- `make repo-brief`
+- `make verify-paths`
+- `make verify-fast`
+- `make verify-security`
+- `make review-ready`
+- `make push-gate`
 - `make forge-explain`
 - `make forge-readiness`
 - `make forge-plan TARGET=<target-repo>`
@@ -106,6 +112,15 @@ Root repo patching is off by default. To add a marked Moradin block to a target
 sanitized check tree, runs a sidecar smoke test, and scans both outputs for
 host-specific paths, generated evidence, and portability failures.
 
+For normal maintenance, start with `make repo-brief`, use `make verify-paths`
+before public-facing outputs, and run `make review-ready` before a PR handoff.
+The generated pre-push gate is available as `make push-gate`.
+
+Forge does not opt into release-candidate signing/readiness lanes yet. That
+requires a stable release artifact path, build summary, SBOM/security evidence,
+platform signing or smoke evidence, and a release-candidate manifest. Until then,
+`make public-portability-check` remains the public release hygiene gate.
+
 ## Optional Workbench
 
 The browser workbench is secondary. It remains useful for diagnostics,
@@ -118,6 +133,10 @@ npm --prefix dev_tracker/ui install
 
 Use local browser access, WSL browser access, or SSH local forwarding. Keep the
 workbench loopback-only unless the user explicitly asks for broader exposure.
+Use `tpl-ui-review-brief --repo moradins-forge --mode auto --prompt <prompt>`
+before UI creation, refinement, screenshot critique, or formatting/readability
+work. Reference renders and visual measurements stay opt-in until Forge has a
+repo-local screenshot and DOM-box capture wrapper.
 
 ## Key Contracts
 
