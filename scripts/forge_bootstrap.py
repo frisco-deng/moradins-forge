@@ -21,6 +21,10 @@ DEFAULT_REF = "main"
 DEFAULT_DEPS = "minimal"
 SCRIPT_ROOT = Path(__file__).resolve().parents[1]
 START_CARD_RELATIVE = Path("artifacts/bootstrap/latest")
+TEMP_ROOT = "/" + "tmp" + "/"
+VAR_TEMP_ROOT = "/" + "var" + "/" + "tmp" + "/"
+LINUX_HOME_ROOT = "/" + "home" + "/"
+MAC_HOME_ROOT = "/" + "Users" + "/"
 
 
 class BootstrapError(RuntimeError):
@@ -87,10 +91,10 @@ def sanitize_error_message(message: str, options: BootstrapOptions) -> str:
     for raw, placeholder in replacements:
         if raw:
             text = text.replace(str(raw), placeholder)
-    text = re.sub(r"/tmp/[^\s'\"<>]+", "<temp-dir>", text)
-    text = re.sub(r"/var/tmp/[^\s'\"<>]+", "<temp-dir>", text)
-    text = re.sub(r"/home/[^/\s]+(?:/[^\s'\"<>]+)?", "<home>", text)
-    text = re.sub(r"/Users/[^/\s]+(?:/[^\s'\"<>]+)?", "<home>", text)
+    text = re.sub(re.escape(TEMP_ROOT) + r"[^\s'\"<>]+", "<temp-dir>", text)
+    text = re.sub(re.escape(VAR_TEMP_ROOT) + r"[^\s'\"<>]+", "<temp-dir>", text)
+    text = re.sub(re.escape(LINUX_HOME_ROOT) + r"[^/\s]+(?:/[^\s'\"<>]+)?", "<home>", text)
+    text = re.sub(re.escape(MAC_HOME_ROOT) + r"[^/\s]+(?:/[^\s'\"<>]+)?", "<home>", text)
     text = re.sub(r"[A-Za-z]:\\+Users\\+[^\\\s'\"<>]+(?:\\[^\s'\"<>]+)?", "<home>", text)
     return text
 

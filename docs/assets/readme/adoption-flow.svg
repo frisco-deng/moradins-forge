@@ -1,0 +1,35 @@
+<svg width="920" height="260" viewBox="0 0 920 260" role="img" aria-labelledby="title desc">
+  <title id="title">Moradin Forge adoption flow</title>
+  <desc id="desc">Agent flow from Forge orientation through approval, sidecar write, and verification.</desc>
+  <rect width="920" height="260" rx="18" fill="#f8fafc"/>
+  <rect x="28" y="28" width="864" height="204" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="54" y="66" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#0f172a">Adoption Flow</text>
+  <g font-family="Arial, sans-serif" font-size="15" fill="#0f172a">
+    <rect x="54" y="100" width="130" height="72" rx="10" fill="#dbeafe" stroke="#2563eb"/>
+    <text x="82" y="130" font-weight="700">Explain</text>
+    <text x="75" y="153">read Forge</text>
+    <rect x="230" y="100" width="130" height="72" rx="10" fill="#dcfce7" stroke="#16a34a"/>
+    <text x="271" y="130" font-weight="700">Plan</text>
+    <text x="252" y="153">dry run only</text>
+    <rect x="406" y="100" width="130" height="72" rx="10" fill="#fef3c7" stroke="#d97706"/>
+    <text x="445" y="130" font-weight="700">Approve</text>
+    <text x="433" y="153">human gate</text>
+    <rect x="582" y="100" width="130" height="72" rx="10" fill="#ede9fe" stroke="#7c3aed"/>
+    <text x="621" y="130" font-weight="700">Apply</text>
+    <text x="612" y="153">sidecar only</text>
+    <rect x="758" y="100" width="106" height="72" rx="10" fill="#fee2e2" stroke="#dc2626"/>
+    <text x="785" y="130" font-weight="700">Verify</text>
+    <text x="784" y="153">scan leaks</text>
+  </g>
+  <g stroke="#475569" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M190 136h31"/>
+    <path d="M216 128l10 8-10 8"/>
+    <path d="M366 136h31"/>
+    <path d="M392 128l10 8-10 8"/>
+    <path d="M542 136h31"/>
+    <path d="M568 128l10 8-10 8"/>
+    <path d="M718 136h31"/>
+    <path d="M744 128l10 8-10 8"/>
+  </g>
+  <text x="54" y="204" font-family="Arial, sans-serif" font-size="15" fill="#334155">Nothing writes to the target repo before the approval step.</text>
+</svg>

@@ -1,0 +1,21 @@
+<svg width="920" height="300" viewBox="0 0 920 300" role="img" aria-labelledby="title desc">
+  <title id="title">Moradin Forge safety boundary</title>
+  <desc id="desc">Default Forge work stays local and request-only for host changes.</desc>
+  <rect width="920" height="300" rx="18" fill="#f8fafc"/>
+  <rect x="34" y="34" width="396" height="218" rx="14" fill="#ecfdf5" stroke="#16a34a" stroke-width="2"/>
+  <rect x="490" y="34" width="396" height="218" rx="14" fill="#fff1f2" stroke="#e11d48" stroke-width="2"/>
+  <text x="60" y="74" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#14532d">Allowed By Default</text>
+  <text x="516" y="74" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#881337">Blocked By Default</text>
+  <g font-family="Arial, sans-serif" font-size="16" fill="#0f172a">
+    <text x="72" y="118">Read Forge guidance</text>
+    <text x="72" y="152">Inspect target repo metadata</text>
+    <text x="72" y="186">Write local sidecar after consent</text>
+    <text x="72" y="220">Report missing tools as requests</text>
+    <text x="528" y="118">Host package installs</text>
+    <text x="528" y="152">Credential rewrites</text>
+    <text x="528" y="186">Global shell changes</text>
+    <text x="528" y="220">Target root patches without consent</text>
+  </g>
+  <path d="M460 74v176" stroke="#64748b" stroke-width="3" stroke-dasharray="8 8"/>
+  <text x="344" y="282" font-family="Arial, sans-serif" font-size="15" fill="#334155">Forge is local-first and consent-gated.</text>
+</svg>

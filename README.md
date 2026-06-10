@@ -10,7 +10,7 @@ deterministic reflex layer: read the same entrypoints, run the same readiness
 and planning commands, write the same local artifacts, and verify the same
 safety boundaries every time.
 
-## Low-Token Bootstrap
+## Quick Start: Low-Token Bootstrap
 
 For a fresh machine or a low-context agent handoff, clone Forge with HTTPS and
 run the platform bootstrap. Bootstrap primes Forge only; it does not install
@@ -43,6 +43,23 @@ Set-Location <forge-root>
 The bootstrap writes a sanitized agent start card under
 `artifacts/bootstrap/latest/` when it runs outside dry-run mode. Missing tools
 are reported as request-only manual actions.
+
+## Visual Overview
+
+![Adoption flow](docs/assets/readme/adoption-flow.svg)
+
+![Safety boundary](docs/assets/readme/safety-boundary.svg)
+
+![What gets written](docs/assets/readme/written-surface.svg)
+
+![Token-saving start path](docs/assets/readme/token-saving-start.svg)
+
+| View | What it shows |
+| --- | --- |
+| Adoption flow | Forge explains, plans, waits for approval, applies a sidecar, then verifies. |
+| Safety boundary | Forge keeps host installs, credential changes, and target-root patches out of the default path. |
+| What gets written | Approved adoption writes a bounded `.moradins-harness/` sidecar plus local readiness and rollback records. |
+| Token-saving start path | Bootstrap gives the agent one small start card before broader repo inspection. |
 
 ## Agent Intercept
 
@@ -213,3 +230,5 @@ Use the shortest repo-native gate that matches the change:
 
 Public releases should pass all gates, GitHub Actions, and a fresh sidecar smoke
 against a disposable target repo.
+
+Current beta release target: `v0.2.0-beta.1`.

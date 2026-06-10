@@ -260,6 +260,7 @@ owner: moradin-forge
 | FORGE-004 | preserve root workflows by default | docs/references/moradin_forge_agent_integration_contract_v1.md | write sidecar adapters before root patches | active |
 | FORGE-005 | verify sidecars for portability before handoff | scripts/moradin_forge.py | run `forge verify` or `make forge-verify` | active |
 | FORGE-006 | keep bootstrap separate from adoption | docs/references/moradin_forge_installer_bootstrap_contract_v1.md | run platform bootstrap only to prime Forge and write a start card | active |
+| FORGE-007 | keep beta release visuals portable and local | README.md | scan SVG assets before public release | active |
 """,
     "Harness/artifacts/control/current_features.md": """\
 ---
@@ -278,6 +279,7 @@ owner: moradin-forge
 | FORGE-FEAT-004 | request-only tooling readiness artifacts | implemented | docs/references/tooling_readiness_install_request_contract_v1.md |
 | FORGE-FEAT-005 | public export and sidecar portability scans | implemented | scripts/public_export.py |
 | FORGE-FEAT-006 | low-token clone-and-prime bootstrap entrypoints | implemented | docs/references/moradin_forge_installer_bootstrap_contract_v1.md |
+| FORGE-FEAT-007 | README visual overview for adoption and safety boundaries | implemented | docs/assets/readme/ |
 """,
     "Harness/artifacts/control/compatibility_window_status.md": """\
 ---
@@ -314,6 +316,7 @@ owner: moradin-forge
 | --- | --- | --- | --- | --- |
 | PUBLIC-001 | 2026-05-11 | public-alpha | Published Moradin's Forge as an agent-first local integration kit with consent-gated sidecar adoption. | ready |
 | PUBLIC-002 | 2026-06-09 | tooling-inheritance | Adopted current shared-tooling adapter improvements, hardened portability scans, and added request-only bootstrap entrypoints. | ready |
+| PUBLIC-003 | 2026-06-10 | beta-release | Prepared v0.2.0-beta.1 with version normalization, CI fixes, and README visual overview assets. | ready |
 """,
 }
 

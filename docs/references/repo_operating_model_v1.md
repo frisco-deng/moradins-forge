@@ -2,7 +2,7 @@
 title: "Moradin Forge Repo Operating Model V1"
 status: approved
 owner: moradin-forge
-last_reviewed: 2026-06-09
+last_reviewed: 2026-06-10
 source_refs:
   - ../../README.md
   - ../../AGENTS.md
@@ -42,6 +42,8 @@ branches in this repo.
 Use these gates before public PRs and releases:
 
 - `make test`
+- `make verify-ci`
+- `make verify-security`
 - `make payload-validate`
 - `make payload-smoke`
 - `make forge-smoke`
@@ -51,6 +53,8 @@ Use these gates before public PRs and releases:
 - `npm --prefix dev_tracker/ui run test`
 - `npm --prefix dev_tracker/ui run build`
 - `npm --prefix dev_tracker/ui audit --audit-level=moderate`
+- SVG asset scan for `script`, `http`, `file:`, raw home paths, hostnames,
+  usernames, and SSH remotes.
 
 For adoption behavior changes, also run a fresh sidecar smoke against a
 disposable target repo and verify the target root files are preserved by

@@ -51,7 +51,7 @@ def make_forge_root(tmp_path: Path) -> Path:
                 "name: moradin_harness_payload",
                 "kind: moradin_payload",
                 "payload_id: moradin_harness_payload",
-                "payload_version: 0.2.0-alpha",
+                "payload_version: 0.2.0-beta.1",
                 "source_root: .",
                 "sidecar_default_dir: .moradins-harness",
                 "include_paths:",

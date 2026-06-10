@@ -1,6 +1,6 @@
 manager_schema_version: 2
 template_schema_version: 2
 template_id: base_app
-template_version: 0.1.0-alpha
-release_stage: alpha
+template_version: 0.2.0-beta.1
+release_stage: beta
 path_graph: canonical_only

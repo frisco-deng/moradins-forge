@@ -2,7 +2,7 @@
 title: "Moradin Payload Contract V1"
 status: approved
 owner: platform-architecture
-last_reviewed: 2026-06-09
+last_reviewed: 2026-06-10
 source_refs:
   - Harness/moradin_payload/manifest.yaml
 related_docs:
@@ -31,7 +31,7 @@ manifest for agent-first local adoption.
 - Bootstrap entrypoints: `install/bootstrap-linux.sh`,
   `install/bootstrap-macos.sh`, and `install/bootstrap-windows.ps1`
 
-The compatibility scaffold remains available for one release window, but primary
+The compatibility scaffold remains available for one beta release window, but primary
 UI routes, docs, and commands use Moradin payload language.
 
 ## Copy Rules

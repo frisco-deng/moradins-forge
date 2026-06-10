@@ -15,9 +15,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-sys.dont_write_bytecode = True
-
 from python_runtime import route_advice as python_route_advice, runtime_info as python_runtime_info
+
+sys.dont_write_bytecode = True
 
 
 SCHEMA_VERSION = 1

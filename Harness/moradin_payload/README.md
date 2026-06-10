@@ -9,6 +9,6 @@ The payload contract controls:
 - excluded generated or local-only artifacts,
 - the default sidecar directory `.moradins-harness/`,
 - platform bootstrap entrypoints and their shared request-only core,
-- compatibility keys that keep early adopters stable during the public alpha.
+- compatibility keys that keep early adopters stable during the public beta.
 
 Do not add generated local evidence or host-specific paths to the payload.
