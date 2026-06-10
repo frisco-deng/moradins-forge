@@ -26,6 +26,7 @@ TEXT_EXTENSIONS = {
     ".ts",
     ".tsx",
     ".css",
+    ".svg",
 }
 SKIP_DIRS = {
     ".git",

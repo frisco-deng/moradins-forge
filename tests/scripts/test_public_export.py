@@ -50,6 +50,10 @@ def make_source_repo(tmp_path: Path) -> Path:
     write(source / "install/bootstrap-linux.sh", "#!/usr/bin/env sh\n")
     write(source / "install/bootstrap-macos.sh", "#!/usr/bin/env sh\n")
     write(source / "install/bootstrap-windows.ps1", "#!/usr/bin/env pwsh\n")
+    write(
+        source / "docs/assets/readme/overview.svg",
+        f"<svg><text>{PRIVATE_CODE_ROOT_TOKEN}/{SHARED_TEMPLATES_TOKEN}</text></svg>\n",
+    )
     write(source / "Harness/entrypoints/forge.md", "# Forge Entrypoint\n")
     write(
         source / "Harness/moradin_payload/manifest.yaml",
@@ -99,12 +103,14 @@ def make_source_repo(tmp_path: Path) -> Path:
 def test_scan_tree_reports_forbidden_references(tmp_path: Path) -> None:
     root = tmp_path / "root"
     write(
-        root / "README.md",
+        root / "docs/assets/readme/leak.svg",
         "\n".join(
             [
+                "<svg>",
                 *forbidden_reference_samples(),
                 BRANCH_WAIVER_TOKEN,
                 PR_HARDENING_TOKEN,
+                "</svg>",
                 "",
             ]
         ),
@@ -151,6 +157,9 @@ def test_export_public_tree_excludes_history_and_sanitizes_text(tmp_path: Path) 
     assert (export / "install/bootstrap-macos.sh").is_file()
     assert (export / "install/bootstrap-windows.ps1").is_file()
     assert (export / "scripts/forge_bootstrap.py").is_file()
+    svg_text = (export / "docs/assets/readme/overview.svg").read_text(encoding="utf-8")
+    assert "shared-tooling-source" in svg_text
+    assert PRIVATE_CODE_ROOT_TOKEN not in svg_text
     assert "shared-tooling-source" in (export / "README.md").read_text(encoding="utf-8")
     assert "cd <forge-root>" in (export / "AGENTS.md").read_text(encoding="utf-8")
     assert "/artifacts/" in (export / ".gitignore").read_text(encoding="utf-8")

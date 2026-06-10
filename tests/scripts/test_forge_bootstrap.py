@@ -74,11 +74,38 @@ def test_missing_required_tools_are_request_only(monkeypatch: pytest.MonkeyPatch
 
     assert readiness["status"] == "blocked"
     assert payload["status"] == "blocked"
+    assert payload["agent_start"]["dry_run"] == "true"
+    assert payload["agent_start"]["write_suppressed"] == "true"
     assert "request_only" in rendered
     assert "sudo " not in rendered
     assert "brew " not in rendered
     assert "winget " not in rendered
     assert "git@github.com" not in rendered
+
+
+def test_blocked_bootstrap_does_not_write_start_card_to_non_forge_dest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dest = tmp_path / "non-forge"
+    dest.mkdir()
+    (dest / "README.md").write_text("not Forge\n", encoding="utf-8")
+    monkeypatch.setattr(forge_bootstrap.shutil, "which", lambda _command: None)
+
+    payload = bootstrap(
+        BootstrapOptions(
+            repo_url=forge_bootstrap.DEFAULT_REPO_URL,
+            ref="main",
+            dest=dest,
+            target=None,
+            deps="minimal",
+            dry_run=False,
+        )
+    )
+
+    assert payload["status"] == "blocked"
+    assert payload["agent_start"]["write_suppressed"] == "true"
+    assert not (dest / "artifacts").exists()
 
 
 def test_error_output_sanitizes_destination(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

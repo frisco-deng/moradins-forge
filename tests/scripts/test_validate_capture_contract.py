@@ -77,6 +77,39 @@ def test_validate_capture_manifest_fails_on_unallowlisted_legacy_reference(tmp_p
     assert any("legacy path marker" in issue.message for issue in issues)
 
 
+def test_validate_capture_manifest_scans_svg_assets(tmp_path: Path) -> None:
+    _write(
+        tmp_path / "docs/references/generic_harness_capture_manifest_v1.md",
+        """# Capture Manifest
+
+## Include Globs
+
+- `docs/assets/**`
+
+## Exclude Globs
+
+- `dev_tracker/ui/public/generated/**`
+
+## Allowed Legacy Reference Files
+
+- `docs/references/portability_copy_contract.md`
+""",
+    )
+    _write(
+        tmp_path / "docs/assets/readme/leak.svg",
+        "<svg><text>legacy docs/99_generated reference</text></svg>\n",
+    )
+
+    issues, included = capture_contract.validate_capture_manifest(
+        repo_root=tmp_path,
+        manifest_path=tmp_path / "docs/references/generic_harness_capture_manifest_v1.md",
+    )
+
+    assert "docs/assets/readme/leak.svg" in included
+    assert issues
+    assert any("legacy path marker" in issue.message for issue in issues)
+
+
 def test_validate_capture_manifest_excludes_release_evidence_from_legacy_scan(tmp_path: Path) -> None:
     _write(
         tmp_path / "docs/references/generic_harness_capture_manifest_v1.md",

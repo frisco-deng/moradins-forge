@@ -60,6 +60,7 @@ def make_forge_root(tmp_path: Path) -> Path:
                 "  - README.md",
                 "  - Harness/entrypoints",
                 "  - Harness/artifacts",
+                "  - docs/assets",
                 "  - docs/design_docs",
                 "  - docs/product_specs",
                 "  - docs/references",
@@ -76,6 +77,10 @@ def make_forge_root(tmp_path: Path) -> Path:
     write(forge_root / "FORGE.md", "# Forge\n")
     write(forge_root / "Harness/entrypoints/forge.md", "# Forge Entrypoint\n")
     write(forge_root / "Harness/artifacts/control/current_guidance.md", "# Guidance\n")
+    write(
+        forge_root / "docs/assets/readme/overview.svg",
+        f"<svg><text>{PRIVATE_CODE_ROOT_TOKEN}/{SHARED_TEMPLATES_TOKEN}</text></svg>\n",
+    )
     write(
         forge_root / Path(*RELEASE_EVIDENCE_TOKEN.split("/")) / "latest/sidecar/secret.md",
         "# Manager evidence\n",
@@ -157,6 +162,9 @@ def test_apply_copies_payload_excludes_release_evidence_and_preserves_root_files
     assert (target / "AGENTS.md").read_text(encoding="utf-8") == original_agents
     assert (target / "Makefile").read_text(encoding="utf-8") == original_makefile
     assert "shared-tooling-source" in (sidecar / "README.md").read_text(encoding="utf-8")
+    svg_text = (sidecar / "docs/assets/readme/overview.svg").read_text(encoding="utf-8")
+    assert "shared-tooling-source" in svg_text
+    assert PRIVATE_CODE_ROOT_TOKEN not in svg_text
     assert (sidecar / "adapters/Makefile.snippet").is_file()
     assert (sidecar / "adapters/package.json.scripts.snippet.json").is_file()
     assert (sidecar / "adapters/python.commands.md").is_file()
@@ -227,10 +235,12 @@ def test_verify_fails_on_forbidden_reference_or_manager_artifact(tmp_path: Path)
     apply_integration(forge_root, target, ForgeApplyOptions(approve=True))
     sidecar = target / ".moradins-harness"
     write(
-        sidecar / "docs/leak.md",
+        sidecar / "docs/assets/readme/leak.svg",
         "\n".join(
             [
+                "<svg>",
                 *forbidden_reference_samples(),
+                "</svg>",
                 "",
             ]
         ),

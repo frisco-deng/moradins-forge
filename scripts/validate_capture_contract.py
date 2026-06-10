@@ -23,6 +23,7 @@ TEXT_EXTENSIONS = {
     ".ts",
     ".tsx",
     ".css",
+    ".svg",
     ".yml",
     ".yaml",
     ".toml",

@@ -282,8 +282,14 @@ def bootstrap(options: BootstrapOptions) -> dict[str, Any]:
     actions: list[dict[str, Any]] = []
     tool_state = detect_tools(options.deps)
     if tool_state["status"] == "blocked":
-        payload = start_card_payload(options, "blocked", tool_state, actions, skipped=[])
-        payload["agent_start"] = write_start_card(options.dest, payload, options.dry_run)
+        skipped = ["start card write suppressed because required tools are missing"]
+        payload = start_card_payload(options, "blocked", tool_state, actions, skipped=skipped)
+        payload["agent_start"] = {
+            "json": "<forge-root>/artifacts/bootstrap/latest/agent_start.json",
+            "markdown": "<forge-root>/artifacts/bootstrap/latest/agent_start.md",
+            **({"dry_run": "true"} if options.dry_run else {}),
+            "write_suppressed": "true",
+        }
         return payload
     checkout_status = checkout_repo(options, actions)
     skipped = prime_dependencies(options, actions, tool_state)

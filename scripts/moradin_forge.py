@@ -63,6 +63,7 @@ TEXT_SUFFIXES = {
     ".ps1",
     ".py",
     ".sh",
+    ".svg",
     ".toml",
     ".ts",
     ".tsx",
