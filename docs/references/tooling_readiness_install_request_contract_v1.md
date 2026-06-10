@@ -2,10 +2,11 @@
 title: "Tooling Readiness And Install Request Contract V1"
 status: approved
 owner: platform-operations
-last_reviewed: 2026-05-03
+last_reviewed: 2026-06-09
 source_refs:
   - dev_tracker/ui/scripts/control-api.mjs
   - scripts/moradin_forge.py
+  - scripts/forge_bootstrap.py
 related_docs:
   - moradin_payload_contract_v1.md
   - moradin_forge_agent_integration_contract_v1.md
@@ -26,6 +27,9 @@ the UI or from native Forge scripts.
 - `POST /api/moradin/install-request`
 - `scripts/moradin_forge.sh readiness`
 - `scripts/moradin_forge.ps1 readiness`
+- `install/bootstrap-linux.sh`
+- `install/bootstrap-macos.sh`
+- `install/bootstrap-windows.ps1`
 
 ## Readiness Checks
 
@@ -40,6 +44,11 @@ Readiness checks cover:
 
 Each check records `present`, `missing`, or `manual`, plus any human-run install
 commands and verification command.
+
+Bootstrap readiness uses the same request-only model but keeps output smaller:
+it requires `git` plus a Python 3 launcher, treats `uv`, `node`, and `npm` as
+optional priming tools, and writes sanitized agent start-card guidance instead
+of running host installation commands.
 
 ## Install Request Artifacts
 
@@ -63,3 +72,5 @@ Each request includes:
 - Install commands must be reviewed and run by a human in a shell they control.
 - Missing optional scanner or bridge tools must not block payload validation.
 - Missing required baseline tools should block deploy work until resolved.
+- Bootstrap must not execute `sudo`, `brew`, `winget`, shell profile edits,
+  credential rewrites, global Git config changes, or Forge `apply`.

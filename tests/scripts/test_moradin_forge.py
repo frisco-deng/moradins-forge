@@ -30,6 +30,17 @@ def write(path: Path, content: str = "ok\n") -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def forbidden_reference_samples() -> list[str]:
+    return [
+        f"{PRIVATE_CODE_ROOT_TOKEN}/{SHARED_TEMPLATES_TOKEN}",
+        "/".join(["", "Users", "alice", "code", "private"]),
+        "C:" + "\\".join(["", "Users", "Alice", "code", "private"]),
+        "\\\\" + "\\".join(["wsl.localhost", "Ubuntu", "home", "alice", "code"]),
+        "git" + "@github.com:" + "frisco-deng/moradins-forge.git",
+        "/".join(["", "home", "alice", ".codex", "sessions", "2026", "06", "09", "session.jsonl"]),
+    ]
+
+
 def make_forge_root(tmp_path: Path) -> Path:
     forge_root = tmp_path / "forge"
     write(
@@ -215,7 +226,15 @@ def test_verify_fails_on_forbidden_reference_or_manager_artifact(tmp_path: Path)
     target = make_target(tmp_path)
     apply_integration(forge_root, target, ForgeApplyOptions(approve=True))
     sidecar = target / ".moradins-harness"
-    write(sidecar / "docs/leak.md", f"{PRIVATE_CODE_ROOT_TOKEN}/{SHARED_TEMPLATES_TOKEN}\n")
+    write(
+        sidecar / "docs/leak.md",
+        "\n".join(
+            [
+                *forbidden_reference_samples(),
+                "",
+            ]
+        ),
+    )
     write(sidecar / Path(*RELEASE_REPORTS_TOKEN.split("/")) / "leak.md", "local evidence\n")
 
     result = verify_integration(target)
@@ -223,6 +242,11 @@ def test_verify_fails_on_forbidden_reference_or_manager_artifact(tmp_path: Path)
     assert result["status"] == "fail"
     codes = {issue["code"] for issue in result["issues"]}
     assert "internal_home_path" in codes
+    assert "mac_home_path" in codes
+    assert "windows_user_path" in codes
+    assert "wsl_unc_path" in codes
+    assert "ssh_clone_url" in codes
+    assert "codex_home_or_session_path" in codes
     assert "local_only_artifact_copied" in codes
 
 

@@ -2,7 +2,7 @@
 title: "Moradin Payload Contract V1"
 status: approved
 owner: platform-architecture
-last_reviewed: 2026-05-03
+last_reviewed: 2026-06-09
 source_refs:
   - Harness/moradin_payload/manifest.yaml
 related_docs:
@@ -28,6 +28,8 @@ manifest for agent-first local adoption.
 - Default sidecar directory: `.moradins-harness`
 - Compatibility scaffold: `.harness_template/`
 - Agent-first entrypoint: `FORGE.md`
+- Bootstrap entrypoints: `install/bootstrap-linux.sh`,
+  `install/bootstrap-macos.sh`, and `install/bootstrap-windows.ps1`
 
 The compatibility scaffold remains available for one release window, but primary
 UI routes, docs, and commands use Moradin payload language.
@@ -40,6 +42,8 @@ UI routes, docs, and commands use Moradin payload language.
 - New-project generation and existing-project sidecar deploy must use the same
   manifest.
 - Forge native scripts must use the same manifest for sidecar materialization.
+- Bootstrap scripts and `scripts/forge_bootstrap.py` are included so a copied
+  sidecar can explain or prime Forge from the same contract surface.
 - Symlinks are rejected during payload copy.
 - Generated local evidence is not copied downstream.
 

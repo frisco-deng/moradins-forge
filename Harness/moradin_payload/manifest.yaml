@@ -43,6 +43,8 @@ include_paths:
   - Harness/artifacts/schemas
   - docs/references
   - skills
+  - install
+  - scripts/forge_bootstrap.py
   - scripts/moradin_forge.py
   - scripts/moradin_forge.sh
   - scripts/moradin_forge.ps1

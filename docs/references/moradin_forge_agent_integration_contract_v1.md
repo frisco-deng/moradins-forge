@@ -2,14 +2,16 @@
 title: "Moradin Forge Agent Integration Contract V1"
 status: approved
 owner: platform-operations
-last_reviewed: 2026-05-08
+last_reviewed: 2026-06-09
 source_refs:
   - FORGE.md
   - Harness/entrypoints/forge.md
   - Harness/entrypoints/forge_agent_handoff.md
   - scripts/moradin_forge.py
+  - scripts/forge_bootstrap.py
 related_docs:
   - moradin_payload_contract_v1.md
+  - moradin_forge_installer_bootstrap_contract_v1.md
   - moradin_forge_public_export_contract_v1.md
   - tooling_readiness_install_request_contract_v1.md
   - assistant_handoff_contract_v1.md
@@ -25,6 +27,9 @@ entrypoints, explains the integration, asks for consent, then applies Moradin
 locally through deterministic scripts.
 
 ## Integration Flow
+
+Optional pre-step: run the platform installer bootstrap to clone or prime Forge
+and write `artifacts/bootstrap/latest/agent_start.md`.
 
 1. Explain: `scripts/moradin_forge.sh explain` or
    `.\scripts\moradin_forge.ps1 explain`.
@@ -59,9 +64,12 @@ overwrite flag.
 - Linux/macOS: `scripts/moradin_forge.sh`
 - Windows PowerShell: `scripts/moradin_forge.ps1`
 - Core implementation: `scripts/moradin_forge.py`
+- Bootstrap entrypoints: `install/bootstrap-linux.sh`,
+  `install/bootstrap-macos.sh`, and `install/bootstrap-windows.ps1`
 
 The native wrappers choose `uv` when available and fall back to a local Python 3
 interpreter. Missing tools are reported through request-only readiness artifacts.
+Bootstrap uses the same safety boundary and never runs `apply`.
 
 ## Rollback
 

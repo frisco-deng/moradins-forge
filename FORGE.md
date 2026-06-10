@@ -19,6 +19,23 @@ If the user sent you here as Codex, Claude Code, or another coding agent:
    - it will not edit outside the approved target repo.
 5. Ask the user for explicit consent before running any apply command.
 
+If the user wants a low-token first pass, run the platform bootstrap first:
+
+```sh
+install/bootstrap-linux.sh --target <target-repo>
+install/bootstrap-macos.sh --target <target-repo>
+```
+
+On Windows PowerShell:
+
+```powershell
+.\install\bootstrap-windows.ps1 -Target <target-repo>
+```
+
+Bootstrap only clones or primes Forge and writes a sanitized start card under
+`artifacts/bootstrap/latest/`; it never installs host tools, patches a target
+repo, or runs `apply`.
+
 Use this deterministic path:
 
 ```sh
@@ -42,7 +59,9 @@ Use `tpl context-primer --latest-session --repo moradins-forge` after a new
 session, compaction, long resume, or repeated broad reads. Use
 `tpl session-supervisor --live --latest-session --repo moradins-forge` when work
 starts looping, and `tpl rerun-advice moradins-forge -- <command>` before
-repeating long deterministic commands.
+repeating long deterministic commands. Use the Python route reported by
+`make repo-brief`; Forge is a `uv` repo and raw `python` is not the runtime
+contract.
 
 On Windows PowerShell, use:
 
@@ -62,5 +81,6 @@ the marked block and receiving explicit user approval.
 
 Forge is a public-candidate repo. Public docs, sidecars, exports, and release
 evidence must not contain raw home paths, usernames, hostnames, Windows user
-paths, WSL UNC paths, or machine-origin markers. Use placeholders such as
-`<forge-root>`, `<target-repo>`, `<temp-dir>`, and `<workbench-port>`.
+paths, WSL UNC paths, Codex session paths, SSH clone URLs, raw temp paths, or
+machine-origin markers. Use placeholders such as `<forge-root>`,
+`<target-repo>`, `<temp-dir>`, and `<workbench-port>`.

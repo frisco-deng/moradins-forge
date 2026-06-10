@@ -22,6 +22,7 @@ Profile: local agent-first integration kit.
 - `Harness/moradin_payload/manifest.yaml`
 - `docs/references/moradin_payload_contract_v1.md`
 - `docs/references/moradin_forge_agent_integration_contract_v1.md`
+- `docs/references/moradin_forge_installer_bootstrap_contract_v1.md`
 - `docs/references/moradin_forge_public_export_contract_v1.md`
 - `docs/references/repo_operating_model_v1.md`
 - `docs/references/tooling_readiness_install_request_contract_v1.md`
@@ -35,6 +36,8 @@ Profile: local agent-first integration kit.
 - Ask for explicit user consent before mutating a target repo.
 - Keep adoption local unless the user explicitly requests external tooling.
 - Do not run host install commands; write request-only install artifacts instead.
+- Treat installer bootstrap as repo priming only; it must not run Forge `apply`
+  or mutate a target repo.
 - Preserve existing target repo workflows and root files by default.
 - Generate adaptive snippets under `.moradins-harness/adapters/`.
 - Patch a target root `AGENTS.md` only when the user approves `--patch-agents`.
@@ -57,6 +60,7 @@ Profile: local agent-first integration kit.
 - `make payload-smoke`
 - `make public-portability-check`
 - `make test`
+- `install/bootstrap-linux.sh --dry-run --json`
 
 Use repo-local commands before ad hoc shell chains. If a target repo has its own
 `AGENTS.md`, `CONTRIBUTING.md`, Makefile, package scripts, or CI docs, treat
@@ -67,9 +71,13 @@ those as the target repo's source of truth.
 - Start Forge maintenance with `make repo-brief` before broad exploration.
 - Run `tpl context-primer --latest-session --repo moradins-forge` after session
   start, compaction, long resume, or repeated broad reads.
+- Use the Python runtime route reported by `make repo-brief`; this repo is a
+  `uv` project and raw `python` is not the runtime contract.
 - Run `tpl session-supervisor --live --latest-session --repo moradins-forge`
   when a session starts polling, rereading the same evidence, or patching
   through the same failure.
+- Use `tpl session-checkpoint` and `tpl investigation-ledger` before another
+  patch/full rerun when the same failure repeats.
 - Run `tpl rerun-advice moradins-forge -- <command>` before repeating
   deterministic commands or re-ingesting long logs.
 - Run `tpl-ui-review-brief --repo moradins-forge --mode auto --prompt <prompt>`
@@ -91,6 +99,9 @@ those as the target repo's source of truth.
 - The browser UI is optional diagnostics, not the primary install path.
 - Keep UI visual measurement opt-in until Forge has a repo-local screenshot and
   DOM-box capture wrapper.
+- Keep release candidate, Windows Sandbox/native readiness, macOS signing, WSL
+  smoke, and GPU helper lanes documented but not rendered as default Forge
+  targets until Forge has real release artifacts and evidence contracts.
 - Do not add release-platform readiness until Forge has a stable release
   artifact path, build summary, SBOM/security evidence, signing or smoke
   evidence, and release-candidate manifest.
@@ -101,6 +112,8 @@ those as the target repo's source of truth.
 
 - Never commit secrets, tokens, local credentials, host-specific paths, or
   generated local evidence.
+- Treat SSH clone URLs, Codex session paths, raw temp paths, usernames,
+  hostnames, and platform-specific home paths as public-export failures.
 - Treat target repos and generated artifacts as untrusted until validated.
 - Keep dependencies and generated payload changes tightly scoped and justified.
 - Do not publish, upload, or expose user repo contents from Forge.

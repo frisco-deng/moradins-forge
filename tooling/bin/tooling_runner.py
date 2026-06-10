@@ -9,10 +9,15 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+sys.dont_write_bytecode = True
+
+from python_runtime import route_advice as python_route_advice, runtime_info as python_runtime_info
 
 
 SCHEMA_VERSION = 1
@@ -65,7 +70,7 @@ DIAGNOSTIC_FAILURE_TERMS = (
 COMMAND_FAILURE_ADVISORIES = (
     (
         ("python: command not found", "/bin/bash: python:", "python: not found"),
-        "use `python3` or the repo's deterministic Python environment instead of retrying raw `python`",
+        "use the repo Python route from `make repo-brief`; do not retry raw `python`",
     ),
     (
         ("no rule to make target 'fmt-md'", "no rule to make target `fmt-md`", "no rule to make target fmt-md"),
@@ -1092,6 +1097,7 @@ def collect_base_summary(root: Path, config: dict[str, Any], target: str, artifa
             **repo_cfg,
             "root": str(root),
             "manifests": manifest_info(root, repo_cfg),
+            "python_runtime": python_runtime_info(root, repo_cfg=repo_cfg, targets=config["targets"]),
             "ui_cli": ui_cli_info(root, repo_cfg, config["targets"]),
             "ui_review": ui_review_info(root, repo_cfg, config["targets"]),
             "repo_local_agents": repo_agents_path.exists(),
@@ -1213,6 +1219,18 @@ def populate_brief_findings(summary: dict[str, Any]) -> None:
         summary["findings"].append("unavailable: gh is not installed")
     elif not github["authenticated"]:
         summary["findings"].append(f"unavailable: {github['error'] or 'gh is not authenticated'}")
+    python_runtime = repo.get("python_runtime", {})
+    if python_runtime.get("detected"):
+        preferred = python_runtime.get("preferred_python_command") or python_runtime.get("fallback_python_command") or "python3"
+        summary["findings"].append(
+            "python-runtime: "
+            + f"{python_runtime.get('manager')} via `{preferred}`; "
+            + f"notebook=`{python_runtime.get('notebook_inspection_command') or preferred}`; "
+            + f"test=`{python_runtime.get('test_command') or 'repo-local make target'}`; "
+            + str(python_runtime.get("route_note") or "")
+        )
+        if not python_runtime.get("raw_python_allowed"):
+            summary["findings"].append("python-runtime: raw `python` is not a repo contract; use the route above or a repo-local make target")
     ui_cli = repo.get("ui_cli", {})
     if ui_cli.get("detected"):
         marker_count = len(ui_cli.get("configs", [])) + sum(len(items) for items in ui_cli.get("browser_scripts", {}).values())
@@ -1483,6 +1501,16 @@ def write_summary(summary: dict[str, Any], artifact_dir: Path) -> None:
         f"- reused_step_artifacts: `{len(summary['analysis'].get('reused_step_artifacts') or [])}`",
         f"- step_reuse_saved_seconds: `{summary['analysis'].get('step_reuse_saved_seconds', 0.0)}`",
     ]
+    python_runtime = summary["repo"].get("python_runtime", {})
+    if python_runtime:
+        insert_at = md_lines.index("## Git") - 1
+        md_lines[insert_at:insert_at] = [
+            f"- python_runtime_manager: `{python_runtime.get('manager', 'none')}`",
+            f"- python_preferred_command: `{python_runtime.get('preferred_python_command') or 'none'}`",
+            f"- python_notebook_command: `{python_runtime.get('notebook_inspection_command') or 'none'}`",
+            f"- python_test_command: `{python_runtime.get('test_command') or 'none'}`",
+            f"- raw_python_allowed: `{python_runtime.get('raw_python_allowed', False)}`",
+        ]
     stale_reasons = summary["analysis"].get("artifact_stale_reasons") or []
     previous_stale_reasons = summary["analysis"].get("previous_artifact_stale_reasons") or []
     md_lines.append(f"- artifact_stale_reasons: `{'; '.join(stale_reasons) or 'none'}`")
@@ -1585,6 +1613,13 @@ def print_summary(summary: dict[str, Any], artifact_dir: Path) -> None:
         lines.append(
             f"[tooling] repo_local_agents={summary['repo']['repo_local_agents_path'] or 'none'}"
         )
+        python_runtime = summary["repo"].get("python_runtime", {})
+        if python_runtime:
+            lines.append(
+                "[tooling] python_runtime="
+                f"{python_runtime.get('manager', 'none')} preferred={python_runtime.get('preferred_python_command') or 'none'} "
+                f"raw_python_allowed={python_runtime.get('raw_python_allowed', False)}"
+            )
         github = summary["github"]
         gh_state = "authenticated" if github["authenticated"] else github["error"] or "unavailable"
         lines.append(f"[tooling] gh={gh_state}")
@@ -1663,6 +1698,18 @@ def diagnostic_next_action(summary: dict[str, Any]) -> str:
 def command_failure_advisories(summary: dict[str, Any]) -> list[str]:
     signal_text = diagnostic_signal_text(summary)
     actions: list[str] = []
+    repo_root = Path(str(summary.get("repo", {}).get("root") or "."))
+    for step in summary.get("prep_steps", []) + summary.get("steps", []):
+        if step.get("status") not in {"fail", "warn"}:
+            continue
+        advice = python_route_advice(
+            str(step.get("command") or ""),
+            repo_root,
+            repo_cfg=summary.get("repo", {}),
+            targets=summary.get("targets", {}),
+        )
+        if advice and advice not in actions:
+            actions.append(advice)
     for terms, action in COMMAND_FAILURE_ADVISORIES:
         if any(term in signal_text for term in terms):
             actions.append(action)

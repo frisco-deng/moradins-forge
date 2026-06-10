@@ -15,3 +15,4 @@ owner: moradin-forge
 | FORGE-003 | keep host tool installation request-only | docs/references/tooling_readiness_install_request_contract_v1.md | write install-request artifacts instead of installing tools | active |
 | FORGE-004 | preserve root workflows by default | docs/references/moradin_forge_agent_integration_contract_v1.md | write sidecar adapters before root patches | active |
 | FORGE-005 | verify sidecars for portability before handoff | scripts/moradin_forge.py | run `forge verify` or `make forge-verify` | active |
+| FORGE-006 | keep bootstrap separate from adoption | docs/references/moradin_forge_installer_bootstrap_contract_v1.md | run platform bootstrap only to prime Forge and write a start card | active |

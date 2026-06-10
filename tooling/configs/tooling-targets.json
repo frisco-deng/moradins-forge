@@ -60,6 +60,27 @@
         ]
       }
     },
+    "python_runtime": {
+      "detected": true,
+      "manager": "uv",
+      "source": "repo_files_or_commands",
+      "markers": [
+        ".venv/bin/python",
+        "pyproject.toml",
+        "uv.lock"
+      ],
+      "preferred_python_command": "uv run python",
+      "notebook_inspection_command": "uv run python",
+      "test_command": "uv run pytest",
+      "fallback_python_command": "python3",
+      "raw_python_allowed": false,
+      "python3_valid_for_repo": false,
+      "preferred_available": true,
+      "uv_available": true,
+      "python3_available": true,
+      "raw_python_available": false,
+      "route_note": "uv project detected; use uv so dependencies and project settings are active"
+    },
     "ui_cli": {
       "enabled": true,
       "mode": "headless",

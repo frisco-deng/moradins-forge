@@ -2,13 +2,14 @@
 title: "Moradin Forge Repo Operating Model V1"
 status: approved
 owner: moradin-forge
-last_reviewed: 2026-05-11
+last_reviewed: 2026-06-09
 source_refs:
   - ../../README.md
   - ../../AGENTS.md
 related_docs:
   - moradin_forge_public_export_contract_v1.md
   - moradin_forge_agent_integration_contract_v1.md
+  - moradin_forge_installer_bootstrap_contract_v1.md
   - tooling_readiness_install_request_contract_v1.md
 ---
 
@@ -30,6 +31,11 @@ branches in this repo.
 - Run portability and sidecar leak checks before every public PR or release.
 - Keep public docs generic; use `<forge-root>`, `<target-repo>`, `<temp-dir>`,
   and `<workbench-port>` placeholders.
+- Use HTTPS clone examples in public docs. SSH remotes are local operator
+  configuration and must not appear in public guidance or generated evidence.
+- Keep optional UI visual, release candidate, Windows native, macOS signing, WSL
+  smoke, and GPU helper lanes out of default Forge targets until Forge has real
+  release artifacts and evidence contracts.
 
 ## Required Public Gates
 
@@ -40,6 +46,7 @@ Use these gates before public PRs and releases:
 - `make payload-smoke`
 - `make forge-smoke`
 - `make public-portability-check`
+- `install/bootstrap-linux.sh --dry-run --json`
 - `npm --prefix dev_tracker/ui ci`
 - `npm --prefix dev_tracker/ui run test`
 - `npm --prefix dev_tracker/ui run build`

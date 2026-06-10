@@ -2,7 +2,7 @@
 title: "References Index"
 status: approved
 owner: docs-build-pipeline
-last_reviewed: 2026-03-27
+last_reviewed: 2026-06-09
 source_refs: []
 related_docs:
   - Harness/artifacts/openapi
@@ -16,6 +16,7 @@ related_docs:
   - redeployable_harness_contract_v1.md
   - moradin_payload_contract_v1.md
   - moradin_forge_agent_integration_contract_v1.md
+  - moradin_forge_installer_bootstrap_contract_v1.md
   - moradin_forge_public_export_contract_v1.md
   - repo_operating_model_v1.md
   - tooling_readiness_install_request_contract_v1.md
@@ -34,7 +35,7 @@ Reference assets and external/tooling reference pointers.
 - `Harness/artifacts/openapi/`
 - `Harness/artifacts/schemas/`
 - `docs/references/portability_copy_contract.md`
-- `compatibility_window`: `closed`
+- `compatibility_window`: `bridge_first`
 
 ## Key References
 
@@ -47,6 +48,7 @@ Reference assets and external/tooling reference pointers.
 - [Redeployable Harness Contract V1](redeployable_harness_contract_v1.md)
 - [Moradin Payload Contract V1](moradin_payload_contract_v1.md)
 - [Moradin Forge Agent Integration Contract V1](moradin_forge_agent_integration_contract_v1.md)
+- [Moradin Forge Installer Bootstrap Contract V1](moradin_forge_installer_bootstrap_contract_v1.md)
 - [Moradin Forge Public Export And Portability Contract V1](moradin_forge_public_export_contract_v1.md)
 - [Moradin Forge Repo Operating Model V1](repo_operating_model_v1.md)
 - [Tooling Readiness And Install Request Contract V1](tooling_readiness_install_request_contract_v1.md)
