@@ -23,6 +23,8 @@ Optional readiness entrypoints:
 - `make verify-paths`
 - `make fix-paths-safe`
 - `make push-gate`
+- `make release-gate-local`
+- `make sonarqube-local`
 - `make verify-ui-cli`
 - `make forge-explain`
 - `make payload-validate`
@@ -38,7 +40,8 @@ Usage notes:
 - Use `make verify-paths` to check tracked files for raw workspace-root leakage before shipping docs, reports, or evidence artifacts.
 - Use `make fix-paths-safe` only for deterministic rewrites of docs and generated reports; keep source, tests, config, and archive fixes manual unless the generator has been sanitized.
 - Use `make push-gate` before pushing; it runs the local-first DevSecOps path, including path-origin checks, and records any emergency bypass reason.
-- Treat `make verify-security` as the default security validation surface. It wraps repo-specific checks plus shared scanners such as `gitleaks`, pinned safe `trivy`, `actionlint`, `zizmor`, `conftest`, and `yamllint` when those surfaces are present.
+- Treat `make verify-security` as the default local/on-prem security validation surface. It wraps repo-specific checks plus shared scanners such as `gitleaks`, pinned safe `trivy`, `semgrep`, `actionlint`, `zizmor`, `conftest`, and `yamllint` when those surfaces are present.
+- Optional `make sonarqube-local` targets self-hosted SonarQube Community only when local `SONAR_HOST_URL` and `SONAR_TOKEN` are set; SonarCloud is not part of the default contract.
 - Hardened or containerized adapters require Syft SBOM plus `grype dir:. --fail-on high`; standard repos keep Grype advisory unless they are promoted after baseline triage.
 - Local unchanged `make verify-security` reruns may reuse fresh per-step scanner artifacts; GitHub Actions reruns required scanners by default.
 - Use `make verify-ui-cli` only when it is rendered for the repo; it runs repo-declared browser/UI CLI checks using native headless mode or `xvfb-run` when explicitly required.
@@ -48,7 +51,8 @@ Usage notes:
 - Use `make verify-ui-cli` for fast repo-declared browser smoke checks, and reserve `make ui-review-pack` for visual review, accessibility, mobile, reduced-motion, large-text, or Lighthouse evidence.
 - Treat `make review-ready` as the handoff summary target before opening or updating a PR; it defaults to `REVIEW_READY_SCOPE=core`, can run safe repo-native prep hooks before the core checks, and writes concise artifacts for the LLM chain.
 - Use `REVIEW_READY_SCOPE=full make review-ready` when you need container, SBOM, or CI-local detail in addition to the core PR checks.
-- Treat `make ci-local` as the local workflow truth surface; it summarizes GitHub Actions readiness by default and can execute `act` when `CI_LOCAL_MODE=run` is set.
+- Use `make release-gate-local` before private Free `dev -> main` or promotion handoff; it writes `artifacts/tooling/release-gate-local/latest/{summary.json,summary.md}`, treats GitHub Actions as advisory evidence, and requires a manual human gate.
+- Treat `make ci-local` as the local workflow truth surface; it runs workflow trigger audits, actionlint/zizmor/conftest/yamllint checks when available, and can execute `act` only when `CI_LOCAL_MODE=run` is set.
 - When generated `tooling-*.yml` workflows exist, the workflow-focused scanners target that managed surface first before falling back to the repo's broader workflow directory.
 - All generated information and verify targets write `summary.json`, `summary.md`, and step logs under `artifacts/tooling/<target>/` unless `TOOLING_LOG_ROOT` overrides the default.
 - Rendered repos ignore `artifacts/` by default so repeated tooling runs do not create review noise.

@@ -88,6 +88,7 @@ EXCLUDE_GLOBS = (
     ".turbo/**",
     "coverage/**",
     ".cache/**",
+    "vendor/**",
 )
 LINUX_HOME_PREFIX = "/" + "home" + "/"
 MAC_HOME_PREFIX = "/" + "Users" + "/"

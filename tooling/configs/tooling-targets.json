@@ -9,6 +9,7 @@
     "default_branch": "main",
     "git_policy_profile": "main-only",
     "github_flow_profile": "free-public",
+    "github_actions_mode": "standard",
     "integration_branch": "",
     "production_branch": "",
     "dockerfiles": [],
@@ -58,6 +59,105 @@
           "grype",
           "osv-scanner"
         ]
+      }
+    },
+    "security_profile": {
+      "name": "local-free-enterprise",
+      "version": 1,
+      "description": "Free local/on-prem security evidence profile; no paid GitHub or SaaS scanners are required.",
+      "paid_github_required": false,
+      "saas_required": false,
+      "private_codeql": "disabled_no_paid_github_plan",
+      "public_codeql": "allowed_only_for_explicit_public_candidate_or_public_repos",
+      "semgrep_mode": "required",
+      "required_local_tools": [
+        "gitleaks",
+        "trivy",
+        "actionlint",
+        "zizmor",
+        "conftest",
+        "yamllint",
+        "semgrep",
+        "syft",
+        "grype"
+      ],
+      "configured_local_tools": [
+        "gitleaks",
+        "trivy",
+        "actionlint",
+        "zizmor",
+        "conftest",
+        "yamllint",
+        "semgrep",
+        "pip-audit",
+        "syft",
+        "grype",
+        "osv-scanner"
+      ],
+      "command_only_checks": [
+        "repo-security-01",
+        "node-lockfile-audit-dev_tracker-ui"
+      ],
+      "hardened_container_tools_required": true,
+      "control_categories": [
+        "sast",
+        "sca",
+        "secrets",
+        "iac_misconfig",
+        "workflow_policy",
+        "sbom",
+        "license",
+        "exceptions"
+      ],
+      "evidence_map": {
+        "sast": [
+          "semgrep"
+        ],
+        "sca": [
+          "trivy-fs",
+          "pip-audit",
+          "node-lockfile-audit-dev_tracker-ui",
+          "grype",
+          "osv-scanner"
+        ],
+        "secrets": [
+          "gitleaks",
+          "trivy-fs"
+        ],
+        "iac_misconfig": [
+          "trivy-fs"
+        ],
+        "workflow_policy": [
+          "workflow-actionlint",
+          "workflow-zizmor",
+          "workflow-conftest",
+          "workflow-yamllint"
+        ],
+        "sbom": [
+          "syft"
+        ],
+        "license": [
+          "trivy-fs"
+        ],
+        "exceptions": []
+      },
+      "policy_exceptions": [],
+      "sonarqube": {
+        "mode": "self_hosted_community_optional",
+        "target": "sonarqube-local",
+        "required": false,
+        "saas": false
+      },
+      "vendor_boundaries": {
+        "excluded_required_gates": [
+          "Snyk Code",
+          "Checkmarx",
+          "Fortify",
+          "SonarCloud",
+          "GitHub Advanced Security",
+          "private CodeQL"
+        ],
+        "reason": "paid SaaS or enterprise procurement required; keep as optional evaluation lanes only"
       }
     },
     "python_runtime": {
@@ -114,6 +214,14 @@
       "reference_image": "artifacts/ui-reference-renders/latest/reference.png",
       "measure_summary": "artifacts/ui-visual-measure/latest/summary.json",
       "measurements": "artifacts/ui-visual-measure/latest/measurements.csv"
+    },
+    "cad": {
+      "enabled": false,
+      "profile": "",
+      "engine": "",
+      "required": false,
+      "unit": "mm",
+      "summary_path": "artifacts/tooling/cad/summary.json"
     },
     "release": {
       "platforms": [],
@@ -194,6 +302,78 @@
           "category": "verify-fast",
           "command": "make payload-validate"
         }
+      ],
+      "artifact_contract": {
+        "kind": "verify-fast",
+        "summary": "artifacts/tooling/verify-fast/summary.json",
+        "markdown": "artifacts/tooling/verify-fast/summary.md",
+        "summary_json": "artifacts/tooling/verify-fast/summary.json",
+        "summary_md": "artifacts/tooling/verify-fast/summary.md",
+        "target_latest_json": "artifacts/tooling/verify-fast/latest/summary.json",
+        "target_latest_md": "artifacts/tooling/verify-fast/latest/summary.md",
+        "latest_index": "artifacts/tooling/latest/verify-fast.json",
+        "evidence_category": "local_gate",
+        "strictness_level": "promotion_required",
+        "freshness_keys": [
+          "git.head_sha",
+          "git.state_fingerprint",
+          "analysis.run_signature"
+        ],
+        "expected_outputs": [
+          "summary_json",
+          "summary_md",
+          "status",
+          "exit_code",
+          "full_log_path",
+          "failure_fingerprint",
+          "changed_state_fingerprint",
+          "next_actions"
+        ],
+        "allowed_rerun_triggers": [
+          "artifact_missing",
+          "artifact_stale",
+          "artifact_partial",
+          "artifact_contradictory",
+          "repo_declared_insufficient",
+          "code_change",
+          "config_change",
+          "dependency_change",
+          "environment_change",
+          "diagnostic_required",
+          "release_critical_evidence_needed",
+          "FORCE_RERUN=1"
+        ]
+      },
+      "evidence_category": "local_gate",
+      "strictness_level": "promotion_required",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "exit_code",
+        "full_log_path",
+        "failure_fingerprint",
+        "changed_state_fingerprint",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
       ]
     },
     "verify": {
@@ -226,6 +406,10 @@
           "name": "gitleaks",
           "required": true,
           "category": "secret-scan",
+          "evidence_categories": [
+            "secrets"
+          ],
+          "gate": "required",
           "command": "gitleaks detect --no-git --no-banner --redact --max-target-megabytes 10 --report-format json --report-path \"{artifact_root}/gitleaks.json\" --config tooling/configs/gitleaks/gitleaks.toml --source .",
           "tool": "gitleaks"
         },
@@ -233,6 +417,13 @@
           "name": "trivy-fs",
           "required": true,
           "category": "security-scan",
+          "evidence_categories": [
+            "sca",
+            "secrets",
+            "iac_misconfig",
+            "license"
+          ],
+          "gate": "required",
           "command": "trivy fs --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed --scanners vuln,secret,misconfig,license --skip-dirs artifacts --skip-dirs archive --skip-dirs _archive --skip-dirs .data --skip-dirs outputs --skip-dirs packs --skip-dirs node_modules --skip-dirs .venv --skip-dirs .pytest_cache --skip-dirs .ruff_cache --skip-dirs .mypy_cache --skip-dirs .nox --skip-dirs .tox --skip-dirs .uv-cache --skip-dirs dist --skip-dirs build --skip-dirs coverage .",
           "tool": "trivy"
         },
@@ -240,6 +431,10 @@
           "name": "workflow-actionlint",
           "required": true,
           "category": "workflow",
+          "evidence_categories": [
+            "workflow_policy"
+          ],
+          "gate": "required",
           "command": "if compgen -G \".github/workflows/tooling-*.yml\" > /dev/null; then actionlint .github/workflows/tooling-*.yml; elif compgen -G \".github/workflows/*.yml\" > /dev/null; then actionlint .github/workflows/*.yml; else echo \"no workflows detected\"; fi",
           "tool": "actionlint"
         },
@@ -247,6 +442,10 @@
           "name": "workflow-zizmor",
           "required": true,
           "category": "workflow",
+          "evidence_categories": [
+            "workflow_policy"
+          ],
+          "gate": "required",
           "command": "if compgen -G \".github/workflows/tooling-*.yml\" > /dev/null; then zizmor .github/workflows/tooling-*.yml; elif compgen -G \".github/workflows/*.yml\" > /dev/null; then zizmor .github/workflows/*.yml; else echo \"no workflows detected\"; fi",
           "tool": "zizmor"
         },
@@ -254,6 +453,10 @@
           "name": "workflow-conftest",
           "required": true,
           "category": "workflow",
+          "evidence_categories": [
+            "workflow_policy"
+          ],
+          "gate": "required",
           "command": "if compgen -G \".github/workflows/tooling-*.yml\" > /dev/null; then conftest test --all-namespaces -p tooling/policies/conftest/github-actions .github/workflows/tooling-*.yml; elif compgen -G \".github/workflows/*.yml\" > /dev/null; then conftest test --all-namespaces -p tooling/policies/conftest/github-actions .github/workflows/*.yml; else echo \"no workflows detected\"; fi",
           "tool": "conftest"
         },
@@ -261,13 +464,21 @@
           "name": "workflow-yamllint",
           "required": true,
           "category": "workflow",
+          "evidence_categories": [
+            "workflow_policy"
+          ],
+          "gate": "required",
           "command": "if compgen -G \".github/workflows/tooling-*.yml\" > /dev/null; then yamllint -c tooling/configs/yamllint/yamllint.yaml .github/workflows/tooling-*.yml; elif compgen -G \".github/workflows/*.yml\" > /dev/null; then yamllint -c tooling/configs/yamllint/yamllint.yaml .github/workflows/*.yml; else echo \"no workflows detected\"; fi",
           "tool": "yamllint"
         },
         {
           "name": "semgrep",
-          "required": false,
+          "required": true,
           "category": "security-scan",
+          "evidence_categories": [
+            "sast"
+          ],
+          "gate": "required",
           "command": "semgrep scan --config auto --error --exclude artifacts --exclude archive --exclude _archive --exclude .data --exclude outputs --exclude packs --exclude node_modules --exclude .venv --exclude .pytest_cache --exclude .ruff_cache --exclude .mypy_cache --exclude .nox --exclude .tox --exclude build --exclude dist --exclude coverage .",
           "tool": "semgrep"
         },
@@ -275,13 +486,31 @@
           "name": "pip-audit",
           "required": false,
           "category": "dependency-scan",
+          "evidence_categories": [
+            "sca"
+          ],
+          "gate": "advisory",
           "command": "if [ -f pyproject.toml ]; then uv export --format requirements-txt --no-hashes > \"{artifact_root}/python-requirements.txt\" && pip-audit -r \"{artifact_root}/python-requirements.txt\" --no-deps --disable-pip; else echo \"python dependency audit not applicable\"; fi",
           "tool": "pip-audit"
+        },
+        {
+          "name": "node-lockfile-audit-dev_tracker-ui",
+          "required": false,
+          "category": "dependency-scan",
+          "evidence_categories": [
+            "sca"
+          ],
+          "gate": "advisory",
+          "command": "if [ -f 'dev_tracker/ui/package-lock.json' ]; then cd 'dev_tracker/ui' && npm audit --audit-level=high; elif [ -f 'dev_tracker/ui/pnpm-lock.yaml' ]; then cd 'dev_tracker/ui' && corepack pnpm audit --audit-level high; elif [ -f 'dev_tracker/ui/yarn.lock' ]; then cd 'dev_tracker/ui' && yarn npm audit --severity high; else echo 'node dependency audit not_applicable: no supported lockfile'; fi"
         },
         {
           "name": "syft",
           "required": true,
           "category": "sbom",
+          "evidence_categories": [
+            "sbom"
+          ],
+          "gate": "required",
           "command": "syft dir:. --exclude './artifacts/**' --exclude '**/artifacts/**' --exclude './archive/**' --exclude '**/archive/**' --exclude './_archive/**' --exclude '**/_archive/**' --exclude './.data/**' --exclude '**/.data/**' --exclude './outputs/**' --exclude '**/outputs/**' --exclude './packs/**' --exclude '**/packs/**' --exclude './node_modules/**' --exclude '**/node_modules/**' --exclude './.venv/**' --exclude '**/.venv/**' --exclude './.pytest_cache/**' --exclude '**/.pytest_cache/**' --exclude './.ruff_cache/**' --exclude '**/.ruff_cache/**' --exclude './.mypy_cache/**' --exclude '**/.mypy_cache/**' --exclude './.nox/**' --exclude '**/.nox/**' --exclude './.tox/**' --exclude '**/.tox/**' --exclude './.uv-cache/**' --exclude '**/.uv-cache/**' --exclude './dist/**' --exclude '**/dist/**' --exclude './build/**' --exclude '**/build/**' --exclude './coverage/**' --exclude '**/coverage/**' -o json > \"{artifact_root}/syft-sbom.json\"",
           "tool": "syft"
         },
@@ -289,6 +518,10 @@
           "name": "grype",
           "required": true,
           "category": "security-scan",
+          "evidence_categories": [
+            "sca"
+          ],
+          "gate": "required",
           "command": "grype dir:. --exclude './artifacts/**' --exclude '**/artifacts/**' --exclude './archive/**' --exclude '**/archive/**' --exclude './_archive/**' --exclude '**/_archive/**' --exclude './.data/**' --exclude '**/.data/**' --exclude './outputs/**' --exclude '**/outputs/**' --exclude './packs/**' --exclude '**/packs/**' --exclude './node_modules/**' --exclude '**/node_modules/**' --exclude './.venv/**' --exclude '**/.venv/**' --exclude './.pytest_cache/**' --exclude '**/.pytest_cache/**' --exclude './.ruff_cache/**' --exclude '**/.ruff_cache/**' --exclude './.mypy_cache/**' --exclude '**/.mypy_cache/**' --exclude './.nox/**' --exclude '**/.nox/**' --exclude './.tox/**' --exclude '**/.tox/**' --exclude './.uv-cache/**' --exclude '**/.uv-cache/**' --exclude './dist/**' --exclude '**/dist/**' --exclude './build/**' --exclude '**/build/**' --exclude './coverage/**' --exclude '**/coverage/**' --fail-on high",
           "tool": "grype"
         },
@@ -296,8 +529,102 @@
           "name": "osv-scanner",
           "required": false,
           "category": "dependency-scan",
+          "evidence_categories": [
+            "sca"
+          ],
+          "gate": "advisory",
           "command": "osv-scanner scan source -r . --format json > \"{artifact_root}/osv-scanner.json\"",
           "tool": "osv-scanner"
+        }
+      ],
+      "security_profile": "local-free-enterprise",
+      "artifact_contract": {
+        "kind": "verify-security",
+        "summary": "artifacts/tooling/verify-security/summary.json",
+        "markdown": "artifacts/tooling/verify-security/summary.md",
+        "summary_json": "artifacts/tooling/verify-security/summary.json",
+        "summary_md": "artifacts/tooling/verify-security/summary.md",
+        "target_latest_json": "artifacts/tooling/verify-security/latest/summary.json",
+        "target_latest_md": "artifacts/tooling/verify-security/latest/summary.md",
+        "latest_index": "artifacts/tooling/latest/verify-security.json",
+        "evidence_category": "security",
+        "strictness_level": "promotion_required",
+        "freshness_keys": [
+          "git.head_sha",
+          "git.state_fingerprint",
+          "analysis.run_signature"
+        ],
+        "expected_outputs": [
+          "summary_json",
+          "summary_md",
+          "status",
+          "exit_code",
+          "full_log_path",
+          "failure_fingerprint",
+          "scanner_findings",
+          "waiver_required",
+          "next_actions"
+        ],
+        "allowed_rerun_triggers": [
+          "artifact_missing",
+          "artifact_stale",
+          "artifact_partial",
+          "artifact_contradictory",
+          "repo_declared_insufficient",
+          "code_change",
+          "config_change",
+          "dependency_change",
+          "environment_change",
+          "diagnostic_required",
+          "release_critical_evidence_needed",
+          "FORCE_RERUN=1"
+        ]
+      },
+      "evidence_category": "security",
+      "strictness_level": "promotion_required",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "exit_code",
+        "full_log_path",
+        "failure_fingerprint",
+        "scanner_findings",
+        "waiver_required",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
+    },
+    "sonarqube-local": {
+      "kind": "commands",
+      "steps": [
+        {
+          "name": "sonarqube-local",
+          "required": false,
+          "category": "quality",
+          "evidence_categories": [
+            "quality"
+          ],
+          "gate": "advisory",
+          "command": "if [ -z \"${SONAR_HOST_URL:-}\" ] || [ -z \"${SONAR_TOKEN:-${SONAR_LOGIN:-}}\" ]; then echo 'not_applicable: self-hosted SonarQube Community disabled; set SONAR_HOST_URL and SONAR_TOKEN locally'; exit 0; fi; if ! command -v sonar-scanner >/dev/null 2>&1; then echo 'unavailable: sonar-scanner missing for self-hosted SonarQube Community analysis'; exit 2; fi; sonar-scanner -Dsonar.host.url=\"${SONAR_HOST_URL}\" -Dsonar.token=\"${SONAR_TOKEN:-${SONAR_LOGIN:-}}\""
         }
       ]
     },
@@ -388,6 +715,166 @@
       ],
       "advisory_targets": [
         "ci-local"
+      ],
+      "artifact_contract": {
+        "kind": "review-ready",
+        "summary": "artifacts/tooling/review-ready/summary.json",
+        "markdown": "artifacts/tooling/review-ready/summary.md",
+        "summary_json": "artifacts/tooling/review-ready/summary.json",
+        "summary_md": "artifacts/tooling/review-ready/summary.md",
+        "target_latest_json": "artifacts/tooling/review-ready/latest/summary.json",
+        "target_latest_md": "artifacts/tooling/review-ready/latest/summary.md",
+        "latest_index": "artifacts/tooling/latest/review-ready.json",
+        "evidence_category": "review_handoff",
+        "strictness_level": "promotion_required",
+        "freshness_keys": [
+          "git.head_sha",
+          "git.state_fingerprint",
+          "analysis.run_signature"
+        ],
+        "expected_outputs": [
+          "summary_json",
+          "summary_md",
+          "status",
+          "branch",
+          "head_sha",
+          "changed_files",
+          "verification_summary",
+          "next_actions"
+        ],
+        "allowed_rerun_triggers": [
+          "artifact_missing",
+          "artifact_stale",
+          "artifact_partial",
+          "artifact_contradictory",
+          "repo_declared_insufficient",
+          "code_change",
+          "config_change",
+          "dependency_change",
+          "environment_change",
+          "diagnostic_required",
+          "release_critical_evidence_needed",
+          "FORCE_RERUN=1"
+        ]
+      },
+      "evidence_category": "review_handoff",
+      "strictness_level": "promotion_required",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "branch",
+        "head_sha",
+        "changed_files",
+        "verification_summary",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
+    },
+    "release-gate-local": {
+      "kind": "release-gate-local",
+      "targets": [
+        "repo-brief",
+        "verify-paths",
+        "verify-fast",
+        "verify-security",
+        "ci-local",
+        "review-ready"
+      ],
+      "advisory_targets": [
+        "ci-local"
+      ],
+      "remote_actions_authority": false,
+      "manual_human_gate_required": true,
+      "artifact_contract": {
+        "kind": "release-gate-local",
+        "summary": "artifacts/tooling/release-gate-local/summary.json",
+        "markdown": "artifacts/tooling/release-gate-local/summary.md",
+        "summary_json": "artifacts/tooling/release-gate-local/summary.json",
+        "summary_md": "artifacts/tooling/release-gate-local/summary.md",
+        "target_latest_json": "artifacts/tooling/release-gate-local/latest/summary.json",
+        "target_latest_md": "artifacts/tooling/release-gate-local/latest/summary.md",
+        "latest_index": "artifacts/tooling/latest/release-gate-local.json",
+        "evidence_category": "release_gate",
+        "strictness_level": "promotion_required",
+        "freshness_keys": [
+          "git.head_sha",
+          "git.state_fingerprint",
+          "analysis.run_signature"
+        ],
+        "expected_outputs": [
+          "summary_json",
+          "summary_md",
+          "status",
+          "final_decision",
+          "head_sha",
+          "target_branch",
+          "child_target_evidence",
+          "security_waiver_status",
+          "manual_human_gate_required",
+          "next_actions"
+        ],
+        "allowed_rerun_triggers": [
+          "artifact_missing",
+          "artifact_stale",
+          "artifact_partial",
+          "artifact_contradictory",
+          "repo_declared_insufficient",
+          "code_change",
+          "config_change",
+          "dependency_change",
+          "environment_change",
+          "diagnostic_required",
+          "release_critical_evidence_needed",
+          "FORCE_RERUN=1"
+        ]
+      },
+      "evidence_category": "release_gate",
+      "strictness_level": "promotion_required",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "final_decision",
+        "head_sha",
+        "target_branch",
+        "child_target_evidence",
+        "security_waiver_status",
+        "manual_human_gate_required",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "release_critical_evidence_needed",
+        "security_sensitive_evidence_needed",
+        "repo_declared_insufficient",
+        "FORCE_RERUN=1"
       ]
     },
     "verify-ci": {
@@ -432,7 +919,81 @@
       ]
     },
     "ci-local": {
-      "kind": "ci-local"
+      "kind": "ci-local",
+      "artifact_contract": {
+        "kind": "ci-local",
+        "summary": "artifacts/tooling/ci-local/summary.json",
+        "markdown": "artifacts/tooling/ci-local/summary.md",
+        "summary_json": "artifacts/tooling/ci-local/summary.json",
+        "summary_md": "artifacts/tooling/ci-local/summary.md",
+        "target_latest_json": "artifacts/tooling/ci-local/latest/summary.json",
+        "target_latest_md": "artifacts/tooling/ci-local/latest/summary.md",
+        "latest_index": "artifacts/tooling/latest/ci-local.json",
+        "evidence_category": "workflow_policy",
+        "strictness_level": "advisory",
+        "freshness_keys": [
+          "git.head_sha",
+          "git.state_fingerprint",
+          "analysis.run_signature"
+        ],
+        "expected_outputs": [
+          "summary_json",
+          "summary_md",
+          "status",
+          "workflow_trigger_audit",
+          "actionlint",
+          "zizmor",
+          "conftest",
+          "yamllint",
+          "next_actions"
+        ],
+        "allowed_rerun_triggers": [
+          "artifact_missing",
+          "artifact_stale",
+          "artifact_partial",
+          "artifact_contradictory",
+          "repo_declared_insufficient",
+          "code_change",
+          "config_change",
+          "dependency_change",
+          "environment_change",
+          "diagnostic_required",
+          "release_critical_evidence_needed",
+          "FORCE_RERUN=1"
+        ]
+      },
+      "evidence_category": "workflow_policy",
+      "strictness_level": "advisory",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "workflow_trigger_audit",
+        "actionlint",
+        "zizmor",
+        "conftest",
+        "yamllint",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
     }
   }
 }

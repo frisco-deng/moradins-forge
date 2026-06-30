@@ -15,9 +15,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from python_runtime import route_advice as python_route_advice, runtime_info as python_runtime_info
-
 sys.dont_write_bytecode = True
+
+from python_runtime import route_advice as python_route_advice, runtime_info as python_runtime_info
 
 
 SCHEMA_VERSION = 1
@@ -51,13 +51,35 @@ DOMAIN_LANE_HINTS = {
     "waifu-ui": "for repo state, prefer `make repo-brief` and `npm run status:dev` before raw dashboard polling",
     "moradins-forge": "for Forge work, start with `make forge-explain`, then `make payload-validate` or `make public-portability-check` before broader gates",
 }
-HEAVY_RERUN_TARGETS = {"review-bundle", "review-ready", "verify-fast", "verify", "verify-ci"}
+HEAVY_RERUN_TARGETS = {
+    "review-bundle",
+    "review-ready",
+    "release-gate-local",
+    "verify-fast",
+    "verify",
+    "verify-ci",
+    "verify-container",
+    "ci-local",
+    "sbom",
+}
 CACHEABLE_STEP_TARGETS = {"verify-security"}
 CACHEABLE_STEP_CATEGORIES = {"secret-scan", "security-scan", "workflow", "dependency-scan", "sbom", "container"}
+SECURITY_EVIDENCE_CATEGORIES = [
+    "sast",
+    "sca",
+    "secrets",
+    "iac_misconfig",
+    "workflow_policy",
+    "sbom",
+    "license",
+    "exceptions",
+]
 STATE_HASH_FILE_SIZE_LIMIT_BYTES = 2_000_000
 STATE_HASH_TOTAL_SIZE_LIMIT_BYTES = 10_000_000
 STATE_HASH_FILE_COUNT_LIMIT = 200
 TOOL_VERSION_TIMEOUT_SECONDS = 5
+LONG_LOG_LINE_THRESHOLD = int(os.environ.get("TOOLING_LONG_LOG_LINE_THRESHOLD", "200"))
+LONG_LOG_TOKEN_THRESHOLD = int(os.environ.get("TOOLING_LONG_LOG_TOKEN_THRESHOLD", "8000"))
 DIAGNOSTIC_FAILURE_TERMS = (
     "nan",
     "black",
@@ -94,6 +116,12 @@ UI_CONFIG_NAMES = (
     "vite.browser.config.js",
 )
 UI_SCRIPT_TERMS = ("browser", "e2e", "playwright", "cypress")
+TOOLING_WORKFLOW_CONTEXTS = {
+    "tooling-ci-core.yml": "Tooling / CI Core",
+    "tooling-security-core.yml": "Tooling / Security Core",
+    "tooling-docker-image.yml": "Tooling / Docker Image",
+    "tooling-dependency-submission.yml": "Tooling / Dependency Submission",
+}
 
 
 def utc_now() -> str:
@@ -172,6 +200,25 @@ def log_excerpt(path: Path, *, failed: bool) -> str:
         return "no output"
     sample = lines[-8:] if failed else lines[:4]
     return " | ".join(sample)
+
+
+def log_stats(path: Path | None) -> dict[str, Any]:
+    if path is None or not path.exists():
+        return {
+            "full_log_path": "",
+            "full_log_line_count": 0,
+            "full_log_token_estimate": 0,
+            "long_log_summary_required": False,
+        }
+    text = path.read_text(encoding="utf-8", errors="replace")
+    line_count = len(text.splitlines())
+    token_estimate = max(0, len(text) // 4)
+    return {
+        "full_log_path": str(path),
+        "full_log_line_count": line_count,
+        "full_log_token_estimate": token_estimate,
+        "long_log_summary_required": line_count > LONG_LOG_LINE_THRESHOLD or token_estimate > LONG_LOG_TOKEN_THRESHOLD,
+    }
 
 
 def parse_status(stdout: str) -> list[str]:
@@ -736,7 +783,8 @@ def combine_status(current: str, new: str) -> str:
         "not_applicable": 0,
         "warn": 1,
         "unavailable": 1,
-        "fail": 2,
+        "blocked": 2,
+        "fail": 3,
     }
     return new if order[new] > order[current] else current
 
@@ -796,6 +844,7 @@ def compact_previous_summary(summary: dict[str, Any] | None) -> dict[str, Any] |
         "active_lane_fresh": active_lane.get("brief_fresh", False),
         "summary_json": summary.get("artifacts", {}).get("summary_json", ""),
         "summary_md": summary.get("artifacts", {}).get("summary_md", ""),
+        "security_evidence": summary.get("security_evidence", {}),
     }
 
 
@@ -971,6 +1020,8 @@ def _record_reused_step(
     required: bool,
     category: str,
     cache_metadata: dict[str, str],
+    evidence_categories: list[str] | None = None,
+    gate: str = "",
 ) -> None:
     previous_duration = float(previous_step.get("duration_seconds") or previous_step.get("previous_duration_seconds") or 0.0)
     previous_log = str(previous_step.get("log_path") or "").strip()
@@ -989,6 +1040,8 @@ def _record_reused_step(
         category=category,
         note=f"reused_previous_step_artifact: previous_duration={previous_duration}s previous_log={previous_log or 'none'}; {note}",
         exit_code=previous_step.get("exit_code"),
+        evidence_categories=evidence_categories,
+        gate=gate,
     )
     step.update(cache_metadata)
     step["reused_previous_step_artifact"] = True
@@ -1074,7 +1127,7 @@ def environment_info() -> dict[str, Any]:
         "tooling_allow_ci_step_reuse": os.environ.get("TOOLING_ALLOW_CI_STEP_REUSE", "0") == "1",
         "force_rerun": os.environ.get("FORCE_RERUN", "0") == "1",
         "github_actions": os.environ.get("GITHUB_ACTIONS") == "true",
-        "ci_local_mode": os.environ.get("CI_LOCAL_MODE", "info"),
+        "ci_local_mode": os.environ.get("CI_LOCAL_MODE", "lint"),
         "watch_mode": os.environ.get("WATCH_MODE", "show"),
         "review_ready_scope": os.environ.get("REVIEW_READY_SCOPE", "core"),
     }
@@ -1145,6 +1198,14 @@ def collect_base_summary(root: Path, config: dict[str, Any], target: str, artifa
             "step_reuse_refusals": [],
             "step_reuse_saved_seconds": 0.0,
             "slow_steps": [],
+            "production_efficiency": {
+                "full_log_path_count": 0,
+                "raw_log_token_estimate": 0,
+                "long_log_summary_required_count": 0,
+                "summary_missing_full_log_path": False,
+                "same_failure_diagnostic_required": False,
+                "same_failure_retry_without_diagnostic": False,
+            },
         },
     }
     summary["analysis"]["run_signature"] = compute_run_signature(summary)
@@ -1287,6 +1348,8 @@ def record_step(
     nested_summary: str | None = None,
     exit_code: int | None = None,
     bucket: str = "steps",
+    evidence_categories: list[str] | None = None,
+    gate: str = "",
 ) -> dict[str, Any]:
     step = {
         "name": name,
@@ -1300,8 +1363,15 @@ def record_step(
         "log_path": str(log_path) if log_path else "",
         "summary_path": nested_summary or "",
     }
+    step.update(log_stats(log_path))
+    if evidence_categories:
+        step["evidence_categories"] = evidence_categories
+    if gate:
+        step["gate"] = gate
     summary[bucket].append(step)
     if status == "fail":
+        summary["blockers"].append(f"{name}: {note}")
+    elif status == "blocked":
         summary["blockers"].append(f"{name}: {note}")
     elif status in {"warn", "unavailable"}:
         summary["findings"].append(f"{name}: {note}")
@@ -1324,6 +1394,9 @@ def run_step(
     tool = step.get("tool")
     docker_args = step.get("docker_args")
     category = step.get("category", "command")
+    raw_evidence_categories = step.get("evidence_categories", [])
+    evidence_categories = [str(item) for item in raw_evidence_categories] if isinstance(raw_evidence_categories, list) else []
+    gate = str(step.get("gate") or "").strip()
     resolved_command = format_command(command, artifact_dir, root) if command else ""
     launcher: str | None = None
 
@@ -1338,6 +1411,8 @@ def run_step(
             required=False,
             category=category,
             note="tool hazard: branch-mutating check skipped; set TOOLING_ALLOW_MUTATING_CHECKS=1 only for an explicit mutating run",
+            evidence_categories=evidence_categories,
+            gate=gate,
         )
         return
 
@@ -1355,6 +1430,8 @@ def run_step(
                 required=required,
                 category=category,
                 note=missing_tool_note(summary, str(tool)),
+                evidence_categories=evidence_categories,
+                gate=gate,
             )
             return
         resolved_command = rewrite_command(tool, launcher, resolved_command)
@@ -1373,6 +1450,8 @@ def run_step(
                 required=required,
                 category=category,
                 note="docker bridge unavailable",
+                evidence_categories=evidence_categories,
+                gate=gate,
             )
             return
         resolved_command = f"{docker_launcher} {docker_args}"
@@ -1399,6 +1478,8 @@ def run_step(
                 required=required,
                 category=category,
                 cache_metadata=cache_metadata,
+                evidence_categories=evidence_categories,
+                gate=gate,
             )
             return
         if refusal_reason:
@@ -1429,6 +1510,8 @@ def run_step(
         category=category,
         note=note,
         exit_code=rc,
+        evidence_categories=evidence_categories,
+        gate=gate,
     )
     recorded.update(cache_metadata)
     recorded["reused_previous_step_artifact"] = False
@@ -1437,11 +1520,19 @@ def run_step(
 def write_summary(summary: dict[str, Any], artifact_dir: Path) -> None:
     summary_json = artifact_dir / "summary.json"
     summary_md = artifact_dir / "summary.md"
+    target_latest_dir = artifact_dir / "latest"
+    target_latest_json = target_latest_dir / "summary.json"
+    target_latest_md = target_latest_dir / "summary.md"
     latest_json = Path(summary["artifacts"]["latest_index"])
+    if isinstance(summary.get("release_gate"), dict) and summary["release_gate"]:
+        summary["artifacts"]["pr_ready_md"] = str(artifact_dir / "pr-ready.md")
+        summary["artifacts"]["latest_pr_ready_md"] = str(target_latest_dir / "pr-ready.md")
     output_format = os.environ.get("TOOLING_OUTPUT_FORMAT", "both")
     if output_format in {"both", "json"}:
+        target_latest_dir.mkdir(parents=True, exist_ok=True)
         payload = json.dumps(summary, indent=2, sort_keys=False) + "\n"
         summary_json.write_text(payload, encoding="utf-8")
+        target_latest_json.write_text(payload, encoding="utf-8")
         latest_json.write_text(payload, encoding="utf-8")
 
     md_lines = [
@@ -1515,6 +1606,48 @@ def write_summary(summary: dict[str, Any], artifact_dir: Path) -> None:
     previous_stale_reasons = summary["analysis"].get("previous_artifact_stale_reasons") or []
     md_lines.append(f"- artifact_stale_reasons: `{'; '.join(stale_reasons) or 'none'}`")
     md_lines.append(f"- previous_artifact_stale_reasons: `{'; '.join(previous_stale_reasons) or 'none'}`")
+    production_efficiency = summary["analysis"].get("production_efficiency", {})
+    if isinstance(production_efficiency, dict):
+        md_lines.append(f"- full_log_path_count: `{production_efficiency.get('full_log_path_count', 0)}`")
+        md_lines.append(f"- raw_log_token_estimate: `{production_efficiency.get('raw_log_token_estimate', 0)}`")
+        md_lines.append(f"- long_log_summary_required_count: `{production_efficiency.get('long_log_summary_required_count', 0)}`")
+        md_lines.append(
+            f"- same_failure_retry_without_diagnostic: `{production_efficiency.get('same_failure_retry_without_diagnostic', False)}`"
+        )
+    security_evidence = summary.get("security_evidence", {})
+    if isinstance(security_evidence, dict) and security_evidence:
+        md_lines.extend(["", "## Security Evidence", ""])
+        md_lines.append(f"- profile: `{security_evidence.get('profile', 'unknown')}`")
+        md_lines.append(f"- status: `{security_evidence.get('status', 'unknown')}`")
+        md_lines.append(f"- paid_github_required: `{security_evidence.get('paid_github_required', False)}`")
+        md_lines.append(f"- saas_required: `{security_evidence.get('saas_required', False)}`")
+        md_lines.append(f"- certification_claimed: `{security_evidence.get('certification_claimed', False)}`")
+        categories = security_evidence.get("categories", {})
+        if isinstance(categories, dict):
+            for category in SECURITY_EVIDENCE_CATEGORIES:
+                item = categories.get(category, {})
+                if not isinstance(item, dict):
+                    continue
+                md_lines.append(
+                    f"- `{category}`: `{item.get('status', 'unknown')}` gate `{item.get('gate', 'advisory')}` steps `{len(item.get('steps', []))}`"
+                )
+    release_gate = summary.get("release_gate", {})
+    if isinstance(release_gate, dict) and release_gate:
+        md_lines.extend(["", "## Release Gate", ""])
+        md_lines.append(f"- final_decision: `{release_gate.get('final_decision', 'unknown')}`")
+        md_lines.append(f"- target_branch: `{release_gate.get('target_branch', 'unknown')}`")
+        md_lines.append(f"- github_actions_mode: `{release_gate.get('github_actions_mode', summary['repo'].get('github_actions_mode', 'unknown'))}`")
+        md_lines.append(f"- hosted_runner_minutes_policy: `{release_gate.get('hosted_runner_minutes_policy', 'unknown')}`")
+        md_lines.append(f"- expected_remote_contexts: `{', '.join(release_gate.get('expected_remote_contexts', [])) or 'none'}`")
+        md_lines.append(f"- remote_actions_authority: `{release_gate.get('remote_actions_authority', False)}`")
+        md_lines.append(f"- manual_human_gate_required: `{release_gate.get('manual_human_gate_required', True)}`")
+        md_lines.append(f"- pr_ready_md: `{summary['artifacts'].get('pr_ready_md', 'none')}`")
+        md_lines.append(f"- stale_evidence: `{', '.join(release_gate.get('stale_evidence', [])) or 'none'}`")
+        md_lines.append(f"- missing_evidence: `{', '.join(release_gate.get('missing_evidence', [])) or 'none'}`")
+        md_lines.append(f"- failed_targets: `{', '.join(release_gate.get('failed_targets', [])) or 'none'}`")
+        md_lines.append(f"- blocked_targets: `{', '.join(release_gate.get('blocked_targets', [])) or 'none'}`")
+        md_lines.append(f"- security_waiver_required: `{release_gate.get('security_waiver_required', False)}`")
+        md_lines.append(f"- security_waiver_targets: `{', '.join(release_gate.get('security_waiver_targets', [])) or 'none'}`")
     if summary["prep_steps"]:
         md_lines.extend(["", "## Prep Steps", ""])
         for step in summary["prep_steps"]:
@@ -1567,7 +1700,38 @@ def write_summary(summary: dict[str, Any], artifact_dir: Path) -> None:
         md_lines.append("- none")
     md_lines.append("")
     if output_format in {"both", "text"}:
+        target_latest_dir.mkdir(parents=True, exist_ok=True)
         summary_md.write_text("\n".join(md_lines), encoding="utf-8")
+        target_latest_md.write_text("\n".join(md_lines), encoding="utf-8")
+        if isinstance(release_gate, dict) and release_gate:
+            pr_ready = _release_gate_pr_ready_markdown(summary)
+            (artifact_dir / "pr-ready.md").write_text(pr_ready, encoding="utf-8")
+            (target_latest_dir / "pr-ready.md").write_text(pr_ready, encoding="utf-8")
+
+
+def _release_gate_pr_ready_markdown(summary: dict[str, Any]) -> str:
+    gate = summary.get("release_gate", {}) if isinstance(summary.get("release_gate"), dict) else {}
+    lines = [
+        f"Local promotion evidence for `{summary['repo'].get('repo_id', '')}`",
+        f"- head: `{str(summary['git'].get('head_sha') or '')[:12]}`",
+        f"- branch: `{summary['git'].get('branch', '')}`",
+        f"- release_gate: `{gate.get('final_decision', summary.get('status', 'unknown'))}`",
+        f"- summary: `{summary['artifacts'].get('summary_json', '')}`",
+        f"- github_actions_mode: `{gate.get('github_actions_mode', summary['repo'].get('github_actions_mode', 'unknown'))}`",
+        f"- hosted_runner_minutes_policy: `{gate.get('hosted_runner_minutes_policy', 'unknown')}`",
+        f"- remote_actions_authority: `{gate.get('remote_actions_authority', False)}`",
+        f"- manual_human_gate_required: `{gate.get('manual_human_gate_required', True)}`",
+        f"- security_waiver_required: `{gate.get('security_waiver_required', False)}`",
+        f"- security_waiver_targets: `{', '.join(gate.get('security_waiver_targets', [])) or 'none'}`",
+    ]
+    commands = gate.get("optional_dispatch_commands", [])
+    lines.append("- optional_hosted_dispatch_commands:")
+    if commands:
+        for command in commands:
+            lines.append(f"  - `{command}`")
+    else:
+        lines.append("  - none")
+    return "\n".join(lines) + "\n"
 
 
 def print_summary(summary: dict[str, Any], artifact_dir: Path) -> None:
@@ -1929,6 +2093,186 @@ def populate_step_runtime_analysis(summary: dict[str, Any]) -> None:
         summary["findings"].append("security runtime hotspots: " + ", ".join(hotspots))
 
 
+def populate_production_efficiency_analysis(summary: dict[str, Any]) -> None:
+    steps = summary.get("prep_steps", []) + summary.get("steps", [])
+    full_log_steps = [step for step in steps if step.get("full_log_path") or step.get("log_path")]
+    long_log_steps = [step for step in steps if step.get("long_log_summary_required")]
+    raw_log_tokens = sum(int(step.get("full_log_token_estimate") or 0) for step in steps)
+    same_failure = bool(summary.get("analysis", {}).get("same_failure_as_previous"))
+    next_actions_text = " ".join(str(item) for item in summary.get("next_actions", []))
+    diagnostic_required = same_failure or "tpl-diagnostic-brief" in next_actions_text or "investigation-ledger" in next_actions_text
+    diagnostic_followed = any(
+        "tpl-diagnostic-brief" in str(step.get("command", ""))
+        or "investigation-ledger" in str(step.get("command", ""))
+        or "diagnostic" in str(step.get("summary_path", ""))
+        for step in steps
+    )
+    summary["analysis"]["production_efficiency"] = {
+        "full_log_path_count": len(full_log_steps),
+        "raw_log_token_estimate": raw_log_tokens,
+        "long_log_summary_required_count": len(long_log_steps),
+        "summary_missing_full_log_path": any(step.get("status") in {"fail", "warn"} and not step.get("full_log_path") for step in steps),
+        "same_failure_diagnostic_required": diagnostic_required,
+        "same_failure_retry_without_diagnostic": bool(diagnostic_required and not diagnostic_followed),
+        "diagnostic_followed": diagnostic_followed,
+        "long_log_thresholds": {
+            "line_count": LONG_LOG_LINE_THRESHOLD,
+            "token_estimate": LONG_LOG_TOKEN_THRESHOLD,
+        },
+        "decision_policy": "advisory-report-fail; commands are not shell-blocked",
+    }
+
+
+def _evidence_status_for_steps(steps: list[dict[str, Any]]) -> str:
+    statuses = {str(step.get("status") or "").strip() for step in steps}
+    if "fail" in statuses:
+        return "fail"
+    if "unavailable" in statuses:
+        return "unavailable"
+    if "warn" in statuses:
+        return "warn"
+    if "pass" in statuses:
+        return "pass"
+    return "not_applicable"
+
+
+def build_security_evidence(summary: dict[str, Any]) -> dict[str, Any]:
+    profile = summary.get("repo", {}).get("security_profile", {})
+    if not isinstance(profile, dict):
+        profile = {}
+    steps = summary.get("steps", [])
+    evidence: dict[str, Any] = {
+        "profile": profile.get("name", "local-free-enterprise"),
+        "schema_version": 1,
+        "generated_at": summary.get("generated_at", ""),
+        "source_target": summary.get("target", ""),
+        "summary_json": summary.get("artifacts", {}).get("summary_json", ""),
+        "certification_claimed": False,
+        "paid_github_required": bool(profile.get("paid_github_required", False)),
+        "saas_required": bool(profile.get("saas_required", False)),
+        "private_codeql": profile.get("private_codeql", "disabled_no_paid_github_plan"),
+        "sonarqube": profile.get("sonarqube", {}),
+        "vendor_boundaries": profile.get("vendor_boundaries", {}),
+        "categories": {},
+    }
+    policy_exceptions = profile.get("policy_exceptions", [])
+    if not isinstance(policy_exceptions, list):
+        policy_exceptions = []
+    for category in SECURITY_EVIDENCE_CATEGORIES:
+        if category == "exceptions":
+            if policy_exceptions:
+                evidence["categories"][category] = {
+                    "status": "waived_with_reason",
+                    "gate": "advisory",
+                    "steps": [],
+                    "exceptions": policy_exceptions,
+                    "note": "adapter-declared security exceptions require review before promotion",
+                }
+            else:
+                evidence["categories"][category] = {
+                    "status": "not_applicable",
+                    "gate": "advisory",
+                    "steps": [],
+                    "exceptions": [],
+                    "note": "no adapter-declared exceptions",
+                }
+            continue
+        matched = [
+            step
+            for step in steps
+            if category in [str(item) for item in step.get("evidence_categories", [])]
+        ]
+        if not matched:
+            evidence["categories"][category] = {
+                "status": "not_applicable",
+                "gate": "advisory",
+                "steps": [],
+                "note": "no declared local evidence step for this repo profile",
+            }
+            continue
+        gate = "required" if any(step.get("required", True) for step in matched) else "advisory"
+        evidence["categories"][category] = {
+            "status": _evidence_status_for_steps(matched),
+            "gate": gate,
+            "steps": [
+                {
+                    "name": step.get("name", ""),
+                    "status": step.get("status", ""),
+                    "required": bool(step.get("required", True)),
+                    "gate": step.get("gate", ""),
+                    "category": step.get("category", ""),
+                    "log_path": step.get("log_path", ""),
+                    "summary_path": step.get("summary_path", ""),
+                }
+                for step in matched
+            ],
+            "note": "observed local scanner/control evidence; not a certification claim",
+        }
+    category_statuses = [
+        str(item.get("status") or "")
+        for item in evidence["categories"].values()
+        if isinstance(item, dict)
+    ]
+    if "fail" in category_statuses:
+        evidence["status"] = "fail"
+    elif any(status in {"warn", "unavailable"} for status in category_statuses):
+        evidence["status"] = "warn"
+    else:
+        evidence["status"] = "pass"
+    return evidence
+
+
+def security_waiver_requirement(child_target: str, child_summary: dict[str, Any]) -> dict[str, Any]:
+    if child_target != "verify-security" or child_summary.get("status") != "warn":
+        return {"required": False, "categories": [], "steps": [], "reason": ""}
+
+    categories: list[str] = []
+    evidence = child_summary.get("security_evidence", {})
+    if isinstance(evidence, dict):
+        for name, item in (evidence.get("categories") or {}).items():
+            if not isinstance(item, dict) or name == "exceptions":
+                continue
+            if item.get("status") in {"warn", "fail"}:
+                categories.append(str(name))
+
+    scanner_steps: list[str] = []
+    for step in child_summary.get("steps", []) or []:
+        if not isinstance(step, dict):
+            continue
+        if step.get("status") not in {"warn", "fail"}:
+            continue
+        step_name = str(step.get("name") or "")
+        if step_name in {"osv-scanner", "grype", "trivy-fs", "pip-audit"} or step.get("evidence_categories"):
+            scanner_steps.append(step_name)
+
+    required = bool(categories or scanner_steps)
+    reason = ""
+    if required:
+        parts = []
+        if categories:
+            parts.append("security evidence categories: " + ", ".join(sorted(set(categories))))
+        if scanner_steps:
+            parts.append("scanner steps: " + ", ".join(sorted(set(scanner_steps))))
+        reason = "; ".join(parts)
+    return {
+        "required": required,
+        "categories": sorted(set(categories)),
+        "steps": sorted(set(scanner_steps)),
+        "reason": reason,
+    }
+
+
+def attach_security_evidence(summary: dict[str, Any]) -> None:
+    if summary.get("target") != "verify-security":
+        return
+    previous = summary.get("analysis", {}).get("previous_summary", {})
+    if summary.get("analysis", {}).get("reused_previous_artifact") and isinstance(previous, dict) and previous.get("security_evidence"):
+        summary["security_evidence"] = previous["security_evidence"]
+        summary["findings"].append("security evidence map reused from the fresh previous verify-security artifact")
+        return
+    summary["security_evidence"] = build_security_evidence(summary)
+
+
 def run_brief_checks(root: Path, summary: dict[str, Any], artifact_dir: Path, target_cfg: dict[str, Any]) -> None:
     populate_brief_findings(summary)
     for index, step in enumerate(target_cfg.get("steps", []), start=1):
@@ -2122,8 +2466,25 @@ def run_review_ready(
             )
 
 
+def workflow_trigger_text(text: str) -> str:
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped.startswith("on:"):
+            continue
+        if stripped != "on:":
+            return stripped.partition(":")[2].strip().lower()
+        block: list[str] = []
+        for child in lines[index + 1 :]:
+            if child and not child.startswith((" ", "\t")) and not child.startswith("#"):
+                break
+            block.append(child)
+        return "\n".join(block).lower()
+    return ""
+
+
 def run_ci_local(root: Path, summary: dict[str, Any], artifact_dir: Path) -> None:
-    mode = os.environ.get("CI_LOCAL_MODE", "info")
+    mode = os.environ.get("CI_LOCAL_MODE", "lint")
     workflows = summary["workflows"]["tooling_workflows"] or summary["workflows"]["all_workflows"]
     summary["findings"].append(f"ci-local mode: {mode}")
     if not workflows:
@@ -2137,6 +2498,108 @@ def run_ci_local(root: Path, summary: dict[str, Any], artifact_dir: Path) -> Non
             required=False,
             category="ci-local",
             note="no workflows detected for ci-local",
+        )
+        return
+
+    workflow_paths = [Path(summary["workflows"]["workflow_dir"]) / workflow for workflow in workflows]
+    if mode in {"lint", ""}:
+        dispatch_only = 0
+        automatic = 0
+        for path in workflow_paths:
+            text = (root / path).read_text(encoding="utf-8")
+            trigger_text = workflow_trigger_text(text)
+            has_dispatch = "workflow_dispatch" in trigger_text
+            has_auto = "pull_request" in trigger_text or "push" in trigger_text
+            if has_dispatch and not has_auto:
+                dispatch_only += 1
+            elif has_auto:
+                automatic += 1
+        record_step(
+            summary,
+            name="ci-local-trigger-audit",
+            status="pass",
+            command="inspect .github/workflows trigger modes",
+            duration_seconds=0.0,
+            log_path=None,
+            required=True,
+            category="ci-local",
+            note=f"workflow_dispatch_only={dispatch_only}; automatic={automatic}; workflows={len(workflow_paths)}",
+        )
+        workflow_args = " ".join(shlex.quote(str(path)) for path in workflow_paths)
+        lint_steps = [
+            ("ci-local-actionlint", "actionlint", f"actionlint {workflow_args}"),
+            ("ci-local-zizmor", "zizmor", f"zizmor {workflow_args}"),
+        ]
+        policy_dir = root / "tooling" / "policies" / "conftest" / "github-actions"
+        if policy_dir.exists():
+            lint_steps.append(
+                (
+                    "ci-local-conftest",
+                    "conftest",
+                    f"conftest test --all-namespaces -p {shlex.quote(str(policy_dir.relative_to(root)))} {workflow_args}",
+                )
+            )
+        yamllint_cfg = root / "tooling" / "configs" / "yamllint" / "yamllint.yaml"
+        yamllint_cmd = (
+            f"yamllint -c {shlex.quote(str(yamllint_cfg.relative_to(root)))} {workflow_args}"
+            if yamllint_cfg.exists()
+            else f"yamllint {workflow_args}"
+        )
+        lint_steps.append(("ci-local-yamllint", "yamllint", yamllint_cmd))
+        for index, (name, tool, command) in enumerate(lint_steps, start=2):
+            if resolve_tool(tool) is None:
+                record_step(
+                    summary,
+                    name=name,
+                    status="unavailable",
+                    command=command,
+                    duration_seconds=0.0,
+                    log_path=None,
+                    required=False,
+                    category="ci-local",
+                    note=f"{tool} is unavailable",
+                )
+                continue
+            rc, duration = run_shell(command, cwd=root, log_path=artifact_dir / "logs" / f"{index:02d}-{name}.log")
+            record_step(
+                summary,
+                name=name,
+                status="pass" if rc == 0 else "fail",
+                command=command,
+                duration_seconds=duration,
+                log_path=artifact_dir / "logs" / f"{index:02d}-{name}.log",
+                required=True,
+                category="ci-local",
+                note=log_excerpt(artifact_dir / "logs" / f"{index:02d}-{name}.log", failed=rc != 0),
+                exit_code=rc,
+            )
+        return
+
+    if mode == "info":
+        record_step(
+            summary,
+            name="ci-local-info",
+            status="skipped",
+            command="act <event> -W .github/workflows/<workflow>",
+            duration_seconds=0.0,
+            log_path=None,
+            required=False,
+            category="ci-local",
+            note="ci-local info mode; default lint mode runs workflow lint without GitHub runner credits; set CI_LOCAL_MODE=run to execute act",
+        )
+        return
+
+    if mode != "run":
+        record_step(
+            summary,
+            name="ci-local-mode",
+            status="warn",
+            command="CI_LOCAL_MODE",
+            duration_seconds=0.0,
+            log_path=None,
+            required=False,
+            category="ci-local",
+            note=f"unknown CI_LOCAL_MODE={mode}; use lint, info, or run",
         )
         return
 
@@ -2166,20 +2629,6 @@ def run_ci_local(root: Path, summary: dict[str, Any], artifact_dir: Path) -> Non
             category="ci-local",
             note="docker bridge unavailable for act",
         )
-
-    if mode != "run":
-        record_step(
-            summary,
-            name="ci-local-info",
-            status="skipped",
-            command="act <event> -W .github/workflows/<workflow>",
-            duration_seconds=0.0,
-            log_path=None,
-            required=False,
-            category="ci-local",
-            note="ci-local defaulted to info mode; set CI_LOCAL_MODE=run to execute act",
-        )
-        return
     if not act_ready or docker_launcher is None:
         summary["blockers"].append("ci-local run mode requires both act and a docker bridge")
         summary["status"] = combine_status(summary["status"], "fail")
@@ -2199,6 +2648,168 @@ def run_ci_local(root: Path, summary: dict[str, Any], artifact_dir: Path) -> Non
         "tool": "act",
     }
     run_step(root, summary, artifact_dir, step, 1)
+
+
+def _release_gate_target_branch(summary: dict[str, Any]) -> str:
+    override = os.environ.get("RELEASE_GATE_TARGET_BRANCH", "").strip()
+    if override:
+        return override
+    pr = summary.get("github", {}).get("pull_request")
+    if isinstance(pr, dict):
+        base = str(pr.get("baseRefName") or "").strip()
+        if base:
+            return base
+    repo = summary.get("repo", {})
+    for key in ("production_branch", "integration_branch", "default_branch"):
+        value = str(repo.get(key) or "").strip()
+        if value:
+            return value
+    return "unknown"
+
+
+def _release_gate_record_status(child_status: str, *, required: bool) -> str:
+    if child_status == "pass":
+        return "pass"
+    if child_status == "fail":
+        return "fail"
+    return "blocked" if required else "warn"
+
+
+def run_release_gate_local(root: Path, config: dict[str, Any], summary: dict[str, Any], artifact_dir: Path, target_cfg: dict[str, Any]) -> None:
+    child_targets = [str(target) for target in target_cfg.get("targets", [])]
+    advisory_targets = {str(target) for target in target_cfg.get("advisory_targets", [])}
+    current_head = str(summary.get("git", {}).get("head_sha") or "").strip()
+    target_branch = _release_gate_target_branch(summary)
+    github_actions_mode = str(summary.get("repo", {}).get("github_actions_mode") or "standard")
+    tooling_workflows = list(summary.get("workflows", {}).get("tooling_workflows", []))
+    expected_contexts = [
+        TOOLING_WORKFLOW_CONTEXTS.get(workflow, workflow)
+        for workflow in tooling_workflows
+        if workflow in TOOLING_WORKFLOW_CONTEXTS or workflow.startswith("tooling-")
+    ]
+    branch_ref = str(summary.get("git", {}).get("branch") or "HEAD").strip() or "HEAD"
+    release_gate: dict[str, Any] = {
+        "github_actions_mode": github_actions_mode,
+        "hosted_runner_minutes_policy": "local_first" if github_actions_mode in {"local_artifacts", "manual_hosted"} else "standard_hosted",
+        "expected_remote_contexts": expected_contexts,
+        "optional_dispatch_commands": [
+            f"gh workflow run {workflow} --ref {branch_ref}"
+            for workflow in tooling_workflows
+            if workflow in TOOLING_WORKFLOW_CONTEXTS
+        ],
+        "remote_actions_authority": False,
+        "manual_human_gate_required": True,
+        "target_branch": target_branch,
+        "branch": summary.get("git", {}).get("branch", ""),
+        "head_sha": current_head,
+        "required_targets": [target for target in child_targets if target not in advisory_targets],
+        "advisory_targets": sorted(advisory_targets),
+        "evidence": [],
+        "stale_evidence": [],
+        "missing_evidence": [],
+        "failed_targets": [],
+        "blocked_targets": [],
+        "security_waiver_required": False,
+        "security_waiver_targets": [],
+        "security_waiver_reasons": [],
+        "final_decision": "pass",
+        "reason": "Local deterministic artifacts are the release-gate evidence; GitHub Actions are advisory for private GitHub Free repos when hosted quota is blocked.",
+    }
+    summary["release_gate"] = release_gate
+    summary["findings"].append("release-gate-local: GitHub Actions authority is advisory; a manual human gate is required before promotion")
+
+    if not child_targets:
+        release_gate["final_decision"] = "blocked"
+        release_gate["missing_evidence"].append("no release-gate child targets configured")
+        record_step(
+            summary,
+            name="release-gate-config",
+            status="blocked",
+            command="release-gate-local configuration",
+            duration_seconds=0.0,
+            log_path=None,
+            required=True,
+            category="release-gate",
+            note="no release-gate child targets configured",
+        )
+        return
+
+    previous_review_scope = os.environ.get("REVIEW_READY_SCOPE")
+    try:
+        for index, child_target in enumerate(child_targets, start=1):
+            required = child_target not in advisory_targets
+            if child_target == "review-ready":
+                os.environ["REVIEW_READY_SCOPE"] = "full"
+            child_summary = execute_target(root, config, child_target, nested=True)
+            if child_target == "review-ready":
+                if previous_review_scope is None:
+                    os.environ.pop("REVIEW_READY_SCOPE", None)
+                else:
+                    os.environ["REVIEW_READY_SCOPE"] = previous_review_scope
+
+            child_status = str(child_summary.get("status") or "unavailable")
+            gate_status = _release_gate_record_status(child_status, required=required)
+            waiver = security_waiver_requirement(child_target, child_summary)
+            if waiver["required"]:
+                gate_status = "blocked"
+                release_gate["security_waiver_required"] = True
+                release_gate["security_waiver_targets"].append(child_target)
+                release_gate["security_waiver_reasons"].append(f"{child_target}: {waiver['reason']}")
+                summary["findings"].append(
+                    f"{child_target}: security waiver required before promotion: {waiver['reason']}"
+                )
+            child_head = str(child_summary.get("git", {}).get("head_sha") or "").strip()
+            artifact_matches = bool(current_head and child_head and child_head == current_head)
+            nested_summary = str(child_summary.get("artifacts", {}).get("summary_json") or "")
+            evidence_row = {
+                "target": child_target,
+                "status": child_status,
+                "gate_status": gate_status,
+                "required": required,
+                "summary_path": nested_summary,
+                "artifact_head_sha": child_head,
+                "artifact_head_matches_current": artifact_matches,
+                "security_waiver_required": bool(waiver["required"]),
+                "security_waiver_reason": waiver["reason"],
+            }
+            release_gate["evidence"].append(evidence_row)
+            if not nested_summary:
+                release_gate["missing_evidence"].append(child_target)
+            if current_head and child_head and child_head != current_head:
+                release_gate["stale_evidence"].append(child_target)
+                if gate_status == "pass" and required:
+                    gate_status = "blocked"
+                    evidence_row["gate_status"] = gate_status
+            if gate_status == "fail":
+                release_gate["failed_targets"].append(child_target)
+            elif gate_status == "blocked":
+                release_gate["blocked_targets"].append(child_target)
+            command = "REVIEW_READY_SCOPE=full make review-ready" if child_target == "review-ready" else f"make {child_target}"
+            record_step(
+                summary,
+                name=child_target,
+                status=gate_status,
+                command=command,
+                duration_seconds=0.0,
+                log_path=None,
+                required=required,
+                category="release-gate",
+                note=f"child target status: {child_status}; artifact head matches current: {artifact_matches}",
+                nested_summary=nested_summary,
+            )
+    finally:
+        if previous_review_scope is None:
+            os.environ.pop("REVIEW_READY_SCOPE", None)
+        else:
+            os.environ["REVIEW_READY_SCOPE"] = previous_review_scope
+
+    if release_gate["failed_targets"]:
+        release_gate["final_decision"] = "fail"
+    elif release_gate["blocked_targets"] or release_gate["missing_evidence"] or release_gate["stale_evidence"]:
+        release_gate["final_decision"] = "blocked"
+        summary["status"] = combine_status(summary["status"], "blocked")
+    else:
+        release_gate["final_decision"] = "pass"
 
 
 def run_watch(root: Path, summary: dict[str, Any], artifact_dir: Path, target_cfg: dict[str, Any]) -> None:
@@ -2284,6 +2895,8 @@ def execute_target(root: Path, config: dict[str, Any], target: str, *, nested: b
             run_review_ready(root, config, summary, artifact_dir, target_cfg)
         elif kind == "ci-local":
             run_ci_local(root, summary, artifact_dir)
+        elif kind == "release-gate-local":
+            run_release_gate_local(root, config, summary, artifact_dir, target_cfg)
         elif kind == "watch":
             run_watch(root, summary, artifact_dir, target_cfg)
         else:
@@ -2321,7 +2934,9 @@ def execute_target(root: Path, config: dict[str, Any], target: str, *, nested: b
     summary["analysis"]["active_lane"] = load_active_lane(root, config["repo"], summary["git"])
     apply_lane_advisories(summary)
     populate_step_runtime_analysis(summary)
+    attach_security_evidence(summary)
     summary["next_actions"] = default_next_actions(summary)
+    populate_production_efficiency_analysis(summary)
     summary["analysis"]["artifact_path"] = summary["analysis"].get("artifact_path") or summary["artifacts"]["summary_json"]
     summary["analysis"]["recommended_next_command"] = summary["next_actions"][0] if summary["next_actions"] else ""
     write_summary(summary, artifact_dir)
@@ -2338,7 +2953,7 @@ def main() -> None:
     root = Path(__file__).resolve().parents[2]
     config = read_json(root / "tooling" / "configs" / "tooling-targets.json")
     summary = execute_target(root, config, args.target, nested=False)
-    raise SystemExit(0 if summary["status"] != "fail" else 2)
+    raise SystemExit(0 if summary["status"] not in {"fail", "blocked"} else 2)
 
 
 if __name__ == "__main__":

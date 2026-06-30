@@ -15,6 +15,7 @@ permissions:
 
 jobs:
   submit-dependencies:
+    if: ${{ github.event.repository.private == false || vars.TPL_ENABLE_DEPENDENCY_SUBMISSION == 'true' || vars.META_RAG_ENABLE_DEPENDENCY_SUBMISSION == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
