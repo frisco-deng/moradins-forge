@@ -136,6 +136,7 @@ Windows PowerShell:
 .\scripts\moradin_forge.ps1 plan --target <target-repo>
 .\scripts\moradin_forge.ps1 apply --target <target-repo> --approve
 .\scripts\moradin_forge.ps1 verify --target <target-repo>
+.\scripts\moradin_forge.ps1 rollback --target <target-repo> --approve
 ```
 
 Root repo patching is off by default. To add a marked Moradin block to a target
@@ -154,7 +155,10 @@ Root repo patching is off by default. To add a marked Moradin block to a target
 - `make forge-plan TARGET=<target-repo>`
 - `make forge-adopt TARGET=<target-repo> APPROVE=1`
 - `make forge-verify TARGET=<target-repo>`
+- `make forge-rollback TARGET=<target-repo> APPROVE=1`
 - `make forge-smoke`
+- `make forge-dogfood-smoke`
+- `make forge-release-artifacts`
 - `make payload-validate`
 - `make payload-smoke`
 - `make public-portability-check`
@@ -163,6 +167,13 @@ Root repo patching is off by default. To add a marked Moradin block to a target
 `make public-portability-check` is the public release hygiene gate. It creates a
 sanitized check tree, runs a sidecar smoke test, and scans both outputs for
 host-specific paths, generated evidence, and portability failures.
+
+`make forge-dogfood-smoke` is the bounded Linux/WSL release proof. It creates a
+disposable Git target, proves plan is read-only, applies and verifies the real
+sidecar, confirms rollback refusal without approval, performs approved rollback,
+and checks the target SHA and root hash. The same run writes a public archive,
+SHA-256 checksums, SPDX SBOM, release manifest, and current-SHA operator result
+under ignored `artifacts/dogfood/`. Existing sidecars are never overwritten.
 
 For normal maintenance, start with `make repo-brief`, use `make verify-paths`
 before public-facing outputs, and run `make review-ready` before a PR handoff.

@@ -4,11 +4,15 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
+import errno
+import hashlib
 import json
 import os
 import platform
 import re
 import shutil
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,6 +23,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PAYLOAD_MANIFEST_RELATIVE = Path("Harness/moradin_payload/manifest.yaml")
 CONTROL_ROOT_RELATIVE = Path("Harness/artifacts/control")
 DEFAULT_SIDECAR_DIR = ".moradins-harness"
+OWNERSHIP_RECORD_RELATIVE = Path(
+    "Harness/artifacts/control/forge_integration/ownership.json"
+)
 AGENTS_MARKER_BEGIN = "<!-- moradin-forge:start -->"
 AGENTS_MARKER_END = "<!-- moradin-forge:end -->"
 INTERNAL_USER_TOKEN = "ru" + "ne"
@@ -241,7 +248,7 @@ PORTABLE_TEXT_REPLACEMENTS: list[tuple[re.Pattern[str], str]] = [
 ]
 
 PORTABLE_SIDECAR_MAKEFILE_TEXT = """\
-.PHONY: test payload-validate payload-smoke forge-explain forge-readiness forge-plan forge-adopt forge-verify forge-smoke
+.PHONY: test payload-validate payload-smoke forge-explain forge-readiness forge-plan forge-adopt forge-verify forge-rollback forge-smoke
 
 TARGET ?=
 APPROVE ?=
@@ -274,6 +281,10 @@ forge-adopt:
 forge-verify:
 \t@if [ -z "$(TARGET)" ]; then echo "Usage: make forge-verify TARGET=<repo-path>"; exit 1; fi
 \tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py verify --target "$(TARGET)"
+
+forge-rollback:
+\t@if [ -z "$(TARGET)" ] || [ "$(APPROVE)" != "1" ]; then echo "Usage: make forge-rollback TARGET=<repo-path> APPROVE=1"; exit 1; fi
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py rollback --target "$(TARGET)" --approve
 
 forge-smoke:
 \tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/public_export.py sidecar-smoke --output /tmp/moradin-forge-sidecar-smoke-check --force
@@ -386,6 +397,125 @@ def utc_run_id(prefix: str = "forge") -> str:
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def sha256_bytes(payload: bytes) -> str:
+    return hashlib.sha256(payload).hexdigest()
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def file_manifest(
+    root: Path,
+    *,
+    excluded_relative_paths: set[str] | None = None,
+    excluded_top_level_names: set[str] | None = None,
+    reject_symlinks: bool = True,
+) -> dict[str, str]:
+    """Return a deterministic path-to-digest map without following symlinks."""
+
+    excluded_relative_paths = excluded_relative_paths or set()
+    excluded_top_level_names = excluded_top_level_names or set()
+    entries: dict[str, str] = {}
+    if not root.exists():
+        return entries
+    for current_root, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
+        current_path = Path(current_root)
+        kept_dirs: list[str] = []
+        for dirname in sorted(dirnames):
+            path = current_path / dirname
+            relative = path.relative_to(root).as_posix()
+            if relative.split("/", 1)[0] in excluded_top_level_names:
+                continue
+            if path.is_symlink():
+                if reject_symlinks:
+                    raise ForgeError(f"managed tree symlink is not allowed: {relative}")
+                entries[relative] = f"symlink:{os.readlink(path)}"
+                continue
+            kept_dirs.append(dirname)
+        dirnames[:] = kept_dirs
+        for filename in sorted(filenames):
+            path = current_path / filename
+            relative = path.relative_to(root).as_posix()
+            if relative.split("/", 1)[0] in excluded_top_level_names:
+                continue
+            if relative in excluded_relative_paths:
+                continue
+            if path.is_symlink():
+                if reject_symlinks:
+                    raise ForgeError(f"managed tree symlink is not allowed: {relative}")
+                entries[relative] = f"symlink:{os.readlink(path)}"
+                continue
+            if path.is_file():
+                entries[relative] = sha256_file(path)
+    return dict(sorted(entries.items()))
+
+
+def manifest_digest(manifest: dict[str, str]) -> str:
+    encoded = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return sha256_bytes(encoded)
+
+
+def target_root_digest(target_root: Path, sidecar_dir: str) -> str:
+    manifest = file_manifest(
+        target_root,
+        excluded_top_level_names={".git", sidecar_dir},
+        reject_symlinks=False,
+    )
+    return manifest_digest(manifest)
+
+
+def atomic_write_bytes(path: Path, payload: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp-{uuid.uuid4().hex}")
+    try:
+        temporary.write_bytes(payload)
+        if path.exists():
+            os.chmod(temporary, path.stat().st_mode & 0o777)
+        os.replace(temporary, path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def install_directory_no_replace(source: Path, destination: Path) -> None:
+    """Atomically install a staged directory without replacing any destination."""
+
+    if platform.system() == "Linux":
+        libc = ctypes.CDLL(None, use_errno=True)
+        renameat2 = getattr(libc, "renameat2", None)
+        if renameat2 is not None:
+            renameat2.argtypes = [
+                ctypes.c_int,
+                ctypes.c_char_p,
+                ctypes.c_int,
+                ctypes.c_char_p,
+                ctypes.c_uint,
+            ]
+            renameat2.restype = ctypes.c_int
+            result = renameat2(
+                -100,
+                os.fsencode(source),
+                -100,
+                os.fsencode(destination),
+                1,
+            )
+            if result == 0:
+                return
+            error_number = ctypes.get_errno()
+            if error_number == errno.EEXIST:
+                raise ForgeError(f"sidecar appeared during staged apply: {destination}")
+            if error_number not in {errno.ENOSYS, errno.EINVAL}:
+                raise OSError(error_number, os.strerror(error_number), destination)
+    if destination.exists() or destination.is_symlink():
+        raise ForgeError(f"sidecar appeared during staged apply: {destination}")
+    os.rename(source, destination)
 
 
 def parse_simple_yaml(path: Path) -> dict[str, Any]:
@@ -937,9 +1067,9 @@ def build_integration_plan(
             "Plan mode does not write to the target repo.",
             "Apply requires --approve.",
             "Host tool installs are request-only artifacts.",
-            "Existing sidecars require --overwrite-sidecar.",
+            "Existing sidecars are preserved; overwrite is blocked until a transactional upgrade contract exists.",
         ],
-        "status": "needs_overwrite" if snapshot["sidecar_present"] else readiness["status"],
+        "status": "blocked_existing_sidecar" if snapshot["sidecar_present"] else readiness["status"],
     }
 
 
@@ -1169,12 +1299,150 @@ def patch_agents_adapter(target_root: Path, sidecar_dir: str, create_agents: boo
         existing = agents_path.read_text(encoding="utf-8")
         if AGENTS_MARKER_BEGIN in existing:
             return "already_present"
-        agents_path.write_text(existing.rstrip() + "\n\n" + section, encoding="utf-8")
+        if not existing:
+            separator = ""
+        elif existing.endswith("\n\n"):
+            separator = ""
+        elif existing.endswith("\n"):
+            separator = "\n"
+        else:
+            separator = "\n\n"
+        atomic_write_bytes(agents_path, (existing + separator + section).encode("utf-8"))
         return "patched"
     if create_agents:
-        agents_path.write_text("# AGENTS.md\n\n" + section, encoding="utf-8")
+        atomic_write_bytes(agents_path, ("# AGENTS.md\n\n" + section).encode("utf-8"))
         return "created"
     return "snippet_only"
+
+
+def agents_ownership_snapshot(
+    agents_path: Path,
+    *,
+    adapter_status: str,
+    before_payload: bytes | None,
+) -> dict[str, Any]:
+    after_payload = agents_path.read_bytes() if agents_path.is_file() else None
+    return {
+        "path": "AGENTS.md",
+        "adapter_status": adapter_status,
+        "existed_before": before_payload is not None,
+        "before_size": len(before_payload or b""),
+        "before_sha256": sha256_bytes(before_payload) if before_payload is not None else "",
+        "after_sha256": sha256_bytes(after_payload) if after_payload is not None else "",
+        "owned": adapter_status in {"patched", "created"},
+    }
+
+
+def write_ownership_record(
+    sidecar_root: Path,
+    *,
+    sidecar_dir: str,
+    target_root_hash_before: str,
+    target_root_hash_after: str,
+    agents: dict[str, Any],
+) -> dict[str, Any]:
+    managed_files = file_manifest(
+        sidecar_root,
+        excluded_relative_paths={OWNERSHIP_RECORD_RELATIVE.as_posix()},
+    )
+    payload: dict[str, Any] = {
+        "version": "MoradinForgeOwnershipV1",
+        "generated_at": utc_now(),
+        "sidecar_dir": sidecar_dir,
+        "managed_file_count": len(managed_files),
+        "managed_files": managed_files,
+        "managed_tree_sha256": manifest_digest(managed_files),
+        "target_root_hash_before": target_root_hash_before,
+        "target_root_hash_after": target_root_hash_after,
+        "agents": agents,
+        "rollback_anchor": "v0.1.0-public-alpha",
+    }
+    write_json(sidecar_root / OWNERSHIP_RECORD_RELATIVE, payload)
+    return payload
+
+
+def load_ownership_record(sidecar_root: Path) -> dict[str, Any]:
+    record_path = sidecar_root / OWNERSHIP_RECORD_RELATIVE
+    if record_path.is_symlink() or not record_path.is_file():
+        return {}
+    try:
+        payload = json.loads(record_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    if not isinstance(payload, dict) or payload.get("version") != "MoradinForgeOwnershipV1":
+        return {}
+    return payload
+
+
+def ownership_issues(sidecar_root: Path) -> list[ForgeVerifyIssue]:
+    ownership = load_ownership_record(sidecar_root)
+    if not ownership:
+        return [
+            ForgeVerifyIssue(
+                code="ownership_record_missing",
+                path=OWNERSHIP_RECORD_RELATIVE.as_posix(),
+                message="transactional ownership record is missing or invalid",
+            )
+        ]
+    expected = ownership.get("managed_files")
+    if not isinstance(expected, dict) or not all(
+        isinstance(path, str) and isinstance(digest, str) for path, digest in expected.items()
+    ):
+        return [
+            ForgeVerifyIssue(
+                code="ownership_record_invalid",
+                path=OWNERSHIP_RECORD_RELATIVE.as_posix(),
+                message="managed_files must be a path-to-sha256 mapping",
+            )
+        ]
+    try:
+        actual = file_manifest(
+            sidecar_root,
+            excluded_relative_paths={OWNERSHIP_RECORD_RELATIVE.as_posix()},
+        )
+    except ForgeError as error:
+        return [
+            ForgeVerifyIssue(
+                code="managed_content_unsafe",
+                path=sidecar_root.as_posix(),
+                message=str(error),
+            )
+        ]
+    issues: list[ForgeVerifyIssue] = []
+    for relative in sorted(set(expected) - set(actual)):
+        issues.append(
+            ForgeVerifyIssue(
+                code="managed_file_missing",
+                path=relative,
+                message="managed sidecar file is missing",
+            )
+        )
+    for relative in sorted(set(actual) - set(expected)):
+        issues.append(
+            ForgeVerifyIssue(
+                code="unowned_sidecar_content",
+                path=relative,
+                message="sidecar contains content absent from the ownership record",
+            )
+        )
+    for relative in sorted(set(expected) & set(actual)):
+        if expected[relative] != actual[relative]:
+            issues.append(
+                ForgeVerifyIssue(
+                    code="managed_file_modified",
+                    path=relative,
+                    message="managed sidecar file digest does not match the adoption record",
+                )
+            )
+    if ownership.get("managed_tree_sha256") != manifest_digest(expected):
+        issues.append(
+            ForgeVerifyIssue(
+                code="ownership_tree_digest_mismatch",
+                path=OWNERSHIP_RECORD_RELATIVE.as_posix(),
+                message="ownership record tree digest does not match its file manifest",
+            )
+        )
+    return issues
 
 
 def write_integration_record(
@@ -1210,8 +1478,11 @@ def write_integration_record(
             "Run the target repo's existing deterministic test or verify command.",
         ],
         "rollback": [
-            f"Remove `{portable_plan['target_repo']['sidecar_dir']}/` to remove the sidecar.",
-            "Remove the Moradin's Forge marked block from root AGENTS.md if it was patched.",
+            (
+                f"Run `{portable_plan['target_repo']['sidecar_dir']}/scripts/"
+                "moradin_forge.sh rollback --target . --approve`."
+            ),
+            "Rollback refuses modified or unowned managed content.",
             "No host install commands were executed by Moradin.",
         ],
     }
@@ -1307,6 +1578,7 @@ def verify_integration(
                     )
                 )
         issues.extend(scan_forbidden_sidecar_references(sidecar_root))
+        issues.extend(ownership_issues(sidecar_root))
     issues.extend(scan_local_only_artifact_paths(sidecar_root))
 
     integration_record = load_integration_record(sidecar_root)
@@ -1347,10 +1619,92 @@ def verify_integration(
             "Run the target repo's existing deterministic test or verify command.",
         ],
         "rollback": [
-            f"Remove `{sidecar_dir}/` to remove the sidecar.",
-            "Remove the Moradin's Forge marked block from root AGENTS.md if it was patched.",
+            f"Run `{sidecar_dir}/scripts/moradin_forge.sh rollback --target . --approve`.",
+            "Rollback refuses modified or unowned managed content.",
             "No host install commands were executed by Moradin.",
         ],
+    }
+
+
+def rollback_integration(
+    target_root: Path,
+    *,
+    approve: bool,
+    sidecar_dir: str = DEFAULT_SIDECAR_DIR,
+) -> dict[str, Any]:
+    if not approve:
+        raise ForgeError("rollback requires --approve after the user has confirmed removal")
+    sidecar_dir = normalize_sidecar_dir(sidecar_dir)
+    target_root = target_root.resolve()
+    if not target_root.is_dir():
+        raise ForgeError(f"target repo must be an existing directory: {target_root}")
+    sidecar_root = target_root / sidecar_dir
+    if not sidecar_root.is_dir() or sidecar_root.is_symlink():
+        raise ForgeError(f"managed sidecar does not exist: {sidecar_root}")
+    issues = ownership_issues(sidecar_root)
+    if issues:
+        summary = "; ".join(f"{issue.code}:{issue.path}" for issue in issues[:5])
+        raise ForgeError(f"rollback refused because managed content changed: {summary}")
+    ownership = load_ownership_record(sidecar_root)
+    agents = ownership.get("agents", {})
+    if not isinstance(agents, dict):
+        raise ForgeError("rollback refused because AGENTS.md ownership metadata is invalid")
+    agents_path = target_root / "AGENTS.md"
+    agents_before_rollback = agents_path.read_bytes() if agents_path.is_file() else None
+    restored_agents: bytes | None = agents_before_rollback
+    owned_agents = bool(agents.get("owned"))
+    if owned_agents:
+        if agents_before_rollback is None:
+            raise ForgeError("rollback refused because managed AGENTS.md is missing")
+        if sha256_bytes(agents_before_rollback) != str(agents.get("after_sha256", "")):
+            raise ForgeError("rollback refused because managed AGENTS.md was modified")
+        status = str(agents.get("adapter_status", ""))
+        if status == "created":
+            restored_agents = None
+        elif status == "patched":
+            before_size = agents.get("before_size")
+            if not isinstance(before_size, int) or before_size < 0:
+                raise ForgeError("rollback refused because AGENTS.md size metadata is invalid")
+            restored_agents = agents_before_rollback[:before_size]
+            if sha256_bytes(restored_agents) != str(agents.get("before_sha256", "")):
+                raise ForgeError("rollback refused because AGENTS.md cannot be restored exactly")
+        else:
+            raise ForgeError("rollback refused because AGENTS.md ownership state is invalid")
+
+    root_hash_before_rollback = target_root_digest(target_root, sidecar_dir)
+    quarantine = target_root / f".{sidecar_dir.lstrip('.')}.rollback-{uuid.uuid4().hex}"
+    os.replace(sidecar_root, quarantine)
+    try:
+        if owned_agents:
+            if restored_agents is None:
+                agents_path.unlink()
+            else:
+                atomic_write_bytes(agents_path, restored_agents)
+        shutil.rmtree(quarantine)
+    except Exception:
+        if owned_agents:
+            if agents_before_rollback is None:
+                if agents_path.exists():
+                    agents_path.unlink()
+            else:
+                atomic_write_bytes(agents_path, agents_before_rollback)
+        if quarantine.exists() and not sidecar_root.exists():
+            os.replace(quarantine, sidecar_root)
+        raise
+    root_hash_after_rollback = target_root_digest(target_root, sidecar_dir)
+    expected_root_hash = str(ownership.get("target_root_hash_before", ""))
+    return {
+        "version": "MoradinForgeRollbackResultV1",
+        "generated_at": utc_now(),
+        "target_repo": target_root.as_posix(),
+        "sidecar_dir": sidecar_dir,
+        "removed": True,
+        "agents_restored": owned_agents,
+        "target_root_hash_before_rollback": root_hash_before_rollback,
+        "target_root_hash_after_rollback": root_hash_after_rollback,
+        "target_root_hash_expected": expected_root_hash,
+        "target_root_hash_restored": root_hash_after_rollback == expected_root_hash,
+        "status": "pass",
     }
 
 
@@ -1367,30 +1721,74 @@ def apply_integration(
         raise ForgeError(f"target repo must be an existing directory: {target_root}")
     sidecar_root = target_root / sidecar_dir
     if sidecar_root.exists():
-        if not options.overwrite_sidecar:
-            raise ForgeError(f"sidecar already exists: {sidecar_root}")
-        shutil.rmtree(sidecar_root)
+        if options.overwrite_sidecar:
+            raise ForgeError(
+                "existing sidecar preserved: --overwrite-sidecar is disabled until a transactional upgrade contract is implemented"
+            )
+        raise ForgeError(f"sidecar already exists: {sidecar_root}")
     plan = build_integration_plan(forge_root, target_root, sidecar_dir)
-    sidecar_root.mkdir(parents=True, exist_ok=True)
-    copied_files = copy_payload_to_sidecar(forge_root, sidecar_root)
-    snippet_paths = write_adapter_snippets(sidecar_root, sidecar_dir, target_root)
+    target_root_hash_before = target_root_digest(target_root, sidecar_dir)
+    agents_path = target_root / "AGENTS.md"
+    agents_before = agents_path.read_bytes() if agents_path.is_file() else None
+    staging_root = target_root / f".{sidecar_dir.lstrip('.')}.staging-{uuid.uuid4().hex}"
     adapter_status = "disabled"
-    if options.patch_agents:
-        adapter_status = patch_agents_adapter(target_root, sidecar_dir, options.create_agents)
     install_request = None
-    if options.write_install_request:
-        install_request = write_install_request_artifacts(
-            forge_root,
-            plan["readiness"],
-            target_root=target_root,
+    copied_files: list[str] = []
+    snippet_paths: list[str] = []
+    try:
+        staging_root.mkdir(parents=False)
+        copied_files = copy_payload_to_sidecar(forge_root, staging_root)
+        snippet_paths = write_adapter_snippets(staging_root, sidecar_dir, target_root)
+        if options.write_install_request:
+            install_request = write_install_request_artifacts(
+                forge_root,
+                plan["readiness"],
+                target_root=target_root,
+            )
+        write_integration_record(
+            staging_root,
+            plan,
+            copied_files,
+            "pending" if options.patch_agents else adapter_status,
+            install_request,
         )
-    integration_record = write_integration_record(
-        sidecar_root,
-        plan,
-        copied_files,
-        adapter_status,
-        install_request,
-    )
+        install_directory_no_replace(staging_root, sidecar_root)
+        if options.patch_agents:
+            adapter_status = patch_agents_adapter(target_root, sidecar_dir, options.create_agents)
+            write_integration_record(
+                sidecar_root,
+                plan,
+                copied_files,
+                adapter_status,
+                install_request,
+            )
+        target_root_hash_after = target_root_digest(target_root, sidecar_dir)
+        ownership = write_ownership_record(
+            sidecar_root,
+            sidecar_dir=sidecar_dir,
+            target_root_hash_before=target_root_hash_before,
+            target_root_hash_after=target_root_hash_after,
+            agents=agents_ownership_snapshot(
+                agents_path,
+                adapter_status=adapter_status,
+                before_payload=agents_before,
+            ),
+        )
+    except Exception:
+        if staging_root.exists():
+            shutil.rmtree(staging_root)
+        if sidecar_root.exists():
+            shutil.rmtree(sidecar_root)
+        if agents_before is None:
+            if agents_path.exists() and adapter_status == "created":
+                agents_path.unlink()
+        elif agents_path.is_file() and agents_path.read_bytes() != agents_before:
+            atomic_write_bytes(agents_path, agents_before)
+        raise
+    integration_record = {
+        "json": (sidecar_root / "Harness/artifacts/control/forge_integration/integration.json").as_posix(),
+        "markdown": (sidecar_root / "Harness/artifacts/control/forge_integration/integration.md").as_posix(),
+    }
     return {
         "version": "MoradinForgeApplyResultV1",
         "generated_at": utc_now(),
@@ -1398,9 +1796,18 @@ def apply_integration(
         "sidecar_path": sidecar_root.as_posix(),
         "copied_file_count": len(copied_files),
         "adapter_status": adapter_status,
-        "adapter_snippets": snippet_paths,
+        "adapter_snippets": [
+            (sidecar_root / Path(path).relative_to(staging_root)).as_posix()
+            if Path(path).is_relative_to(staging_root)
+            else path
+            for path in snippet_paths
+        ],
         "install_request": install_request or {},
         "integration_record": integration_record,
+        "ownership_record": (sidecar_root / OWNERSHIP_RECORD_RELATIVE).as_posix(),
+        "managed_tree_sha256": ownership["managed_tree_sha256"],
+        "target_root_hash_before": target_root_hash_before,
+        "target_root_hash_after": target_root_hash_after,
     }
 
 
@@ -1441,6 +1848,11 @@ def print_payload(payload: dict[str, Any], as_json: bool) -> None:
         for issue in payload["issues"][:20]:
             print(f"- {issue['code']}: {issue['path']} {issue['message']}")
         return
+    if payload.get("version") == "MoradinForgeRollbackResultV1":
+        print(f"rollback: {payload['status']}")
+        print(f"target_repo: {payload['target_repo']}")
+        print(f"agents_restored: {payload['agents_restored']}")
+        return
     print(json.dumps(payload, indent=2, sort_keys=True))
 
 
@@ -1478,6 +1890,15 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--json", action="store_true", help="Print JSON output.")
     verify.add_argument("--target", type=Path, required=True)
     verify.add_argument("--sidecar-dir", default=DEFAULT_SIDECAR_DIR)
+
+    rollback = subparsers.add_parser(
+        "rollback",
+        help="Remove an owned, unmodified Forge adoption after confirmation.",
+    )
+    rollback.add_argument("--json", action="store_true", help="Print JSON output.")
+    rollback.add_argument("--target", type=Path, required=True)
+    rollback.add_argument("--approve", action="store_true")
+    rollback.add_argument("--sidecar-dir", default=DEFAULT_SIDECAR_DIR)
     return parser
 
 
@@ -1537,6 +1958,14 @@ def main(argv: list[str] | None = None) -> int:
             result = verify_integration(args.target, args.sidecar_dir)
             print_payload(result, args.json)
             return 0 if result["status"] == "pass" else 1
+        if args.command == "rollback":
+            result = rollback_integration(
+                args.target,
+                approve=args.approve,
+                sidecar_dir=args.sidecar_dir,
+            )
+            print_payload(result, args.json)
+            return 0
     except ForgeError as error:
         print(f"moradin-forge: {error}")
         return 2

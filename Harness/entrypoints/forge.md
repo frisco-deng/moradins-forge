@@ -24,6 +24,8 @@ without breaking that repo's current workflows.
    remaining manual actions.
 8. Verify the sidecar with `scripts/moradin_forge.sh verify --target
    <target-repo>` or the PowerShell wrapper.
+9. When removal is requested, run `scripts/moradin_forge.sh rollback --target
+   <target-repo> --approve`; never delete an unverified sidecar manually.
 
 ## Authority
 
@@ -38,7 +40,7 @@ Forge may write only:
 Forge must not:
 
 - run host install commands,
-- overwrite an existing sidecar without `--overwrite-sidecar`,
+- overwrite an existing sidecar; the compatibility overwrite flag fails closed,
 - create root repo adapters when a safer snippet is enough,
 - publish, upload, or expose local repo contents.
 
@@ -52,6 +54,7 @@ Forge must not:
 
 ## Rollback
 
-Remove `.moradins-harness/` from the target repo and remove the marked
-Moradin's Forge block from target `AGENTS.md` if it was added. No host tool
+Use the explicit rollback command. It verifies the ownership manifest, refuses
+modified or unowned managed content, removes only the owned sidecar, and
+restores a Forge-owned target `AGENTS.md` change exactly. No host tool
 installation is performed by Forge.

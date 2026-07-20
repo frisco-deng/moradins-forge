@@ -2,7 +2,7 @@
 title: "Moradin Forge Agent Integration Contract V1"
 status: approved
 owner: platform-operations
-last_reviewed: 2026-06-09
+last_reviewed: 2026-07-19
 source_refs:
   - FORGE.md
   - Harness/entrypoints/forge.md
@@ -39,6 +39,8 @@ and write `artifacts/bootstrap/latest/agent_start.md`.
 5. Apply after consent: `scripts/moradin_forge.sh apply --target <target-repo>
    --approve`.
 6. Verify: `scripts/moradin_forge.sh verify --target <target-repo>`.
+7. Roll back after confirmation: `scripts/moradin_forge.sh rollback --target
+   <target-repo> --approve`.
 
 ## Write Boundary
 
@@ -52,12 +54,14 @@ Forge may write only:
   `--patch-agents` is explicitly approved.
 
 `verify` must report missing sidecar files, copied local-only artifacts,
-forbidden host-specific references, and mismatches between recorded adapter status and the
-target `AGENTS.md` marker.
+forbidden host-specific references, ownership-hash mismatches, unowned sidecar
+content, and mismatches between recorded adapter status and the target
+`AGENTS.md` marker.
 
 Forge must not execute host install commands, publish repo contents, edit
-external source tooling, or overwrite an existing sidecar without an explicit
-overwrite flag.
+external source tooling, or overwrite an existing sidecar. The compatibility
+`--overwrite-sidecar` option fails closed until a separately reviewed,
+transactional upgrade contract exists.
 
 ## Platform Entrypoints
 
@@ -73,7 +77,9 @@ Bootstrap uses the same safety boundary and never runs `apply`.
 
 ## Rollback
 
-Remove `.moradins-harness/` from the target repo. If Forge patched root
-`AGENTS.md`, remove the block bounded by `moradin-forge:start` and
-`moradin-forge:end`. No host tool install rollback is needed because Forge does
+Run the explicit rollback command rather than deleting files manually. Rollback
+requires approval, verifies every managed file against the adoption ownership
+record, refuses modified or unowned sidecar content, and restores a Forge-owned
+`AGENTS.md` change byte-for-byte. It removes only the owned sidecar and optional
+owned adapter block. No host tool install rollback is needed because Forge does
 not run host installs.
