@@ -30,6 +30,17 @@ def write(path: Path, content: str = "ok\n") -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def forbidden_reference_samples() -> list[str]:
+    return [
+        f"{PRIVATE_CODE_ROOT_TOKEN}/{SHARED_TEMPLATES_TOKEN}",
+        "/".join(["", "Users", "alice", "code", "private"]),
+        "C:" + "\\".join(["", "Users", "Alice", "code", "private"]),
+        "\\\\" + "\\".join(["wsl.localhost", "Ubuntu", "home", "alice", "code"]),
+        "git" + "@github.com:" + "frisco-deng/moradins-forge.git",
+        "/".join(["", "home", "alice", ".codex", "sessions", "2026", "06", "09", "session.jsonl"]),
+    ]
+
+
 def make_forge_root(tmp_path: Path) -> Path:
     forge_root = tmp_path / "forge"
     write(
@@ -40,7 +51,7 @@ def make_forge_root(tmp_path: Path) -> Path:
                 "name: moradin_harness_payload",
                 "kind: moradin_payload",
                 "payload_id: moradin_harness_payload",
-                "payload_version: 0.2.0-alpha",
+                "payload_version: 0.2.0-beta.1",
                 "source_root: .",
                 "sidecar_default_dir: .moradins-harness",
                 "include_paths:",
@@ -49,6 +60,7 @@ def make_forge_root(tmp_path: Path) -> Path:
                 "  - README.md",
                 "  - Harness/entrypoints",
                 "  - Harness/artifacts",
+                "  - docs/assets",
                 "  - docs/design_docs",
                 "  - docs/product_specs",
                 "  - docs/references",
@@ -65,6 +77,10 @@ def make_forge_root(tmp_path: Path) -> Path:
     write(forge_root / "FORGE.md", "# Forge\n")
     write(forge_root / "Harness/entrypoints/forge.md", "# Forge Entrypoint\n")
     write(forge_root / "Harness/artifacts/control/current_guidance.md", "# Guidance\n")
+    write(
+        forge_root / "docs/assets/readme/overview.svg",
+        f"<svg><text>{PRIVATE_CODE_ROOT_TOKEN}/{SHARED_TEMPLATES_TOKEN}</text></svg>\n",
+    )
     write(
         forge_root / Path(*RELEASE_EVIDENCE_TOKEN.split("/")) / "latest/sidecar/secret.md",
         "# Manager evidence\n",
@@ -146,6 +162,9 @@ def test_apply_copies_payload_excludes_release_evidence_and_preserves_root_files
     assert (target / "AGENTS.md").read_text(encoding="utf-8") == original_agents
     assert (target / "Makefile").read_text(encoding="utf-8") == original_makefile
     assert "shared-tooling-source" in (sidecar / "README.md").read_text(encoding="utf-8")
+    svg_text = (sidecar / "docs/assets/readme/overview.svg").read_text(encoding="utf-8")
+    assert "shared-tooling-source" in svg_text
+    assert PRIVATE_CODE_ROOT_TOKEN not in svg_text
     assert (sidecar / "adapters/Makefile.snippet").is_file()
     assert (sidecar / "adapters/package.json.scripts.snippet.json").is_file()
     assert (sidecar / "adapters/python.commands.md").is_file()
@@ -215,7 +234,17 @@ def test_verify_fails_on_forbidden_reference_or_manager_artifact(tmp_path: Path)
     target = make_target(tmp_path)
     apply_integration(forge_root, target, ForgeApplyOptions(approve=True))
     sidecar = target / ".moradins-harness"
-    write(sidecar / "docs/leak.md", f"{PRIVATE_CODE_ROOT_TOKEN}/{SHARED_TEMPLATES_TOKEN}\n")
+    write(
+        sidecar / "docs/assets/readme/leak.svg",
+        "\n".join(
+            [
+                "<svg>",
+                *forbidden_reference_samples(),
+                "</svg>",
+                "",
+            ]
+        ),
+    )
     write(sidecar / Path(*RELEASE_REPORTS_TOKEN.split("/")) / "leak.md", "local evidence\n")
 
     result = verify_integration(target)
@@ -223,6 +252,11 @@ def test_verify_fails_on_forbidden_reference_or_manager_artifact(tmp_path: Path)
     assert result["status"] == "fail"
     codes = {issue["code"] for issue in result["issues"]}
     assert "internal_home_path" in codes
+    assert "mac_home_path" in codes
+    assert "windows_user_path" in codes
+    assert "wsl_unc_path" in codes
+    assert "ssh_clone_url" in codes
+    assert "codex_home_or_session_path" in codes
     assert "local_only_artifact_copied" in codes
 
 

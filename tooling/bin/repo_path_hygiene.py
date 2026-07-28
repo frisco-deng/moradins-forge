@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
+import os
 import re
+import socket
 import subprocess
 from fnmatch import fnmatch
 from pathlib import Path
@@ -12,7 +15,7 @@ from typing import Any
 
 SCRIPT_PATH = Path(__file__).resolve()
 REPO_ROOT = SCRIPT_PATH.parents[2]
-PLACEHOLDER = "<workspace-root>"
+PLACEHOLDER = "${WORKSPACE_ROOT}"
 TEXT_EXTENSIONS = {
     ".c",
     ".cc",
@@ -85,15 +88,37 @@ EXCLUDE_GLOBS = (
     ".turbo/**",
     "coverage/**",
     ".cache/**",
-    "Harness/artifacts/reports/**",
-    "migration" + "_reports/**",
+    "vendor/**",
 )
 LINUX_HOME_PREFIX = "/" + "home" + "/"
 MAC_HOME_PREFIX = "/" + "Users" + "/"
+MNT_PREFIX = "/" + "mnt" + "/"
 PATH_PATTERNS = (
     re.compile(re.escape(LINUX_HOME_PREFIX) + r"[^/\s]+/code(?P<suffix>(?:/[A-Za-z0-9._%+@~=-]+)*)"),
     re.compile(re.escape(MAC_HOME_PREFIX) + r"[^/\s]+/code(?P<suffix>(?:/[A-Za-z0-9._%+@~=-]+)*)"),
 )
+ORIGIN_PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
+    ("raw_workspace_path", "fail", re.compile(re.escape(LINUX_HOME_PREFIX) + r"(?!example\b)[^/\s]+/code(?:/[^\s\"'`<>)\],;:]*)?")),
+    ("codex_home_path", "fail", re.compile(re.escape(LINUX_HOME_PREFIX) + r"(?!example\b)[^/\s]+/\.codex(?:/[^\s\"'`<>)\],;:]*)?")),
+    (
+        "user_home_path",
+        "fail",
+        re.compile(re.escape(LINUX_HOME_PREFIX) + r"(?!example\b)[^/\s]+(?!/code(?:/|$))(?!/\.codex(?:/|$))(?:/[^\s\"'`<>)\],;:]*)?"),
+    ),
+    (
+        "windows_user_path",
+        "fail",
+        re.compile(
+            r"(?:[A-Za-z]:\\+Users\\+[^\\\s\"'`<>)\],;:]+|"
+            + re.escape(MNT_PREFIX)
+            + r"[A-Za-z]/Users/[^/\s\"'`<>)\],;:]+|"
+            + re.escape(MAC_HOME_PREFIX)
+            + r"(?!example\b)[^/\s\"'`<>)\],;:]+)(?:/[^\s\"'`<>)\],;:]*)?"
+        ),
+    ),
+    ("wsl_unc_path", "fail", re.compile(r"\\\\wsl(?:\.localhost)?\\[^\s\"'`<>)\],;:]+")),
+)
+ORIGIN_PATTERN_SOURCE_FILES = {"tooling/bin/repo_path_hygiene.py"}
 SAFE_AUTO_FIX_CLASSES = {"docs_or_agents", "generated_report"}
 GENERATOR_FIX_REQUIRED_CLASSES = {"generated_evidence", "shared_control_plane"}
 MANUAL_CODE_FIX_CLASSES = {"source_or_test", "config_or_env_example"}
@@ -119,7 +144,7 @@ def classify(relative_path: Path) -> str:
     name = relative_path.name
     if relative.startswith("docs/observability/generated/") or relative.startswith("systems_improvements/"):
         return "generated_report"
-    if any(part in parts for part in {"artifacts", "reports", "public_audit", "release"}) and suffix in {
+    if any(part in parts for part in {"artifacts", "reports", "migration_reports", "release"}) and suffix in {
         ".json",
         ".jsonl",
         ".ndjson",
@@ -179,7 +204,91 @@ def _find_matches(text: str) -> list[tuple[str, str]]:
     return matches
 
 
-def collect_findings(repo_root: Path) -> list[dict[str, Any]]:
+def _split_markers(value: str) -> list[str]:
+    return [item.strip() for item in re.split(r"[,:\s]+", value) if item.strip()]
+
+
+def _origin_marker_values() -> tuple[set[str], set[str]]:
+    user_markers = set(_split_markers(os.environ.get("TPL_ORIGIN_USER_MARKERS", "")))
+    host_markers = set(_split_markers(os.environ.get("TPL_ORIGIN_HOST_MARKERS", "")))
+    try:
+        user_markers.add(getpass.getuser())
+    except Exception:
+        pass
+    hostname = socket.gethostname()
+    if hostname:
+        host_markers.add(hostname)
+        host_markers.add(hostname.split(".", 1)[0])
+    user_markers.discard("")
+    host_markers.discard("")
+    return user_markers, host_markers
+
+
+def _dynamic_origin_patterns() -> tuple[tuple[str, str, re.Pattern[str]], ...]:
+    user_markers, host_markers = _origin_marker_values()
+    patterns: list[tuple[str, str, re.Pattern[str]]] = []
+    for marker in sorted(user_markers):
+        if marker.lower() in {"root", "runner", "user", "codex"}:
+            continue
+        patterns.append(("user_marker", "warn", re.compile(rf"(?<![A-Za-z0-9_]){re.escape(marker)}(?![A-Za-z0-9_])")))
+    for marker in sorted(host_markers):
+        if marker.lower() in {"localhost", "host"}:
+            continue
+        patterns.append(("host_marker", "warn", re.compile(rf"(?<![A-Za-z0-9_]){re.escape(marker)}(?![A-Za-z0-9_])")))
+    return tuple(patterns)
+
+
+def _sanitize_sample(value: str) -> str:
+    sanitized = value
+    for pattern in PATH_PATTERNS:
+        sanitized = pattern.sub(lambda match: f"{PLACEHOLDER}{match.group('suffix') or ''}", sanitized)
+    sanitized = re.sub(re.escape(LINUX_HOME_PREFIX) + r"(?!example\b)[^/\s]+/\.codex[^\s\"'`<>)\],;:]*", "${CODEX_HOME}", sanitized)
+    sanitized = re.sub(re.escape(LINUX_HOME_PREFIX) + r"(?!example\b)[^/\s]+", "${HOME}", sanitized)
+    sanitized = re.sub(r"[A-Za-z]:\\+Users\\+[^\\\s\"'`<>)\],;:]+", "%USERPROFILE%", sanitized)
+    sanitized = re.sub(re.escape(MNT_PREFIX) + r"[A-Za-z]/Users/[^/\s\"'`<>)\],;:]+", "%USERPROFILE%", sanitized)
+    sanitized = re.sub(re.escape(MAC_HOME_PREFIX) + r"(?!example\b)[^/\s\"'`<>)\],;:]+", "${HOME}", sanitized)
+    sanitized = re.sub(r"\\\\wsl(?:\.localhost)?\\[^\s\"'`<>)\],;:]+", r"\\wsl$\\<distro>\\...", sanitized)
+    user_markers, host_markers = _origin_marker_values()
+    for marker in sorted(user_markers):
+        sanitized = re.sub(rf"(?<![A-Za-z0-9_]){re.escape(marker)}(?![A-Za-z0-9_])", "${USER_NAME}", sanitized)
+    for marker in sorted(host_markers):
+        sanitized = re.sub(rf"(?<![A-Za-z0-9_]){re.escape(marker)}(?![A-Za-z0-9_])", "${HOST_NAME}", sanitized)
+    return sanitized
+
+
+def _origin_severity(class_counts: dict[str, int], strict_mode: str) -> str:
+    fail_classes = {"raw_workspace_path", "codex_home_path", "user_home_path", "windows_user_path", "wsl_unc_path"}
+    warn_classes = {"user_marker", "host_marker", "test_fixture_marker"}
+    if strict_mode in {"public_candidate", "release_candidate"}:
+        fail_classes |= warn_classes
+        warn_classes = set()
+    if fail_classes & set(class_counts):
+        return "fail"
+    if warn_classes & set(class_counts):
+        return "warn"
+    return "none"
+
+
+def _find_origin_matches(text: str, relative_path: Path, *, strict_mode: str) -> tuple[int, dict[str, int], str, str]:
+    class_counts: dict[str, int] = {}
+    sample = ""
+    for line in text.splitlines():
+        line_classes: set[tuple[str, str]] = set()
+        for class_key, class_severity, pattern in (*ORIGIN_PATTERNS, *_dynamic_origin_patterns()):
+            if pattern.search(line):
+                line_classes.add((class_key, class_severity))
+        if not line_classes:
+            continue
+        if "/tests/" in f"/{relative_path.as_posix()}" or relative_path.as_posix().startswith("tests/"):
+            line_classes.add(("test_fixture_marker", "warn"))
+        if not sample:
+            sample = _sanitize_sample(line.strip())
+        for class_key, class_severity in line_classes:
+            class_counts[class_key] = class_counts.get(class_key, 0) + 1
+    return sum(class_counts.values()), class_counts, _origin_severity(class_counts, strict_mode), sample
+
+
+def collect_findings(repo_root: Path, *, strict_mode: str = "private") -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     for tracked in tracked_files(repo_root):
         relative = tracked.relative_to(repo_root)
@@ -190,7 +299,15 @@ def collect_findings(repo_root: Path) -> list[dict[str, Any]]:
         if text is None:
             continue
         matches = _find_matches(text)
-        if not matches:
+        if relative.as_posix() in ORIGIN_PATTERN_SOURCE_FILES:
+            origin_hit_count, origin_classes, origin_severity, origin_sample = 0, {}, "none", ""
+        else:
+            origin_hit_count, origin_classes, origin_severity, origin_sample = _find_origin_matches(
+                text,
+                relative,
+                strict_mode=strict_mode,
+            )
+        if not matches and origin_hit_count == 0:
             continue
         class_name = classify(relative)
         findings.append(
@@ -199,7 +316,10 @@ def collect_findings(repo_root: Path) -> list[dict[str, Any]]:
                 "class_name": class_name,
                 "remediation": remediation_for(class_name),
                 "hit_count": len(matches),
-                "sample": matches[0][0].replace(matches[0][0], f"{PLACEHOLDER}{matches[0][1]}"),
+                "sample": f"{PLACEHOLDER}{matches[0][1]}" if matches else origin_sample,
+                "origin_hit_count": origin_hit_count,
+                "origin_classes": origin_classes,
+                "origin_severity": origin_severity,
             }
         )
     return findings
@@ -240,6 +360,10 @@ def write_report(repo_root: Path, findings: list[dict[str, Any]]) -> dict[str, s
             remediation: sum(item["hit_count"] for item in findings if item["remediation"] == remediation)
             for remediation in sorted({item["remediation"] for item in findings})
         },
+        "origin_total_hits": sum(int(item.get("origin_hit_count", 0)) for item in findings),
+        "origin_files": sum(1 for item in findings if int(item.get("origin_hit_count", 0)) > 0),
+        "origin_failures": sum(1 for item in findings if item.get("origin_severity") == "fail"),
+        "origin_warnings": sum(1 for item in findings if item.get("origin_severity") == "warn"),
         "placeholder": PLACEHOLDER,
     }
     summary_path = output_dir / "summary.json"
@@ -252,23 +376,25 @@ def write_report(repo_root: Path, findings: list[dict[str, Any]]) -> dict[str, s
 def main() -> None:
     parser = argparse.ArgumentParser(description="Repo-local path hygiene checker for rendered adapters.")
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--strict-mode", choices=("private", "public_candidate", "release_candidate"), default="private")
+    parser.add_argument("--strict-origin", action="store_true")
     parser.add_argument("--rewrite-safe", action="store_true")
     parser.add_argument("--refresh-report", action="store_true")
     args = parser.parse_args()
-    findings = collect_findings(REPO_ROOT)
+    findings = collect_findings(REPO_ROOT, strict_mode=args.strict_mode)
     rewritten: list[str] = []
     if args.rewrite_safe:
         rewritten = rewrite_safe(REPO_ROOT, findings)
-        findings = collect_findings(REPO_ROOT)
+        findings = collect_findings(REPO_ROOT, strict_mode=args.strict_mode)
     report_paths = write_report(REPO_ROOT, findings) if args.refresh_report or args.check or args.rewrite_safe else {}
     payload = {
-        "status": "pass" if not findings else "fail",
+        "status": "pass" if not any(item.get("origin_severity") == "fail" or item["hit_count"] for item in findings) else "fail",
         "findings": findings,
         "rewritten": rewritten,
         "artifacts": report_paths,
     }
     print(json.dumps(payload, indent=2, sort_keys=True))
-    if args.check and findings:
+    if args.check and payload["status"] != "pass":
         raise SystemExit(2)
 
 

@@ -53,7 +53,7 @@ def _run(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
 
 def _workspace_root() -> Path:
     for candidate in (Path.cwd(), *Path.cwd().parents):
-        if (candidate / "shared-tooling-source").exists():
+        if (candidate / ".templates").exists():
             return candidate
     return TEMPLATES_ROOT.parent
 

@@ -1,10 +1,15 @@
 name: Tooling / CI Core
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches:
       - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -34,7 +39,7 @@ jobs:
         # v4
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: "20"
+          node-version: "24"
       - name: Install Node dependencies
         if: ${{ hashFiles('package.json', 'frontend/package.json', 'ui/package.json', 'ui/frontend/package.json', 'dev_tracker/ui/package.json', 'apps/ui/frontend/package.json') != '' }}
         shell: bash
@@ -61,16 +66,6 @@ jobs:
             install_dir "${dir}"
           done
       - name: Bootstrap repo verification entrypoint
-        run: uv sync --group dev
-      - name: Run Forge public export gates
-        run: |
-          set -euo pipefail
-          make test
-          make payload-validate
-          make forge-smoke
-          make public-portability-check
-      - name: Run optional workbench tests
-        run: |
-          set -euo pipefail
-          npm --prefix dev_tracker/ui run test
-          npm --prefix dev_tracker/ui run build
+        run: make bootstrap-ci
+      - name: Run repo verification entrypoint
+        run: make verify-ci

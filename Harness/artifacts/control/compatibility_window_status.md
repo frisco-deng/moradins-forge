@@ -11,8 +11,10 @@ owner: moradin-forge
 - `canonical_payload`: `Harness/moradin_payload/manifest.yaml`
 - `sidecar_default_dir`: `.moradins-harness`
 - `legacy_aliases_enabled`: true
+- `compatibility_scope`: public-alpha history and early adopter stability only
 - `removal_gate`: one public compatibility window after downstream users have
   moved to Moradin payload commands.
 
 Compatibility aliases exist only to keep early adopters stable while public
-Forge commands become canonical.
+Forge commands become canonical. First-read docs should use canonical Forge and
+payload language.

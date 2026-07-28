@@ -17,7 +17,7 @@ interface AnimatedItemProps {
   children: ReactNode;
   index: number;
   selected: boolean;
-  rootRef: RefObject<HTMLDivElement>;
+  rootRef: RefObject<HTMLDivElement | null>;
   onMouseEnter?: () => void;
   onClick?: () => void;
   itemClassName?: string;

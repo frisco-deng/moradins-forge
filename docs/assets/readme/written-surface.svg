@@ -1,0 +1,26 @@
+<svg width="920" height="300" viewBox="0 0 920 300" role="img" aria-labelledby="title desc">
+  <title id="title">Moradin Forge written surface</title>
+  <desc id="desc">Approved adoption writes a bounded sidecar and local evidence files.</desc>
+  <rect width="920" height="300" rx="18" fill="#f8fafc"/>
+  <rect x="44" y="34" width="832" height="220" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="70" y="74" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#0f172a">What Gets Written After Approval</text>
+  <g font-family="Arial, sans-serif" font-size="16" fill="#0f172a">
+    <rect x="76" y="110" width="188" height="92" rx="10" fill="#dbeafe" stroke="#2563eb"/>
+    <text x="104" y="142" font-weight="700">.moradins-harness</text>
+    <text x="108" y="168">docs and payload</text>
+    <text x="121" y="190">control sidecar</text>
+    <rect x="310" y="110" width="156" height="92" rx="10" fill="#dcfce7" stroke="#16a34a"/>
+    <text x="356" y="142" font-weight="700">Adapters</text>
+    <text x="339" y="168">Make, Node,</text>
+    <text x="342" y="190">Python, CI</text>
+    <rect x="512" y="110" width="156" height="92" rx="10" fill="#fef3c7" stroke="#d97706"/>
+    <text x="550" y="142" font-weight="700">Requests</text>
+    <text x="546" y="168">missing tools</text>
+    <text x="545" y="190">human-run only</text>
+    <rect x="714" y="110" width="126" height="92" rx="10" fill="#ede9fe" stroke="#7c3aed"/>
+    <text x="742" y="142" font-weight="700">Reports</text>
+    <text x="739" y="168">rollback and</text>
+    <text x="753" y="190">verify</text>
+  </g>
+  <text x="70" y="236" font-family="Arial, sans-serif" font-size="15" fill="#334155">Existing root files stay unchanged unless the user approves a specific root-file patch.</text>
+</svg>

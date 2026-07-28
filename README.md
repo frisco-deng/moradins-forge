@@ -10,6 +10,57 @@ deterministic reflex layer: read the same entrypoints, run the same readiness
 and planning commands, write the same local artifacts, and verify the same
 safety boundaries every time.
 
+## Quick Start: Low-Token Bootstrap
+
+For a fresh machine or a low-context agent handoff, clone Forge with HTTPS and
+run the platform bootstrap. Bootstrap primes Forge only; it does not install
+host tools, patch a target repo, or run `apply`.
+
+Linux or WSL:
+
+```sh
+git clone https://github.com/frisco-deng/moradins-forge.git <forge-root>
+cd <forge-root>
+install/bootstrap-linux.sh --target <target-repo>
+```
+
+macOS:
+
+```sh
+git clone https://github.com/frisco-deng/moradins-forge.git <forge-root>
+cd <forge-root>
+install/bootstrap-macos.sh --target <target-repo>
+```
+
+Windows PowerShell:
+
+```powershell
+git clone https://github.com/frisco-deng/moradins-forge.git <forge-root>
+Set-Location <forge-root>
+.\install\bootstrap-windows.ps1 -Target <target-repo>
+```
+
+The bootstrap writes a sanitized agent start card under
+`artifacts/bootstrap/latest/` when it runs outside dry-run mode. Missing tools
+are reported as request-only manual actions.
+
+## Visual Overview
+
+![Adoption flow](docs/assets/readme/adoption-flow.svg)
+
+![Safety boundary](docs/assets/readme/safety-boundary.svg)
+
+![What gets written](docs/assets/readme/written-surface.svg)
+
+![Token-saving start path](docs/assets/readme/token-saving-start.svg)
+
+| View | What it shows |
+| --- | --- |
+| Adoption flow | Forge explains, plans, waits for approval, applies a sidecar, then verifies. |
+| Safety boundary | Forge keeps host installs, credential changes, and target-root patches out of the default path. |
+| What gets written | Approved adoption writes a bounded `.moradins-harness/` sidecar plus local readiness and rollback records. |
+| Token-saving start path | Bootstrap gives the agent one small start card before broader repo inspection. |
+
 ## Agent Intercept
 
 If a user sent you here as Codex, Claude Code, or another coding agent, read
@@ -57,14 +108,15 @@ unless the user requests a specific root patch.
 ## Agent-First Flow
 
 1. Clone or pull Forge into `<forge-root>`.
-2. The agent reads `FORGE.md`, `AGENTS.md`, and `Harness/entrypoints/forge.md`.
-3. The agent inspects `<target-repo>` docs, commands, package files, and CI.
-4. The agent runs a dry-run plan and readiness check.
-5. The agent explains proposed writes, detected tooling, install requests,
+2. Optionally run the platform bootstrap to create an agent start card.
+3. The agent reads `FORGE.md`, `AGENTS.md`, and `Harness/entrypoints/forge.md`.
+4. The agent inspects `<target-repo>` docs, commands, package files, and CI.
+5. The agent runs a dry-run plan and readiness check.
+6. The agent explains proposed writes, detected tooling, install requests,
    rollback, and validation.
-6. The user explicitly approves or rejects the apply step.
-7. After approval, Forge writes the local sidecar and adaptive snippets.
-8. The agent runs verification and reports changed paths.
+7. The user explicitly approves or rejects the apply step.
+8. After approval, Forge writes the local sidecar and adaptive snippets.
+9. The agent runs verification and reports changed paths.
 
 Linux and macOS:
 
@@ -91,6 +143,12 @@ Root repo patching is off by default. To add a marked Moradin block to a target
 
 ## Public Command Surface
 
+- `make repo-brief`
+- `make verify-paths`
+- `make verify-fast`
+- `make verify-security`
+- `make review-ready`
+- `make push-gate`
 - `make forge-explain`
 - `make forge-readiness`
 - `make forge-plan TARGET=<target-repo>`
@@ -106,6 +164,22 @@ Root repo patching is off by default. To add a marked Moradin block to a target
 sanitized check tree, runs a sidecar smoke test, and scans both outputs for
 host-specific paths, generated evidence, and portability failures.
 
+For normal maintenance, start with `make repo-brief`, use `make verify-paths`
+before public-facing outputs, and run `make review-ready` before a PR handoff.
+The generated pre-push gate is available as `make push-gate`.
+
+Generated repo summaries report the preferred Python runtime route. Forge is a
+`uv` project, so agents should use `uv run python`, `uv run pytest`, or
+repo-local Make targets instead of retrying raw `python`.
+
+Forge does not opt into release-candidate signing/readiness lanes yet. That
+requires a stable release artifact path, build summary, SBOM/security evidence,
+platform signing or smoke evidence, and a release-candidate manifest. Until then,
+`make public-portability-check` remains the public release hygiene gate.
+UI reference renders, visual measurement, Windows Sandbox/native readiness,
+macOS signing, WSL smoke, and GPU helper lanes remain optional shared-tooling
+surfaces, not default Forge release targets.
+
 ## Optional Workbench
 
 The browser workbench is secondary. It remains useful for diagnostics,
@@ -118,12 +192,18 @@ npm --prefix dev_tracker/ui install
 
 Use local browser access, WSL browser access, or SSH local forwarding. Keep the
 workbench loopback-only unless the user explicitly asks for broader exposure.
+Use `tpl-ui-review-brief --repo moradins-forge --mode auto --prompt <prompt>`
+before UI creation, refinement, screenshot critique, or formatting/readability
+work. Reference renders and visual measurements stay opt-in until Forge has a
+repo-local screenshot and DOM-box capture wrapper.
 
 ## Key Contracts
 
 - Moradin payload contract: `docs/references/moradin_payload_contract_v1.md`
 - Forge agent integration contract:
   `docs/references/moradin_forge_agent_integration_contract_v1.md`
+- Installer bootstrap contract:
+  `docs/references/moradin_forge_installer_bootstrap_contract_v1.md`
 - Public portability contract:
   `docs/references/moradin_forge_public_export_contract_v1.md`
 - Agent handoff prompt:
@@ -150,3 +230,5 @@ Use the shortest repo-native gate that matches the change:
 
 Public releases should pass all gates, GitHub Actions, and a fresh sidecar smoke
 against a disposable target repo.
+
+Current beta release target: `v0.2.0-beta.1`.

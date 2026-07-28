@@ -2,8 +2,8 @@
 
 Canonical source: `docs/exec_plans/index.md`
 
-The active refactor target is alpha canonicalization:
+The active release target is beta readiness:
 
 - one canonical path graph
 - no compatibility shims
-- dry-run validation before alpha push
+- dry-run validation before beta push

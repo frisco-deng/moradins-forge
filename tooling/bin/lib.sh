@@ -134,7 +134,7 @@ tooling_docker_cli() {
     printf '%s' "${docker_cmd}"
     return 0
   fi
-  tooling_fail "container tooling requires either a direct codex-user docker context or the codex bridge from a operator shell. Run install-shell-helpers.sh and complete osplan.md, or set TOOLING_ALLOW_PLAIN_DOCKER=1 for a temporary local fallback."
+  tooling_fail "container tooling requires either a direct codex-user docker context or the codex bridge from an operator shell. Run install-shell-helpers.sh and complete osplan.md, or set TOOLING_ALLOW_PLAIN_DOCKER=1 for a temporary local fallback."
 }
 
 run_docker_command() {

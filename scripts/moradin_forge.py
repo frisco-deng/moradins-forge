@@ -23,6 +23,7 @@ AGENTS_MARKER_BEGIN = "<!-- moradin-forge:start -->"
 AGENTS_MARKER_END = "<!-- moradin-forge:end -->"
 INTERNAL_USER_TOKEN = "ru" + "ne"
 HOME_PREFIX_TOKEN = "/" + "home" + "/"
+MAC_HOME_PREFIX_TOKEN = "/" + "Users" + "/"
 WORKSPACE_ROOT_TOKEN = "WORKSPACE" + "_ROOT"
 SHARED_TEMPLATES_TOKEN = "." + "templates"
 LEGACY_DRY_RUN_TOKEN = "_harness" + "_dry_runs"
@@ -62,6 +63,7 @@ TEXT_SUFFIXES = {
     ".ps1",
     ".py",
     ".sh",
+    ".svg",
     ".toml",
     ".ts",
     ".tsx",
@@ -84,6 +86,26 @@ FORGE_FORBIDDEN_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     (
         "internal_home_path",
         re.compile(re.escape(HOME_PREFIX_TOKEN) + r"[A-Za-z0-9_.-]+(?:/|$)"),
+    ),
+    (
+        "mac_home_path",
+        re.compile(re.escape(MAC_HOME_PREFIX_TOKEN) + r"[A-Za-z0-9_.-]+(?:/|$)"),
+    ),
+    (
+        "windows_user_path",
+        re.compile(r"[A-Za-z]:[\\/]+Users[\\/]+[^\\/\s`\"'<>)]*(?:[\\/][^\\/\s`\"'<>)]*)?"),
+    ),
+    (
+        "wsl_unc_path",
+        re.compile(r"\\\\wsl(?:\.localhost)?\\[^\s`\"'<>)]*"),
+    ),
+    (
+        "codex_home_or_session_path",
+        re.compile(r"(?:^|[\\/])\.codex(?:[\\/][^\s`\"'<>)]*)?|codex[\\/]sessions[\\/][^\s`\"'<>)]*", re.IGNORECASE),
+    ),
+    (
+        "ssh_clone_url",
+        re.compile(r"\b(?:git@[A-Za-z0-9_.-]+:[^\s`\"'<>)]*|ssh://git@[A-Za-z0-9_.-]+/[^\s`\"'<>)]*)"),
     ),
     ("internal_user", re.compile(rf"\b{re.escape(INTERNAL_USER_TOKEN)}\b", re.IGNORECASE)),
     (
@@ -161,6 +183,31 @@ PORTABLE_TEXT_REPLACEMENTS: list[tuple[re.Pattern[str], str]] = [
     (
         re.compile(re.escape(HOME_PREFIX_TOKEN) + r"[A-Za-z0-9_.-]+(?:/[^\s`\"'<>)]*)?"),
         "<local-path>",
+    ),
+    (
+        re.compile(re.escape(MAC_HOME_PREFIX_TOKEN) + r"[A-Za-z0-9_.-]+(?:/[^\s`\"'<>)]*)?"),
+        "<local-path>",
+    ),
+    (
+        re.compile(r"[A-Za-z]:[\\/]+Users[\\/]+[^\\/\s`\"'<>)]*(?:[\\/][^\s`\"'<>)]*)*"),
+        "<local-path>",
+    ),
+    (re.compile(r"\\\\wsl(?:\.localhost)?\\[^\s`\"'<>)]*"), r"\\wsl$\\<distro>\\..."),
+    (
+        re.compile(r"(?:^|[\\/])\.codex(?:[\\/][^\s`\"'<>)]*)?|codex[\\/]sessions[\\/][^\s`\"'<>)]*", re.IGNORECASE),
+        "<codex-session>",
+    ),
+    (
+        re.compile(r"\b(?:git@[A-Za-z0-9_.-]+:[^\s`\"'<>)]*|ssh://git@[A-Za-z0-9_.-]+/[^\s`\"'<>)]*)"),
+        "https://github.com/frisco-deng/moradins-forge.git",
+    ),
+    (
+        re.compile(re.escape(HOME_PREFIX_TOKEN) + r"[A-Za-z0-9_.-]+(?:/[^\s`\"'<>)]*)?"),
+        "<local-path>",
+    ),
+    (
+        re.compile(r"(?<![A-Za-z0-9_])/(?:tmp|var/tmp)/[^\s`\"'<>)]*"),
+        "<temp-dir>",
     ),
     (re.compile(re.escape("${" + WORKSPACE_ROOT_TOKEN + "}")), "<workspace-root>"),
     (re.compile(rf"\b{WORKSPACE_ROOT_TOKEN}\b"), "WORKSPACE_PLACEHOLDER_ROOT"),
@@ -250,6 +297,8 @@ owner: moradin-forge
 | FORGE-003 | keep host tool installation request-only | docs/references/tooling_readiness_install_request_contract_v1.md | write install-request artifacts instead of installing tools | active |
 | FORGE-004 | preserve root workflows by default | docs/references/moradin_forge_agent_integration_contract_v1.md | write sidecar adapters before root patches | active |
 | FORGE-005 | verify sidecars for portability before handoff | scripts/moradin_forge.py | run `forge verify` or `make forge-verify` | active |
+| FORGE-006 | keep bootstrap separate from adoption | docs/references/moradin_forge_installer_bootstrap_contract_v1.md | run platform bootstrap only to prime Forge and write a start card | active |
+| FORGE-007 | keep beta release visuals portable and local | README.md | scan SVG assets before public release | active |
 """,
     "Harness/artifacts/control/current_features.md": """\
 ---
@@ -267,6 +316,8 @@ owner: moradin-forge
 | FORGE-FEAT-003 | adaptive adapter snippets for common repo tooling | implemented | .moradins-harness/adapters/ |
 | FORGE-FEAT-004 | request-only tooling readiness artifacts | implemented | docs/references/tooling_readiness_install_request_contract_v1.md |
 | FORGE-FEAT-005 | public export and sidecar portability scans | implemented | scripts/public_export.py |
+| FORGE-FEAT-006 | low-token clone-and-prime bootstrap entrypoints | implemented | docs/references/moradin_forge_installer_bootstrap_contract_v1.md |
+| FORGE-FEAT-007 | README visual overview for adoption and safety boundaries | implemented | docs/assets/readme/ |
 """,
     "Harness/artifacts/control/compatibility_window_status.md": """\
 ---
@@ -280,6 +331,8 @@ owner: moradin-forge
 - `canonical_payload`: `Harness/moradin_payload/manifest.yaml`
 - `sidecar_default_dir`: `.moradins-harness`
 - `legacy_aliases_enabled`: true
+- `compatibility_scope`: legacy aliases are sanitizer-only compatibility
+  history; first-read docs use Moradin payload names.
 - `removal_gate`: one public compatibility window after downstream users have
   moved to Moradin payload commands.
 """,
@@ -295,6 +348,8 @@ owner: moradin-forge
 | entry_id | date | change_type | summary | status |
 | --- | --- | --- | --- | --- |
 | PUBLIC-001 | 2026-05-11 | public-alpha | Published Moradin's Forge as an agent-first local integration kit with consent-gated sidecar adoption. | ready |
+| PUBLIC-002 | 2026-06-09 | tooling-inheritance | Adopted current shared-tooling adapter improvements, hardened portability scans, and added request-only bootstrap entrypoints. | ready |
+| PUBLIC-003 | 2026-06-10 | beta-release | Prepared v0.2.0-beta.1 with version normalization, CI fixes, and README visual overview assets. | ready |
 """,
 }
 
@@ -465,6 +520,34 @@ def sanitize_portable_payload(value: Any) -> Any:
     return value
 
 
+def origin_marker_patterns() -> list[tuple[str, re.Pattern[str]]]:
+    markers: set[str] = set()
+    for key in ("USER", "USERNAME", "LOGNAME"):
+        marker = os.environ.get(key, "").strip()
+        if marker:
+            markers.add(marker)
+    host = platform.node().strip()
+    if host:
+        markers.add(host)
+        markers.add(host.split(".", 1)[0])
+    ignored = {"", "root", "user", "runner", "localhost", "host", "admin", "administrator"}
+    patterns: list[tuple[str, re.Pattern[str]]] = []
+    for marker in sorted(markers):
+        if len(marker) < 4 or marker.lower() in ignored:
+            continue
+        patterns.append(
+            (
+                "local_origin_marker",
+                re.compile(rf"(?<![A-Za-z0-9_]){re.escape(marker)}(?![A-Za-z0-9_])", re.IGNORECASE),
+            )
+        )
+    return patterns
+
+
+def forbidden_patterns() -> list[tuple[str, re.Pattern[str]]]:
+    return [*FORGE_FORBIDDEN_PATTERNS, *origin_marker_patterns()]
+
+
 def copy_payload_file(relative_path: str, source: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     override = PAYLOAD_FILE_OVERRIDES.get(relative_path)
@@ -551,7 +634,7 @@ def scan_forbidden_sidecar_references(sidecar_root: Path) -> list[ForgeVerifyIss
         relative = relative_to_root(path, sidecar_root)
         text = path.read_text(encoding="utf-8")
         for line_number, line in enumerate(text.splitlines(), start=1):
-            for code, pattern in FORGE_FORBIDDEN_PATTERNS:
+            for code, pattern in forbidden_patterns():
                 if pattern.search(line):
                     issues.append(
                         ForgeVerifyIssue(

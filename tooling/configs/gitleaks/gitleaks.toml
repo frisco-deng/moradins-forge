@@ -9,7 +9,7 @@ paths = [
   '''outputs/''',
   '''packs/''',
   '''projects/_repo_backups/''',
-  '''projects/moradin_tmp_runs/''',
+  '''projects/_harness_dry_runs/''',
   '''node_modules/''',
   '''.venv/''',
   '''.pytest_cache/''',

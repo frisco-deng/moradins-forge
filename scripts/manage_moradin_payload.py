@@ -14,6 +14,8 @@ TEMPLATE_ROOT = REPO_ROOT / ".harness_template"
 MORADIN_PAYLOAD_MANIFEST = REPO_ROOT / "Harness" / "moradin_payload" / "manifest.yaml"
 MIGRATION_REPORTS_ROOT = REPO_ROOT / "public_audit"
 HARNESS_GENERATED_ROOT = REPO_ROOT / "Harness" / "generated"
+EXPECTED_TEMPLATE_VERSION = "0.2.0-beta.1"
+EXPECTED_RELEASE_STAGE = "beta"
 TEXT_EXTENSIONS = {
     ".md",
     ".yaml",
@@ -24,6 +26,7 @@ TEXT_EXTENSIONS = {
     ".ts",
     ".tsx",
     ".css",
+    ".svg",
 }
 SKIP_DIRS = {
     ".git",
@@ -533,12 +536,12 @@ def validate_manifest(
         errors.append(f"{path}: entrypoint must be 'Harness/entrypoints/agent.md'")
     if manifest.get("template_id") != "base_app":
         errors.append(f"{path}: template_id must be 'base_app'")
-    if manifest.get("template_version") != "0.1.0-alpha":
-        errors.append(f"{path}: template_version must be '0.1.0-alpha'")
+    if manifest.get("template_version") != EXPECTED_TEMPLATE_VERSION:
+        errors.append(f"{path}: template_version must be {EXPECTED_TEMPLATE_VERSION!r}")
     if manifest.get("path_convention") != "snake_case":
         errors.append(f"{path}: path_convention must be 'snake_case'")
-    if manifest.get("release_stage") != "alpha":
-        errors.append(f"{path}: release_stage must be 'alpha'")
+    if manifest.get("release_stage") != EXPECTED_RELEASE_STAGE:
+        errors.append(f"{path}: release_stage must be {EXPECTED_RELEASE_STAGE!r}")
     if manifest.get("compatibility_mode") not in {None, "canonical_only"}:
         errors.append(
             f"{path}: compatibility_mode must be omitted or set to 'canonical_only'"

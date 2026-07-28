@@ -2,7 +2,7 @@ manifest_version: 1
 name: moradin_harness_payload
 kind: moradin_payload
 payload_id: moradin_harness_payload
-payload_version: 0.2.0-alpha
+payload_version: 0.2.0-beta.1
 source_root: .
 compatibility_template_root: .harness_template
 materialization_target: target_repo_root
@@ -34,6 +34,7 @@ include_paths:
   - docs/entrypoint_guide
   - docs/design_docs
   - docs/product_specs
+  - docs/assets
   - Harness/entrypoints
   - Harness/artifacts/control/current_guidance.md
   - Harness/artifacts/control/current_features.md
@@ -42,7 +43,10 @@ include_paths:
   - Harness/artifacts/control/loop_state.md
   - Harness/artifacts/schemas
   - docs/references
+  - docs/releases
   - skills
+  - install
+  - scripts/forge_bootstrap.py
   - scripts/moradin_forge.py
   - scripts/moradin_forge.sh
   - scripts/moradin_forge.ps1

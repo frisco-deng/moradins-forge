@@ -1,15 +1,21 @@
 name: Tooling / Dependency Submission
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
 
 jobs:
   submit-dependencies:
+    if: ${{ github.event.repository.private == false || vars.TPL_ENABLE_DEPENDENCY_SUBMISSION == 'true' || vars.META_RAG_ENABLE_DEPENDENCY_SUBMISSION == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -20,7 +26,23 @@ jobs:
         with:
           persist-credentials: false
       - name: Submit dependency graph
+        id: submit
         # v0.0.7
         uses: advanced-security/component-detection-dependency-submission-action@64db6d9d15fd76171b996ad40766f64ae4abae9a
+        continue-on-error: true
         with:
           detectors: UvLock=EnableIfDefaultOff
+      - name: Summarize dependency submission result
+        if: always()
+        shell: bash
+        env:
+          SUBMIT_OUTCOME: ${{ steps.submit.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "${SUBMIT_OUTCOME}" = "success" ]; then
+            echo "[tooling] dependency submission completed"
+          else
+            echo "::warning::Dependency submission did not complete."
+            echo "[tooling] enable the repository Dependency Graph when snapshots should be enforced"
+            echo "[tooling] dependency_submission=soft-skip"
+          fi

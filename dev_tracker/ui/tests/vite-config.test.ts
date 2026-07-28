@@ -11,7 +11,7 @@ describe("vite config network defaults", () => {
   });
 
   it("defaults to 0.0.0.0 in WSL", () => {
-    const host = resolveTrackerUiHost({ WSL_DISTRO_NAME: "durin" }, "linux", "6.6.0");
+    const host = resolveTrackerUiHost({ WSL_DISTRO_NAME: "wsl-test-distro" }, "linux", "6.6.0");
     expect(host).toBe("0.0.0.0");
   });
 
