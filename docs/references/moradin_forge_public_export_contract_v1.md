@@ -2,10 +2,11 @@
 title: "Moradin Forge Public Portability Contract V1"
 status: approved
 owner: moradin-forge
-last_reviewed: 2026-06-09
+last_reviewed: 2026-07-28
 source_refs:
   - ../../scripts/public_export.py
 related_docs:
+  - moradin_forge_release_artifact_contract_v1.md
   - repo_operating_model_v1.md
 ---
 
@@ -28,5 +29,6 @@ paths or generated local evidence.
 - Bootstrap start cards under `artifacts/bootstrap/` are local generated
   evidence and must not be included in public exports or sidecar payloads.
 - `make public-portability-check` must pass before release.
-- Fresh clones must be able to run `make forge-smoke` and
-  `make public-portability-check`.
+- Fresh clones must be able to run `make forge-smoke`,
+  `make public-portability-check`, and `make release-build` without a private
+  repository dependency.

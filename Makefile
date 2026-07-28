@@ -67,8 +67,11 @@ forge-rollback:
 forge-smoke:
 	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/public_export.py sidecar-smoke --output "$(PUBLIC_SIDECAR_SMOKE_DIR)" --force
 
-forge-dogfood-smoke forge-release-artifacts:
+forge-dogfood-smoke:
 	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_dogfood.py
+
+forge-release-artifacts:
+	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_dogfood.py --release-output artifacts/release
 
 public-export:
 	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/public_export.py export --output "$(PUBLIC_EXPORT_DIR)" --force --init-git

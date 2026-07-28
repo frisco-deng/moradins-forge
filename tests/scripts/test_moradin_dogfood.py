@@ -6,11 +6,20 @@ import json
 import tarfile
 from pathlib import Path
 
+import pytest
+
+from scripts import moradin_dogfood as dogfood
 from scripts.moradin_dogfood import (
+    RELEASE_OWNERSHIP_MARKER,
+    build_parser,
     create_deterministic_archive,
+    prepare_owned_output,
+    resolve_release_output,
     run_golden_path,
+    write_release_artifacts,
     write_spdx_sbom,
 )
+from scripts.moradin_forge import ForgeError
 from tests.scripts.test_moradin_forge import make_forge_root
 
 
@@ -76,3 +85,136 @@ def test_spdx_sbom_uses_exact_lockfile_versions(tmp_path: Path) -> None:
     assert ("alpha", "1.2.3") in identities
     assert ("beta", "4.5.6") in identities
     assert result["package_count"] == 3
+
+
+def test_release_output_argument_selects_non_overlapping_stable_root(
+    tmp_path: Path,
+) -> None:
+    dogfood_output = tmp_path / "artifacts" / "dogfood"
+    release_output = tmp_path / "artifacts" / "release"
+
+    args = build_parser().parse_args(["--release-output", str(release_output)])
+    resolved, separate = resolve_release_output(dogfood_output.resolve(), args.release_output)
+
+    assert resolved == release_output.resolve()
+    assert separate is True
+    with pytest.raises(ForgeError, match="must not overlap"):
+        resolve_release_output(dogfood_output.resolve(), dogfood_output / "nested")
+
+
+def test_release_output_replacement_requires_valid_ownership_marker(
+    tmp_path: Path,
+) -> None:
+    release_output = tmp_path / "release"
+    release_output.mkdir()
+    preserved = release_output / "operator-owned.txt"
+    preserved.write_text("keep\n", encoding="utf-8")
+
+    with pytest.raises(ForgeError, match="unowned release output"):
+        prepare_owned_output(
+            release_output,
+            marker_name=RELEASE_OWNERSHIP_MARKER,
+            owner="moradin-release",
+            label="release",
+        )
+
+    assert preserved.read_text(encoding="utf-8") == "keep\n"
+    preserved.unlink()
+    release_output.rmdir()
+    prepare_owned_output(
+        release_output,
+        marker_name=RELEASE_OWNERSHIP_MARKER,
+        owner="moradin-release",
+        label="release",
+    )
+    stale = release_output / "stale.txt"
+    stale.write_text("stale\n", encoding="utf-8")
+    prepare_owned_output(
+        release_output,
+        marker_name=RELEASE_OWNERSHIP_MARKER,
+        owner="moradin-release",
+        label="release",
+    )
+
+    marker = json.loads(
+        (release_output / RELEASE_OWNERSHIP_MARKER).read_text(encoding="utf-8")
+    )
+    assert marker["owner"] == "moradin-release"
+    assert not stale.exists()
+
+
+def test_stable_release_artifacts_are_reproducible(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "forge"
+    (repo_root / "dev_tracker/ui").mkdir(parents=True)
+    (repo_root / "uv.lock").write_text(
+        "version = 1\n\n[[package]]\nname = \"alpha\"\nversion = \"1.2.3\"\n",
+        encoding="utf-8",
+    )
+    (repo_root / "dev_tracker/ui/package-lock.json").write_text(
+        json.dumps(
+            {
+                "packages": {
+                    "": {"name": "ui", "version": "0.0.0"},
+                    "node_modules/beta": {"name": "beta", "version": "4.5.6"},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_public_export(
+        _repo_root: Path,
+        output_root: Path,
+        *,
+        force: bool,
+        init_git: bool,
+    ) -> dict[str, object]:
+        assert force is False
+        assert init_git is False
+        output_root.mkdir(parents=True)
+        (output_root / "README.md").write_text("portable\n", encoding="utf-8")
+        (output_root / "public_audit").mkdir()
+        (output_root / "public_audit/portability_report.json").write_text(
+            '{"generated_at":"non-deterministic"}\n',
+            encoding="utf-8",
+        )
+        return {"status": "pass", "copied_file_count": 1}
+
+    monkeypatch.setattr(dogfood, "export_public_tree", fake_public_export)
+    source_sha = "a" * 40
+    created_at = "2026-07-28T18:00:00Z"
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+
+    write_release_artifacts(
+        repo_root,
+        first,
+        source_sha,
+        created_at=created_at,
+        evidence_path="../dogfood/operator-result.json",
+    )
+    write_release_artifacts(
+        repo_root,
+        second,
+        source_sha,
+        created_at=created_at,
+        evidence_path="../dogfood/operator-result.json",
+    )
+
+    expected_names = {
+        "moradins-forge-0.2.0-beta.1.tar.gz",
+        "moradins-forge-0.2.0-beta.1.spdx.json",
+        "release-manifest.json",
+        "SHA256SUMS",
+    }
+    assert {path.name for path in first.iterdir()} == expected_names
+    for name in expected_names:
+        assert (first / name).read_bytes() == (second / name).read_bytes()
+    manifest = json.loads((first / "release-manifest.json").read_text(encoding="utf-8"))
+    assert manifest["source_sha"] == source_sha
+    assert manifest["evidence"] == "../dogfood/operator-result.json"
+    with tarfile.open(first / "moradins-forge-0.2.0-beta.1.tar.gz", "r:gz") as archive:
+        assert not any("/public_audit/" in name for name in archive.getnames())

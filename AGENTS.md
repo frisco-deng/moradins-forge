@@ -24,6 +24,7 @@ Profile: local agent-first integration kit.
 - `docs/references/moradin_forge_agent_integration_contract_v1.md`
 - `docs/references/moradin_forge_installer_bootstrap_contract_v1.md`
 - `docs/references/moradin_forge_public_export_contract_v1.md`
+- `docs/references/moradin_forge_release_artifact_contract_v1.md`
 - `docs/references/repo_operating_model_v1.md`
 - `docs/references/tooling_readiness_install_request_contract_v1.md`
 - `Harness/README.md`
@@ -55,7 +56,10 @@ Profile: local agent-first integration kit.
 - `make forge-plan TARGET=<target-repo>`
 - `make forge-adopt TARGET=<target-repo> APPROVE=1`
 - `make forge-verify TARGET=<target-repo>`
+- `make forge-rollback TARGET=<target-repo> APPROVE=1`
 - `make forge-smoke`
+- `make forge-dogfood-smoke`
+- `make release-build`
 - `make payload-validate`
 - `make payload-smoke`
 - `make public-portability-check`
@@ -68,23 +72,35 @@ those as the target repo's source of truth.
 
 ## Baseline Workflow
 
-- Start Forge maintenance with `make repo-brief` before broad exploration.
-- Run `tpl context-primer --latest-session --repo moradins-forge` after session
-  start, compaction, long resume, or repeated broad reads.
+- Start Forge maintenance with
+  `tpl repo moradins-forge -- make repo-brief TOOLING_SUMMARY_ONLY=1` before
+  broad exploration.
+- Run `tpl context-primer --repo moradins-forge --concern auto --detail compact`
+  after session start, compaction, long resume, or repeated broad reads.
+- Read current summaries and named artifacts before reopening source or long
+  logs; expand only when evidence is stale, partial, contradictory, or
+  release-critical.
 - Use the Python runtime route reported by `make repo-brief`; this repo is a
   `uv` project and raw `python` is not the runtime contract.
-- Run `tpl session-supervisor --live --latest-session --repo moradins-forge`
+- Run
+  `tpl session-supervisor --mode steering-advisory --watch --live --latest-session --repo moradins-forge`
   when a session starts polling, rereading the same evidence, or patching
   through the same failure.
 - Use `tpl session-checkpoint` and `tpl investigation-ledger` before another
   patch/full rerun when the same failure repeats.
 - Run `tpl rerun-advice moradins-forge -- <command>` before repeating
   deterministic commands or re-ingesting long logs.
+- Use `tpl state <repo-id>` before repeated raw Git state polling and
+  `tpl skill-summary --all` before rereading shared skill instructions.
 - Run `tpl-ui-review-brief --repo moradins-forge --mode auto --prompt <prompt>`
   before UI page creation, component additions, existing-surface refinements,
   screenshot critiques, or formatting/readability fixes.
 - Use `make verify-paths` before public docs, generated sidecars, export
   outputs, or release-facing evidence leave the repo.
+- Do not rely on Codex hooks for routine steering. Keep steering in repo
+  guidance and explicit `.templates` commands; use
+  `tpl codex-hook-status --mode status --format md` only to confirm retired
+  hooks or inspect historical telemetry.
 
 ## Operating Rules
 
@@ -99,12 +115,9 @@ those as the target repo's source of truth.
 - The browser UI is optional diagnostics, not the primary install path.
 - Keep UI visual measurement opt-in until Forge has a repo-local screenshot and
   DOM-box capture wrapper.
-- Keep release candidate, Windows Sandbox/native readiness, macOS signing, WSL
-  smoke, and GPU helper lanes documented but not rendered as default Forge
-  targets until Forge has real release artifacts and evidence contracts.
-- Do not add release-platform readiness until Forge has a stable release
-  artifact path, build summary, SBOM/security evidence, signing or smoke
-  evidence, and release-candidate manifest.
+- Keep release-candidate promotion, Windows Sandbox/native readiness, macOS
+  signing, WSL smoke, UI visual, CAD, and GPU helper lanes disabled until each
+  has approved evidence and a human promotion gate.
 - Before public PRs or releases, run `make public-portability-check` and the
   deterministic gates listed in `docs/references/repo_operating_model_v1.md`.
 
@@ -130,6 +143,14 @@ those as the target repo's source of truth.
   redaction tests.
 - Use descriptive commit messages and ISO 8601 dates (`YYYY-MM-DD`) when dates
   matter.
+- Delegate only bounded, independent read-only concerns. The root agent owns
+  edits, integration, validation, and the final repository state.
+- Do not leave source changes local-only. Finish managed Forge work with a
+  pushed commit and PR, or an explicit blocked handoff.
+- Run `tpl scratch-guard PATH` before destructive or local-only scratch work;
+  scratch must be disposable, ignored, and non-git.
+- In the shared workspace, keep privileged host changes explicit and routed
+  through its bridge runbooks; public Forge must not assume those bridges.
 - Do not merge or promote protected branches without the required human gate.
 
 ## When Uncertain

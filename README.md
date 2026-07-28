@@ -159,6 +159,7 @@ Root repo patching is off by default. To add a marked Moradin block to a target
 - `make forge-smoke`
 - `make forge-dogfood-smoke`
 - `make forge-release-artifacts`
+- `make release-build`
 - `make payload-validate`
 - `make payload-smoke`
 - `make public-portability-check`
@@ -171,9 +172,17 @@ host-specific paths, generated evidence, and portability failures.
 `make forge-dogfood-smoke` is the bounded Linux/WSL release proof. It creates a
 disposable Git target, proves plan is read-only, applies and verifies the real
 sidecar, confirms rollback refusal without approval, performs approved rollback,
-and checks the target SHA and root hash. The same run writes a public archive,
-SHA-256 checksums, SPDX SBOM, release manifest, and current-SHA operator result
-under ignored `artifacts/dogfood/`. Existing sidecars are never overwritten.
+and checks the target SHA and root hash. That command keeps its public archive,
+checksums, SPDX SBOM, release manifest, and current-SHA operator result under
+ignored `artifacts/dogfood/`.
+
+`make release-build` is the advisory, artifact-backed release entrypoint. It
+delegates to `make forge-release-artifacts`, keeps dogfood evidence under
+`artifacts/dogfood/`, writes the stable release set under
+`artifacts/release/`, and records a generated summary under
+`artifacts/tooling/release-build/`. Both output roots are marker-owned; Forge
+refuses to replace unowned or overlapping directories. Existing sidecars are
+never overwritten.
 
 For normal maintenance, start with `make repo-brief`, use `make verify-paths`
 before public-facing outputs, and run `make review-ready` before a PR handoff.
@@ -183,10 +192,11 @@ Generated repo summaries report the preferred Python runtime route. Forge is a
 `uv` project, so agents should use `uv run python`, `uv run pytest`, or
 repo-local Make targets instead of retrying raw `python`.
 
-Forge does not opt into release-candidate signing/readiness lanes yet. That
-requires a stable release artifact path, build summary, SBOM/security evidence,
-platform signing or smoke evidence, and a release-candidate manifest. Until then,
-`make public-portability-check` remains the public release hygiene gate.
+Forge has a stable core artifact path, build summary, and lock-derived SPDX
+SBOM, but does not opt into release-candidate signing/readiness lanes. Platform
+signing or smoke evidence and an approved release-candidate manifest are still
+required before those lanes are enabled. `make public-portability-check`
+remains the public release hygiene gate.
 UI reference renders, visual measurement, Windows Sandbox/native readiness,
 macOS signing, WSL smoke, and GPU helper lanes remain optional shared-tooling
 surfaces, not default Forge release targets.
@@ -217,6 +227,8 @@ repo-local screenshot and DOM-box capture wrapper.
   `docs/references/moradin_forge_installer_bootstrap_contract_v1.md`
 - Public portability contract:
   `docs/references/moradin_forge_public_export_contract_v1.md`
+- Release artifact contract:
+  `docs/references/moradin_forge_release_artifact_contract_v1.md`
 - Agent handoff prompt:
   `Harness/entrypoints/forge_agent_handoff.md`
 - Tooling readiness contract:
