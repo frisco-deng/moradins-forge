@@ -18,8 +18,10 @@ from scripts.moradin_forge import (
     build_integration_plan,
     copy_payload_to_sidecar,
     detect_target_tooling,
+    install_directory_no_replace,
     main,
     normalize_payload_relative_path,
+    rollback_integration,
     verify_integration,
     write_install_request_artifacts,
 )
@@ -267,6 +269,104 @@ def test_existing_sidecar_blocks_without_overwrite(tmp_path: Path) -> None:
 
     with pytest.raises(ForgeError, match="sidecar already exists"):
         apply_integration(forge_root, target, ForgeApplyOptions(approve=True))
+
+
+def test_overwrite_flag_preserves_existing_sidecar(tmp_path: Path) -> None:
+    forge_root = make_forge_root(tmp_path)
+    target = make_target(tmp_path)
+    existing = target / ".moradins-harness/old.txt"
+    write(existing, "preserve me\n")
+
+    with pytest.raises(ForgeError, match="overwrite-sidecar is disabled"):
+        apply_integration(
+            forge_root,
+            target,
+            ForgeApplyOptions(approve=True, overwrite_sidecar=True),
+        )
+
+    assert existing.read_text(encoding="utf-8") == "preserve me\n"
+
+
+def test_staged_install_never_replaces_destination(tmp_path: Path) -> None:
+    staged = tmp_path / "staged"
+    destination = tmp_path / "destination"
+    write(staged / "new.txt", "new\n")
+    write(destination / "foreign.txt", "foreign\n")
+
+    with pytest.raises(ForgeError, match="appeared during staged apply"):
+        install_directory_no_replace(staged, destination)
+
+    assert (staged / "new.txt").is_file()
+    assert (destination / "foreign.txt").read_text(encoding="utf-8") == "foreign\n"
+
+
+def test_rollback_requires_confirmation_and_restores_target_hash(tmp_path: Path) -> None:
+    forge_root = make_forge_root(tmp_path)
+    target = make_target(tmp_path)
+    result = apply_integration(forge_root, target, ForgeApplyOptions(approve=True))
+
+    with pytest.raises(ForgeError, match="rollback requires --approve"):
+        rollback_integration(target, approve=False)
+
+    rollback = rollback_integration(target, approve=True)
+
+    assert rollback["status"] == "pass"
+    assert rollback["target_root_hash_restored"] is True
+    assert rollback["target_root_hash_after_rollback"] == result["target_root_hash_before"]
+    assert not (target / ".moradins-harness").exists()
+
+
+def test_rollback_refuses_modified_or_unowned_sidecar_content(tmp_path: Path) -> None:
+    forge_root = make_forge_root(tmp_path)
+    target = make_target(tmp_path)
+    apply_integration(forge_root, target, ForgeApplyOptions(approve=True))
+    sidecar = target / ".moradins-harness"
+    managed = sidecar / "FORGE.md"
+    managed.write_text("modified\n", encoding="utf-8")
+
+    with pytest.raises(ForgeError, match="managed content changed"):
+        rollback_integration(target, approve=True)
+
+    assert sidecar.is_dir()
+    managed.write_text("# Forge\n", encoding="utf-8")
+    write(sidecar / "operator-note.txt", "unowned\n")
+    with pytest.raises(ForgeError, match="managed content changed"):
+        rollback_integration(target, approve=True)
+    assert (sidecar / "operator-note.txt").is_file()
+
+
+def test_rollback_restores_patched_agents_exactly(tmp_path: Path) -> None:
+    forge_root = make_forge_root(tmp_path)
+    target = make_target(tmp_path)
+    original = b"# Existing Agents\n\nkeep trailing whitespace  \n"
+    (target / "AGENTS.md").write_bytes(original)
+    apply_integration(
+        forge_root,
+        target,
+        ForgeApplyOptions(approve=True, patch_agents=True),
+    )
+
+    rollback = rollback_integration(target, approve=True)
+
+    assert rollback["agents_restored"] is True
+    assert (target / "AGENTS.md").read_bytes() == original
+
+
+def test_rollback_refuses_modified_managed_agents(tmp_path: Path) -> None:
+    forge_root = make_forge_root(tmp_path)
+    target = make_target(tmp_path)
+    apply_integration(
+        forge_root,
+        target,
+        ForgeApplyOptions(approve=True, patch_agents=True),
+    )
+    agents_path = target / "AGENTS.md"
+    agents_path.write_text(agents_path.read_text(encoding="utf-8") + "changed\n", encoding="utf-8")
+
+    with pytest.raises(ForgeError, match="managed AGENTS.md was modified"):
+        rollback_integration(target, approve=True)
+
+    assert (target / ".moradins-harness").is_dir()
 
 
 def test_payload_copy_rejects_symlinks(tmp_path: Path) -> None:
