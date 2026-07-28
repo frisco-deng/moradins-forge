@@ -2,7 +2,7 @@
 title: "Engineer Entry Index"
 status: generated-reference
 owner: docs-build-pipeline
-last_reviewed: 2026-06-10
+last_reviewed: 2026-07-28
 source_refs: []
 related_docs:
   - ../00_overview/engineer_entrypoint.md

@@ -589,10 +589,12 @@ def ui_cli_info(root: Path, repo_cfg: dict[str, Any], targets: dict[str, Any]) -
                 vitest_browser_detected = vitest_browser_detected or "browser" in lowered or "vitest" in lowered
 
     mode = str(repo_cfg.get("ui_cli", {}).get("mode", "")).strip()
+    profile = str(repo_cfg.get("ui_cli", {}).get("profile", "")).strip()
     return {
         "detected": bool(package_jsons or configs or browser_scripts),
         "rendered_target": "verify-ui-cli" in targets,
         "mode": mode,
+        "profile": profile,
         "declared_commands": list(repo_cfg.get("ui_cli", {}).get("commands", [])),
         "package_jsons": package_jsons,
         "configs": sorted(set(configs)),
@@ -605,6 +607,9 @@ def ui_cli_info(root: Path, repo_cfg: dict[str, Any], targets: dict[str, Any]) -
             "npm": shutil.which("npm") is not None,
             "npx": shutil.which("npx") is not None,
             "xvfb-run": resolve_tool("xvfb-run") is not None,
+            "maestro": resolve_tool("maestro") is not None
+            or (Path.home() / ".local" / "bin" / "maestro").is_file()
+            or (Path.home() / ".maestro" / "bin" / "maestro").is_file(),
         },
     }
 
@@ -1301,6 +1306,8 @@ def populate_brief_findings(summary: dict[str, Any]) -> None:
             summary["findings"].append("ui-cli: Playwright detected; install repo-managed browsers with `npx playwright install chromium` when browser binaries are missing")
     if ui_cli.get("mode") == "xvfb" and not ui_cli.get("tools", {}).get("xvfb-run"):
         summary["findings"].append("unavailable: verify-ui-cli requires `xvfb-run`; install the optional UI/browser tooling pack")
+    if ui_cli.get("mode") == "android-device" and not ui_cli.get("tools", {}).get("maestro"):
+        summary["findings"].append("unavailable: Android-device verify-ui-cli requires the pinned optional Maestro CLI")
     ui_review = repo.get("ui_review", {})
     if ui_review.get("enabled"):
         rendered_targets = ui_review.get("rendered_targets", [])

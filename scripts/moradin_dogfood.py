@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import gzip
 import json
+import os
 import platform
 import re
 import shutil
@@ -27,12 +28,13 @@ from scripts.moradin_forge import (
     target_root_digest,
     verify_integration,
 )
-from scripts.public_export import export_public_tree
+from scripts.public_export import PUBLIC_AUDIT_DIRNAME, export_public_tree
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = REPO_ROOT / "artifacts" / "dogfood"
-OWNERSHIP_MARKER = ".moradin-dogfood-output.json"
+DOGFOOD_OWNERSHIP_MARKER = ".moradin-dogfood-output.json"
+RELEASE_OWNERSHIP_MARKER = ".moradin-release-output.json"
 RELEASE_VERSION = "v0.2.0-beta.1"
 ROLLBACK_ANCHOR = "v0.1.0-public-alpha"
 
@@ -70,17 +72,68 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def prepare_owned_output(output_root: Path) -> None:
+def validate_owned_output(
+    output_root: Path,
+    *,
+    marker_name: str,
+    owner: str,
+    label: str,
+) -> None:
+    if not output_root.exists():
+        return
+    marker = output_root / marker_name
+    if not output_root.is_dir() or not marker.is_file():
+        raise ForgeError(f"refusing to replace unowned {label} output: {output_root}")
+    try:
+        marker_payload = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ForgeError(f"refusing to replace unowned {label} output: {output_root}") from error
+    if marker_payload.get("version") != 1 or marker_payload.get("owner") != owner:
+        raise ForgeError(f"refusing to replace unowned {label} output: {output_root}")
+
+
+def prepare_owned_output(
+    output_root: Path,
+    *,
+    marker_name: str,
+    owner: str,
+    label: str,
+) -> None:
+    validate_owned_output(
+        output_root,
+        marker_name=marker_name,
+        owner=owner,
+        label=label,
+    )
     if output_root.exists():
-        marker = output_root / OWNERSHIP_MARKER
-        if not marker.is_file():
-            raise ForgeError(f"refusing to replace unowned dogfood output: {output_root}")
         shutil.rmtree(output_root)
     output_root.mkdir(parents=True)
     write_json(
-        output_root / OWNERSHIP_MARKER,
-        {"version": 1, "owner": "moradin-dogfood", "created_at": utc_now()},
+        output_root / marker_name,
+        {"version": 1, "owner": owner, "created_at": utc_now()},
     )
+
+
+def resolve_release_output(output_root: Path, release_output: Path | None) -> tuple[Path, bool]:
+    nested_release_root = (output_root / "release").resolve()
+    if release_output is None:
+        return nested_release_root, False
+    release_root = release_output.resolve()
+    if release_root == nested_release_root:
+        return release_root, False
+    if (
+        release_root == output_root
+        or release_root in output_root.parents
+        or output_root in release_root.parents
+    ):
+        raise ForgeError("release output must not overlap dogfood output")
+    return release_root, True
+
+
+def git_commit_timestamp(repo_root: Path, source_sha: str) -> str:
+    raw = run(["git", "show", "-s", "--format=%cI", source_sha], cwd=repo_root)
+    parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    return parsed.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def write_disposable_target(target_root: Path) -> None:
@@ -209,7 +262,13 @@ def dependency_packages(repo_root: Path) -> list[tuple[str, str, str]]:
     return sorted(packages)
 
 
-def write_spdx_sbom(repo_root: Path, output_path: Path, source_sha: str) -> dict[str, Any]:
+def write_spdx_sbom(
+    repo_root: Path,
+    output_path: Path,
+    source_sha: str,
+    *,
+    created_at: str | None = None,
+) -> dict[str, Any]:
     root_id = "SPDXRef-Package-moradins-forge"
     packages: list[dict[str, Any]] = [
         {
@@ -262,7 +321,10 @@ def write_spdx_sbom(repo_root: Path, output_path: Path, source_sha: str) -> dict
         "SPDXID": "SPDXRef-DOCUMENT",
         "name": f"moradins-forge-{RELEASE_VERSION}",
         "documentNamespace": f"https://github.com/frisco-deng/moradins-forge/sbom/{source_sha}",
-        "creationInfo": {"created": utc_now(), "creators": ["Tool: moradin-dogfood"]},
+        "creationInfo": {
+            "created": created_at or utc_now(),
+            "creators": ["Tool: moradin-dogfood"],
+        },
         "documentDescribes": [root_id],
         "packages": packages,
         "relationships": relationships,
@@ -281,6 +343,12 @@ def create_deterministic_archive(source_root: Path, archive_path: Path) -> str:
         info.uname = "root"
         info.gname = "root"
         info.mtime = 0
+        if info.isdir():
+            info.mode = 0o755
+        elif info.isfile():
+            info.mode = 0o755 if info.mode & 0o111 else 0o644
+        elif info.issym():
+            info.mode = 0o777
         return info
 
     with archive_path.open("wb") as raw:
@@ -292,7 +360,14 @@ def create_deterministic_archive(source_root: Path, archive_path: Path) -> str:
     return sha256_file(archive_path)
 
 
-def write_release_artifacts(repo_root: Path, release_root: Path, source_sha: str) -> dict[str, Any]:
+def write_release_artifacts(
+    repo_root: Path,
+    release_root: Path,
+    source_sha: str,
+    *,
+    created_at: str | None = None,
+    evidence_path: str = "../operator-result.json",
+) -> dict[str, Any]:
     release_root.mkdir(parents=True, exist_ok=True)
     archive_path = release_root / f"moradins-forge-{RELEASE_VERSION.removeprefix('v')}.tar.gz"
     sbom_path = release_root / f"moradins-forge-{RELEASE_VERSION.removeprefix('v')}.spdx.json"
@@ -301,9 +376,17 @@ def write_release_artifacts(repo_root: Path, release_root: Path, source_sha: str
         export = export_public_tree(repo_root, export_root, force=False, init_git=False)
         if export["status"] != "pass":
             raise ForgeError("public export portability scan failed")
+        audit_root = export_root / PUBLIC_AUDIT_DIRNAME
+        if audit_root.exists():
+            shutil.rmtree(audit_root)
         archive_sha = create_deterministic_archive(export_root, archive_path)
         copied_file_count = export["copied_file_count"]
-    sbom = write_spdx_sbom(repo_root, sbom_path, source_sha)
+    sbom = write_spdx_sbom(
+        repo_root,
+        sbom_path,
+        source_sha,
+        created_at=created_at,
+    )
     manifest_path = release_root / "release-manifest.json"
     manifest = {
         "schema_version": 1,
@@ -315,7 +398,7 @@ def write_release_artifacts(repo_root: Path, release_root: Path, source_sha: str
         "public_export_file_count": copied_file_count,
         "data_schema_compatibility": "sidecar ownership record added; existing sidecars are preserved and require fresh adoption",
         "rollback_command": "git switch --detach v0.1.0-public-alpha",
-        "evidence": "../operator-result.json",
+        "evidence": evidence_path,
     }
     write_json(manifest_path, manifest)
     checksums_path = release_root / "SHA256SUMS"
@@ -338,19 +421,55 @@ def run_dogfood(
     repo_root: Path = REPO_ROOT,
     output_root: Path = DEFAULT_OUTPUT,
     *,
+    release_output: Path | None = None,
     allow_dirty: bool = False,
 ) -> dict[str, Any]:
     repo_root = repo_root.resolve()
     output_root = output_root.resolve()
+    release_root, separate_release_output = resolve_release_output(output_root, release_output)
     git = git_identity(repo_root)
     if not git["clean"] and not allow_dirty:
         raise ForgeError("dogfood evidence requires a clean worktree")
-    prepare_owned_output(output_root)
+    validate_owned_output(
+        output_root,
+        marker_name=DOGFOOD_OWNERSHIP_MARKER,
+        owner="moradin-dogfood",
+        label="dogfood",
+    )
+    if separate_release_output:
+        validate_owned_output(
+            release_root,
+            marker_name=RELEASE_OWNERSHIP_MARKER,
+            owner="moradin-release",
+            label="release",
+        )
+    prepare_owned_output(
+        output_root,
+        marker_name=DOGFOOD_OWNERSHIP_MARKER,
+        owner="moradin-dogfood",
+        label="dogfood",
+    )
+    if separate_release_output:
+        prepare_owned_output(
+            release_root,
+            marker_name=RELEASE_OWNERSHIP_MARKER,
+            owner="moradin-release",
+            label="release",
+        )
     work_root = output_root / "work"
     golden_path = run_golden_path(repo_root, work_root / "target")
     if golden_path["status"] != "pass":
         raise ForgeError("transactional golden path failed")
-    release = write_release_artifacts(repo_root, output_root / "release", git["head_sha"])
+    evidence_path = Path(
+        os.path.relpath(output_root / "operator-result.json", start=release_root)
+    ).as_posix()
+    release = write_release_artifacts(
+        repo_root,
+        release_root,
+        git["head_sha"],
+        created_at=git_commit_timestamp(repo_root, git["head_sha"]),
+        evidence_path=evidence_path,
+    )
     shutil.rmtree(work_root)
     cleanup_passed = not work_root.exists()
     completed_at = utc_now()
@@ -412,6 +531,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=REPO_ROOT)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--release-output",
+        type=Path,
+        help=(
+            "Write stable release artifacts to an independently owned directory; "
+            "the default keeps a nested copy under the dogfood output."
+        ),
+    )
     parser.add_argument("--allow-dirty", action="store_true", help="Write diagnostic, non-promotable evidence.")
     parser.add_argument("--json", action="store_true")
     return parser
@@ -420,7 +547,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        payload = run_dogfood(args.repo_root, args.output, allow_dirty=args.allow_dirty)
+        payload = run_dogfood(
+            args.repo_root,
+            args.output,
+            release_output=args.release_output,
+            allow_dirty=args.allow_dirty,
+        )
     except (ForgeError, OSError, subprocess.CalledProcessError, ValueError) as error:
         print(f"moradin-dogfood: {error}")
         return 2
@@ -430,7 +562,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"dogfood: {payload['status']}")
         print(f"sha: {payload['head_sha']}")
         print(f"evidence: {(args.output / 'operator-result.json').resolve()}")
-        print(f"release_manifest: {(args.output / 'release/release-manifest.json').resolve()}")
+        release_output = args.release_output or args.output / "release"
+        print(f"release_manifest: {(release_output / 'release-manifest.json').resolve()}")
     return 0 if payload["status"] == "pass" else 1
 
 

@@ -55,13 +55,19 @@ make verify-fast
 make review-ready
 ```
 
-Use `tpl context-primer --latest-session --repo moradins-forge` after a new
-session, compaction, long resume, or repeated broad reads. Use
-`tpl session-supervisor --live --latest-session --repo moradins-forge` when work
-starts looping, and `tpl rerun-advice moradins-forge -- <command>` before
-repeating long deterministic commands. Use the Python route reported by
+Use `tpl context-primer --repo moradins-forge --concern auto --detail compact`
+after a new session, compaction, long resume, or repeated broad reads. Prefer
+current summaries and named artifacts before reopening source or long logs. Use
+`tpl session-supervisor --mode steering-advisory --watch --live --latest-session --repo moradins-forge`
+when work starts looping, and `tpl rerun-advice moradins-forge -- <command>`
+before repeating long deterministic commands. Use the Python route reported by
 `make repo-brief`; Forge is a `uv` repo and raw `python` is not the runtime
 contract.
+
+For release maintenance, use `make release-build`, then inspect
+`artifacts/tooling/release-build/summary.md` and
+`artifacts/release/release-manifest.json`. This core contract does not authorize
+publication, signing, or platform-lane activation.
 
 On Windows PowerShell, use:
 
