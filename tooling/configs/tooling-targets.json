@@ -165,7 +165,6 @@
       "manager": "uv",
       "source": "repo_files_or_commands",
       "markers": [
-        ".venv/bin/python",
         "pyproject.toml",
         "uv.lock"
       ],
@@ -184,6 +183,7 @@
     "ui_cli": {
       "enabled": true,
       "mode": "headless",
+      "profile": "",
       "commands": [
         "npm --prefix dev_tracker/ui run test"
       ]
@@ -637,6 +637,78 @@
           "category": "ui-cli",
           "command": "CI=1 npm --prefix dev_tracker/ui run test"
         }
+      ],
+      "artifact_contract": {
+        "kind": "verify-ui-cli",
+        "summary": "artifacts/tooling/verify-ui-cli/summary.json",
+        "markdown": "artifacts/tooling/verify-ui-cli/summary.md",
+        "summary_json": "artifacts/tooling/verify-ui-cli/summary.json",
+        "summary_md": "artifacts/tooling/verify-ui-cli/summary.md",
+        "target_latest_json": "artifacts/tooling/verify-ui-cli/latest/summary.json",
+        "target_latest_md": "artifacts/tooling/verify-ui-cli/latest/summary.md",
+        "latest_index": "artifacts/tooling/latest/verify-ui-cli.json",
+        "evidence_category": "ui_cli",
+        "strictness_level": "advisory",
+        "freshness_keys": [
+          "git.head_sha",
+          "git.state_fingerprint",
+          "analysis.run_signature"
+        ],
+        "expected_outputs": [
+          "summary_json",
+          "summary_md",
+          "status",
+          "exit_code",
+          "full_log_path",
+          "failure_fingerprint",
+          "changed_state_fingerprint",
+          "next_actions"
+        ],
+        "allowed_rerun_triggers": [
+          "artifact_missing",
+          "artifact_stale",
+          "artifact_partial",
+          "artifact_contradictory",
+          "repo_declared_insufficient",
+          "code_change",
+          "config_change",
+          "dependency_change",
+          "environment_change",
+          "diagnostic_required",
+          "release_critical_evidence_needed",
+          "FORCE_RERUN=1"
+        ]
+      },
+      "evidence_category": "ui_cli",
+      "strictness_level": "advisory",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "exit_code",
+        "full_log_path",
+        "failure_fingerprint",
+        "changed_state_fingerprint",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
       ]
     },
     "forge-explain": {
@@ -691,6 +763,17 @@
           "required": true,
           "category": "public-portability",
           "command": "make public-portability-check"
+        }
+      ]
+    },
+    "release-build": {
+      "kind": "commands",
+      "steps": [
+        {
+          "name": "release-build-01",
+          "required": true,
+          "category": "release-build",
+          "command": "make forge-release-artifacts"
         }
       ]
     },
@@ -978,6 +1061,832 @@
         "zizmor",
         "conftest",
         "yamllint",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
+    }
+  },
+  "artifact_contracts": {
+    "bootstrap-ci": {
+      "kind": "bootstrap-ci",
+      "summary": "artifacts/tooling/bootstrap-ci/summary.json",
+      "markdown": "artifacts/tooling/bootstrap-ci/summary.md",
+      "summary_json": "artifacts/tooling/bootstrap-ci/summary.json",
+      "summary_md": "artifacts/tooling/bootstrap-ci/summary.md",
+      "target_latest_json": "artifacts/tooling/bootstrap-ci/latest/summary.json",
+      "target_latest_md": "artifacts/tooling/bootstrap-ci/latest/summary.md",
+      "latest_index": "artifacts/tooling/latest/bootstrap-ci.json",
+      "evidence_category": "local_gate",
+      "strictness_level": "advisory",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "exit_code",
+        "full_log_path",
+        "failure_fingerprint",
+        "changed_state_fingerprint",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
+    },
+    "bootstrap-security": {
+      "kind": "bootstrap-security",
+      "summary": "artifacts/tooling/bootstrap-security/summary.json",
+      "markdown": "artifacts/tooling/bootstrap-security/summary.md",
+      "summary_json": "artifacts/tooling/bootstrap-security/summary.json",
+      "summary_md": "artifacts/tooling/bootstrap-security/summary.md",
+      "target_latest_json": "artifacts/tooling/bootstrap-security/latest/summary.json",
+      "target_latest_md": "artifacts/tooling/bootstrap-security/latest/summary.md",
+      "latest_index": "artifacts/tooling/latest/bootstrap-security.json",
+      "evidence_category": "local_gate",
+      "strictness_level": "advisory",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "exit_code",
+        "full_log_path",
+        "failure_fingerprint",
+        "changed_state_fingerprint",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
+    },
+    "ci-local": {
+      "kind": "ci-local",
+      "summary": "artifacts/tooling/ci-local/summary.json",
+      "markdown": "artifacts/tooling/ci-local/summary.md",
+      "summary_json": "artifacts/tooling/ci-local/summary.json",
+      "summary_md": "artifacts/tooling/ci-local/summary.md",
+      "target_latest_json": "artifacts/tooling/ci-local/latest/summary.json",
+      "target_latest_md": "artifacts/tooling/ci-local/latest/summary.md",
+      "latest_index": "artifacts/tooling/latest/ci-local.json",
+      "evidence_category": "workflow_policy",
+      "strictness_level": "advisory",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "workflow_trigger_audit",
+        "actionlint",
+        "zizmor",
+        "conftest",
+        "yamllint",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
+    },
+    "fix-paths-safe": {
+      "kind": "fix-paths-safe",
+      "summary": "artifacts/tooling/fix-paths-safe/summary.json",
+      "markdown": "artifacts/tooling/fix-paths-safe/summary.md",
+      "summary_json": "artifacts/tooling/fix-paths-safe/summary.json",
+      "summary_md": "artifacts/tooling/fix-paths-safe/summary.md",
+      "target_latest_json": "artifacts/tooling/fix-paths-safe/latest/summary.json",
+      "target_latest_md": "artifacts/tooling/fix-paths-safe/latest/summary.md",
+      "latest_index": "artifacts/tooling/latest/fix-paths-safe.json",
+      "evidence_category": "local_gate",
+      "strictness_level": "advisory",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "exit_code",
+        "full_log_path",
+        "failure_fingerprint",
+        "changed_state_fingerprint",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
+    },
+    "forge-explain": {
+      "kind": "forge-explain",
+      "summary": "artifacts/tooling/forge-explain/summary.json",
+      "markdown": "artifacts/tooling/forge-explain/summary.md",
+      "summary_json": "artifacts/tooling/forge-explain/summary.json",
+      "summary_md": "artifacts/tooling/forge-explain/summary.md",
+      "target_latest_json": "artifacts/tooling/forge-explain/latest/summary.json",
+      "target_latest_md": "artifacts/tooling/forge-explain/latest/summary.md",
+      "latest_index": "artifacts/tooling/latest/forge-explain.json",
+      "evidence_category": "local_gate",
+      "strictness_level": "advisory",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "exit_code",
+        "full_log_path",
+        "failure_fingerprint",
+        "changed_state_fingerprint",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
+    },
+    "forge-smoke": {
+      "kind": "forge-smoke",
+      "summary": "artifacts/tooling/forge-smoke/summary.json",
+      "markdown": "artifacts/tooling/forge-smoke/summary.md",
+      "summary_json": "artifacts/tooling/forge-smoke/summary.json",
+      "summary_md": "artifacts/tooling/forge-smoke/summary.md",
+      "target_latest_json": "artifacts/tooling/forge-smoke/latest/summary.json",
+      "target_latest_md": "artifacts/tooling/forge-smoke/latest/summary.md",
+      "latest_index": "artifacts/tooling/latest/forge-smoke.json",
+      "evidence_category": "local_gate",
+      "strictness_level": "advisory",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "exit_code",
+        "full_log_path",
+        "failure_fingerprint",
+        "changed_state_fingerprint",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
+    },
+    "payload-smoke": {
+      "kind": "payload-smoke",
+      "summary": "artifacts/tooling/payload-smoke/summary.json",
+      "markdown": "artifacts/tooling/payload-smoke/summary.md",
+      "summary_json": "artifacts/tooling/payload-smoke/summary.json",
+      "summary_md": "artifacts/tooling/payload-smoke/summary.md",
+      "target_latest_json": "artifacts/tooling/payload-smoke/latest/summary.json",
+      "target_latest_md": "artifacts/tooling/payload-smoke/latest/summary.md",
+      "latest_index": "artifacts/tooling/latest/payload-smoke.json",
+      "evidence_category": "local_gate",
+      "strictness_level": "advisory",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "exit_code",
+        "full_log_path",
+        "failure_fingerprint",
+        "changed_state_fingerprint",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
+    },
+    "payload-validate": {
+      "kind": "payload-validate",
+      "summary": "artifacts/tooling/payload-validate/summary.json",
+      "markdown": "artifacts/tooling/payload-validate/summary.md",
+      "summary_json": "artifacts/tooling/payload-validate/summary.json",
+      "summary_md": "artifacts/tooling/payload-validate/summary.md",
+      "target_latest_json": "artifacts/tooling/payload-validate/latest/summary.json",
+      "target_latest_md": "artifacts/tooling/payload-validate/latest/summary.md",
+      "latest_index": "artifacts/tooling/latest/payload-validate.json",
+      "evidence_category": "local_gate",
+      "strictness_level": "advisory",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "exit_code",
+        "full_log_path",
+        "failure_fingerprint",
+        "changed_state_fingerprint",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
+    },
+    "public-portability-check": {
+      "kind": "public-portability-check",
+      "summary": "artifacts/tooling/public-portability-check/summary.json",
+      "markdown": "artifacts/tooling/public-portability-check/summary.md",
+      "summary_json": "artifacts/tooling/public-portability-check/summary.json",
+      "summary_md": "artifacts/tooling/public-portability-check/summary.md",
+      "target_latest_json": "artifacts/tooling/public-portability-check/latest/summary.json",
+      "target_latest_md": "artifacts/tooling/public-portability-check/latest/summary.md",
+      "latest_index": "artifacts/tooling/latest/public-portability-check.json",
+      "evidence_category": "local_gate",
+      "strictness_level": "advisory",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "exit_code",
+        "full_log_path",
+        "failure_fingerprint",
+        "changed_state_fingerprint",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
+    },
+    "release-build": {
+      "kind": "release-build",
+      "summary": "artifacts/tooling/release-build/summary.json",
+      "markdown": "artifacts/tooling/release-build/summary.md",
+      "summary_json": "artifacts/tooling/release-build/summary.json",
+      "summary_md": "artifacts/tooling/release-build/summary.md",
+      "target_latest_json": "artifacts/tooling/release-build/latest/summary.json",
+      "target_latest_md": "artifacts/tooling/release-build/latest/summary.md",
+      "latest_index": "artifacts/tooling/latest/release-build.json",
+      "evidence_category": "local_gate",
+      "strictness_level": "advisory",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "exit_code",
+        "full_log_path",
+        "failure_fingerprint",
+        "changed_state_fingerprint",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
+    },
+    "release-gate-local": {
+      "kind": "release-gate-local",
+      "summary": "artifacts/tooling/release-gate-local/summary.json",
+      "markdown": "artifacts/tooling/release-gate-local/summary.md",
+      "summary_json": "artifacts/tooling/release-gate-local/summary.json",
+      "summary_md": "artifacts/tooling/release-gate-local/summary.md",
+      "target_latest_json": "artifacts/tooling/release-gate-local/latest/summary.json",
+      "target_latest_md": "artifacts/tooling/release-gate-local/latest/summary.md",
+      "latest_index": "artifacts/tooling/latest/release-gate-local.json",
+      "evidence_category": "release_gate",
+      "strictness_level": "promotion_required",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "final_decision",
+        "head_sha",
+        "target_branch",
+        "child_target_evidence",
+        "security_waiver_status",
+        "manual_human_gate_required",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
+    },
+    "repo-brief": {
+      "kind": "repo-brief",
+      "summary": "artifacts/tooling/repo-brief/summary.json",
+      "markdown": "artifacts/tooling/repo-brief/summary.md",
+      "summary_json": "artifacts/tooling/repo-brief/summary.json",
+      "summary_md": "artifacts/tooling/repo-brief/summary.md",
+      "target_latest_json": "artifacts/tooling/repo-brief/latest/summary.json",
+      "target_latest_md": "artifacts/tooling/repo-brief/latest/summary.md",
+      "latest_index": "artifacts/tooling/latest/repo-brief.json",
+      "evidence_category": "repo_status",
+      "strictness_level": "advisory",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "exit_code",
+        "full_log_path",
+        "failure_fingerprint",
+        "changed_state_fingerprint",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
+    },
+    "review-ready": {
+      "kind": "review-ready",
+      "summary": "artifacts/tooling/review-ready/summary.json",
+      "markdown": "artifacts/tooling/review-ready/summary.md",
+      "summary_json": "artifacts/tooling/review-ready/summary.json",
+      "summary_md": "artifacts/tooling/review-ready/summary.md",
+      "target_latest_json": "artifacts/tooling/review-ready/latest/summary.json",
+      "target_latest_md": "artifacts/tooling/review-ready/latest/summary.md",
+      "latest_index": "artifacts/tooling/latest/review-ready.json",
+      "evidence_category": "review_handoff",
+      "strictness_level": "promotion_required",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "branch",
+        "head_sha",
+        "changed_files",
+        "verification_summary",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
+    },
+    "sonarqube-local": {
+      "kind": "sonarqube-local",
+      "summary": "artifacts/tooling/sonarqube-local/summary.json",
+      "markdown": "artifacts/tooling/sonarqube-local/summary.md",
+      "summary_json": "artifacts/tooling/sonarqube-local/summary.json",
+      "summary_md": "artifacts/tooling/sonarqube-local/summary.md",
+      "target_latest_json": "artifacts/tooling/sonarqube-local/latest/summary.json",
+      "target_latest_md": "artifacts/tooling/sonarqube-local/latest/summary.md",
+      "latest_index": "artifacts/tooling/latest/sonarqube-local.json",
+      "evidence_category": "local_gate",
+      "strictness_level": "advisory",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "exit_code",
+        "full_log_path",
+        "failure_fingerprint",
+        "changed_state_fingerprint",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
+    },
+    "verify": {
+      "kind": "verify",
+      "summary": "artifacts/tooling/verify/summary.json",
+      "markdown": "artifacts/tooling/verify/summary.md",
+      "summary_json": "artifacts/tooling/verify/summary.json",
+      "summary_md": "artifacts/tooling/verify/summary.md",
+      "target_latest_json": "artifacts/tooling/verify/latest/summary.json",
+      "target_latest_md": "artifacts/tooling/verify/latest/summary.md",
+      "latest_index": "artifacts/tooling/latest/verify.json",
+      "evidence_category": "local_gate",
+      "strictness_level": "advisory",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "exit_code",
+        "full_log_path",
+        "failure_fingerprint",
+        "changed_state_fingerprint",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
+    },
+    "verify-ci": {
+      "kind": "verify-ci",
+      "summary": "artifacts/tooling/verify-ci/summary.json",
+      "markdown": "artifacts/tooling/verify-ci/summary.md",
+      "summary_json": "artifacts/tooling/verify-ci/summary.json",
+      "summary_md": "artifacts/tooling/verify-ci/summary.md",
+      "target_latest_json": "artifacts/tooling/verify-ci/latest/summary.json",
+      "target_latest_md": "artifacts/tooling/verify-ci/latest/summary.md",
+      "latest_index": "artifacts/tooling/latest/verify-ci.json",
+      "evidence_category": "local_gate",
+      "strictness_level": "advisory",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "exit_code",
+        "full_log_path",
+        "failure_fingerprint",
+        "changed_state_fingerprint",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
+    },
+    "verify-fast": {
+      "kind": "verify-fast",
+      "summary": "artifacts/tooling/verify-fast/summary.json",
+      "markdown": "artifacts/tooling/verify-fast/summary.md",
+      "summary_json": "artifacts/tooling/verify-fast/summary.json",
+      "summary_md": "artifacts/tooling/verify-fast/summary.md",
+      "target_latest_json": "artifacts/tooling/verify-fast/latest/summary.json",
+      "target_latest_md": "artifacts/tooling/verify-fast/latest/summary.md",
+      "latest_index": "artifacts/tooling/latest/verify-fast.json",
+      "evidence_category": "local_gate",
+      "strictness_level": "promotion_required",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "exit_code",
+        "full_log_path",
+        "failure_fingerprint",
+        "changed_state_fingerprint",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
+    },
+    "verify-paths": {
+      "kind": "verify-paths",
+      "summary": "artifacts/tooling/verify-paths/summary.json",
+      "markdown": "artifacts/tooling/verify-paths/summary.md",
+      "summary_json": "artifacts/tooling/verify-paths/summary.json",
+      "summary_md": "artifacts/tooling/verify-paths/summary.md",
+      "target_latest_json": "artifacts/tooling/verify-paths/latest/summary.json",
+      "target_latest_md": "artifacts/tooling/verify-paths/latest/summary.md",
+      "latest_index": "artifacts/tooling/latest/verify-paths.json",
+      "evidence_category": "domain_gate",
+      "strictness_level": "advisory",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "exit_code",
+        "full_log_path",
+        "failure_fingerprint",
+        "changed_state_fingerprint",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
+    },
+    "verify-security": {
+      "kind": "verify-security",
+      "summary": "artifacts/tooling/verify-security/summary.json",
+      "markdown": "artifacts/tooling/verify-security/summary.md",
+      "summary_json": "artifacts/tooling/verify-security/summary.json",
+      "summary_md": "artifacts/tooling/verify-security/summary.md",
+      "target_latest_json": "artifacts/tooling/verify-security/latest/summary.json",
+      "target_latest_md": "artifacts/tooling/verify-security/latest/summary.md",
+      "latest_index": "artifacts/tooling/latest/verify-security.json",
+      "evidence_category": "security",
+      "strictness_level": "promotion_required",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "exit_code",
+        "full_log_path",
+        "failure_fingerprint",
+        "scanner_findings",
+        "waiver_required",
+        "next_actions"
+      ],
+      "allowed_rerun_triggers": [
+        "artifact_missing",
+        "artifact_stale",
+        "artifact_partial",
+        "artifact_contradictory",
+        "repo_declared_insufficient",
+        "code_change",
+        "config_change",
+        "dependency_change",
+        "environment_change",
+        "diagnostic_required",
+        "release_critical_evidence_needed",
+        "FORCE_RERUN=1"
+      ]
+    },
+    "verify-ui-cli": {
+      "kind": "verify-ui-cli",
+      "summary": "artifacts/tooling/verify-ui-cli/summary.json",
+      "markdown": "artifacts/tooling/verify-ui-cli/summary.md",
+      "summary_json": "artifacts/tooling/verify-ui-cli/summary.json",
+      "summary_md": "artifacts/tooling/verify-ui-cli/summary.md",
+      "target_latest_json": "artifacts/tooling/verify-ui-cli/latest/summary.json",
+      "target_latest_md": "artifacts/tooling/verify-ui-cli/latest/summary.md",
+      "latest_index": "artifacts/tooling/latest/verify-ui-cli.json",
+      "evidence_category": "ui_cli",
+      "strictness_level": "advisory",
+      "freshness_keys": [
+        "git.head_sha",
+        "git.state_fingerprint",
+        "analysis.run_signature"
+      ],
+      "expected_outputs": [
+        "summary_json",
+        "summary_md",
+        "status",
+        "exit_code",
+        "full_log_path",
+        "failure_fingerprint",
+        "changed_state_fingerprint",
         "next_actions"
       ],
       "allowed_rerun_triggers": [

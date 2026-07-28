@@ -31,6 +31,7 @@ Optional readiness entrypoints:
 - `make payload-smoke`
 - `make forge-smoke`
 - `make public-portability-check`
+- `make release-build`
 
 Usage notes:
 
