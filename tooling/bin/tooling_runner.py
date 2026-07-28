@@ -17,7 +17,7 @@ from typing import Any
 
 sys.dont_write_bytecode = True
 
-from python_runtime import route_advice as python_route_advice, runtime_info as python_runtime_info
+from python_runtime import route_advice as python_route_advice, runtime_info as python_runtime_info  # noqa: E402
 
 
 SCHEMA_VERSION = 1
