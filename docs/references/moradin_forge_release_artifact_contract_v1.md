@@ -58,7 +58,8 @@ not part of the checksummed release set.
 ## Reproducibility
 
 - Promotable release evidence requires a clean Git worktree.
-- The archive uses sorted paths, zeroed ownership, and normalized timestamps.
+- The archive uses sorted paths, zeroed ownership, normalized timestamps, and
+  Git-portable executable or non-executable modes.
 - Generated local portability reports are validated, then excluded from the
   archive so time- and machine-specific audit metadata cannot affect its hash.
 - The SPDX document uses the source commit timestamp and exact Python and npm

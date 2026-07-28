@@ -343,6 +343,12 @@ def create_deterministic_archive(source_root: Path, archive_path: Path) -> str:
         info.uname = "root"
         info.gname = "root"
         info.mtime = 0
+        if info.isdir():
+            info.mode = 0o755
+        elif info.isfile():
+            info.mode = 0o755 if info.mode & 0o111 else 0o644
+        elif info.issym():
+            info.mode = 0o777
         return info
 
     with archive_path.open("wb") as raw:

@@ -40,22 +40,34 @@ def test_golden_path_restores_disposable_git_target(tmp_path: Path) -> None:
 
 def test_archive_is_deterministic_and_has_portable_root(tmp_path: Path) -> None:
     source = tmp_path / "source"
-    source.mkdir()
-    (source / "README.md").write_text("portable\n", encoding="utf-8")
-    nested = source / "docs"
-    nested.mkdir()
-    (nested / "guide.md").write_text("guide\n", encoding="utf-8")
+    second_source = tmp_path / "second-source"
+    for root in (source, second_source):
+        root.mkdir()
+        (root / "README.md").write_text("portable\n", encoding="utf-8")
+        nested = root / "docs"
+        nested.mkdir()
+        (nested / "guide.md").write_text("guide\n", encoding="utf-8")
+    (source / "README.md").chmod(0o664)
+    (source / "docs").chmod(0o775)
+    (source / "docs/guide.md").chmod(0o664)
+    (second_source / "README.md").chmod(0o644)
+    (second_source / "docs").chmod(0o755)
+    (second_source / "docs/guide.md").chmod(0o644)
     first = tmp_path / "first.tar.gz"
     second = tmp_path / "second.tar.gz"
 
     first_sha = create_deterministic_archive(source, first)
-    second_sha = create_deterministic_archive(source, second)
+    second_sha = create_deterministic_archive(second_source, second)
 
     assert first_sha == second_sha
     with tarfile.open(first, "r:gz") as archive:
         names = archive.getnames()
+        readme = archive.getmember("moradins-forge-0.2.0-beta.1/README.md")
+        docs = archive.getmember("moradins-forge-0.2.0-beta.1/docs")
     assert "moradins-forge-0.2.0-beta.1/README.md" in names
     assert "moradins-forge-0.2.0-beta.1/docs/guide.md" in names
+    assert readme.mode == 0o644
+    assert docs.mode == 0o755
 
 
 def test_spdx_sbom_uses_exact_lockfile_versions(tmp_path: Path) -> None:
