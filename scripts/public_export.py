@@ -158,12 +158,17 @@ EXPORT_SKIP_EXACT = {
 EXPORT_SKIP_PREFIXES.update(
     {
         "Harness/artifacts/control/forge_runs",
+        "Harness/artifacts/control/efficiency",
         "Harness/artifacts/control/install_requests",
         "Harness/artifacts/control/migration_start",
         "Harness/artifacts/control/migration_waves",
         f"Harness/artifacts/control/{PR_HARDENING_TOKEN}",
         "Harness/artifacts/control/public_export",
         "Harness/artifacts/control/repo_registry",
+        "Harness/artifacts/control/onboard_runs",
+        "Harness/artifacts/control/tooling_plans",
+        "Harness/artifacts/control/tooling_receipts",
+        "Harness/artifacts/control/upgrade_runs",
         "Harness/artifacts/control/discovery_sessions",
         "testing_suite",
         "tests/testing_suite",
@@ -171,10 +176,18 @@ EXPORT_SKIP_PREFIXES.update(
 )
 
 PUBLIC_MAKEFILE_TEXT = """\
-.PHONY: lint-py lint-md test test-py ui-test ui-build payload-validate payload-smoke template-validate template-smoke forge-explain forge-readiness forge-brief forge-plan forge-adopt-dry-run forge-adopt forge-verify forge-smoke public-export public-portability-check
+.PHONY: lint-py lint-md test test-py ui-test ui-build payload-validate payload-smoke template-validate template-smoke forge-explain forge-readiness forge-brief forge-onboard forge-tooling-plan forge-tooling-update-plan forge-tooling-apply forge-tooling-bundle forge-tooling-rollback forge-plan forge-adopt-dry-run forge-adopt forge-verify forge-upgrade-plan forge-upgrade forge-upgrade-rollback forge-rollback forge-smoke public-export public-portability-check
 
 PUBLIC_EXPORT_DIR ?= /tmp/moradin-forge-public-export-check
 PUBLIC_SIDECAR_SMOKE_DIR ?= /tmp/moradin-forge-sidecar-smoke-check
+WORKSPACE ?=
+PLAN ?=
+PLAN_SHA256 ?=
+OUTPUT ?=
+RECEIPT ?=
+AGENT_FILES ?=
+CREATE_AGENT_FILES ?=
+UPGRADE_ID ?=
 
 lint-py:
 \tUV_CACHE_DIR=/tmp/uv-cache uv run ruff check .
@@ -209,6 +222,30 @@ forge-explain forge-brief:
 forge-readiness:
 \tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py readiness
 
+forge-onboard:
+\t@if [ -z "$(WORKSPACE)" ]; then echo "Usage: make forge-onboard WORKSPACE=<workspace-path>"; exit 1; fi
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py onboard --workspace "$(WORKSPACE)"
+
+forge-tooling-plan:
+\t@if [ -z "$(WORKSPACE)" ]; then echo "Usage: make forge-tooling-plan WORKSPACE=<workspace-path>"; exit 1; fi
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py tooling-plan --workspace "$(WORKSPACE)"
+
+forge-tooling-update-plan:
+\t@if [ -z "$(WORKSPACE)" ]; then echo "Usage: make forge-tooling-update-plan WORKSPACE=<workspace-path>"; exit 1; fi
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py tooling-update-plan --workspace "$(WORKSPACE)"
+
+forge-tooling-apply:
+\t@if [ -z "$(PLAN)" ] || [ -z "$(PLAN_SHA256)" ]; then echo "Usage: make forge-tooling-apply PLAN=<plan.json> PLAN_SHA256=<digest>"; exit 1; fi
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py tooling-apply --plan "$(PLAN)" --approve-plan-sha256 "$(PLAN_SHA256)"
+
+forge-tooling-bundle:
+\t@if [ -z "$(PLAN)" ] || [ -z "$(OUTPUT)" ]; then echo "Usage: make forge-tooling-bundle PLAN=<plan.json> OUTPUT=<bundle-path>"; exit 1; fi
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py tooling-bundle --plan "$(PLAN)" --output "$(OUTPUT)"
+
+forge-tooling-rollback:
+\t@if [ -z "$(RECEIPT)" ] || [ "$(APPROVE)" != "1" ]; then echo "Usage: make forge-tooling-rollback RECEIPT=<receipt.json> APPROVE=1"; exit 1; fi
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py tooling-rollback --receipt "$(RECEIPT)" --approve
+
 forge-plan forge-adopt-dry-run:
 \t@if [ -z "$(TARGET)" ]; then \\
 \t\techo "Usage: make $@ TARGET=<repo-path>"; \\
@@ -218,10 +255,10 @@ forge-plan forge-adopt-dry-run:
 
 forge-adopt:
 \t@if [ -z "$(TARGET)" ] || [ "$(APPROVE)" != "1" ]; then \\
-\t\techo "Usage: make forge-adopt TARGET=<repo-path> APPROVE=1 [OVERWRITE=1] [PATCH_AGENTS=1]"; \\
+\t\techo "Usage: make forge-adopt TARGET=<repo-path> APPROVE=1 [AGENT_FILES='AGENTS.md CLAUDE.md']"; \\
 \t\texit 1; \\
 \tfi
-\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py apply --target "$(TARGET)" --approve $(if $(OVERWRITE),--overwrite-sidecar,) $(if $(PATCH_AGENTS),--patch-agents,) --write-install-request
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py apply --target "$(TARGET)" --approve $(if $(OVERWRITE),--overwrite-sidecar,) $(if $(PATCH_AGENTS),--patch-agents,) $(foreach file,$(AGENT_FILES),--approve-agent-file $(file)) $(foreach file,$(CREATE_AGENT_FILES),--create-agent-file $(file)) --write-install-request
 
 forge-verify:
 \t@if [ -z "$(TARGET)" ]; then \\
@@ -229,6 +266,22 @@ forge-verify:
 \t\texit 1; \\
 \tfi
 \tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py verify --target "$(TARGET)"
+
+forge-upgrade-plan:
+\t@if [ -z "$(TARGET)" ]; then echo "Usage: make forge-upgrade-plan TARGET=<repo-path>"; exit 1; fi
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py upgrade-plan --target "$(TARGET)"
+
+forge-upgrade:
+\t@if [ -z "$(TARGET)" ] || [ -z "$(PLAN)" ] || [ -z "$(PLAN_SHA256)" ]; then echo "Usage: make forge-upgrade TARGET=<repo-path> PLAN=<plan.json> PLAN_SHA256=<digest>"; exit 1; fi
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py upgrade --target "$(TARGET)" --plan "$(PLAN)" --approve-plan-sha256 "$(PLAN_SHA256)"
+
+forge-upgrade-rollback:
+\t@if [ -z "$(TARGET)" ] || [ -z "$(UPGRADE_ID)" ] || [ "$(APPROVE)" != "1" ]; then echo "Usage: make forge-upgrade-rollback TARGET=<repo-path> UPGRADE_ID=<id> APPROVE=1"; exit 1; fi
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py upgrade-rollback --target "$(TARGET)" --upgrade-id "$(UPGRADE_ID)" --approve
+
+forge-rollback:
+\t@if [ -z "$(TARGET)" ] || [ "$(APPROVE)" != "1" ]; then echo "Usage: make forge-rollback TARGET=<repo-path> APPROVE=1"; exit 1; fi
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py rollback --target "$(TARGET)" --approve
 
 forge-smoke:
 \tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/public_export.py sidecar-smoke --output "$(PUBLIC_SIDECAR_SMOKE_DIR)" --force
@@ -257,11 +310,16 @@ owner: moradin-forge
 | --- | --- | --- | --- | --- |
 | FORGE-001 | inspect Forge and the target repo before proposing changes | FORGE.md | explain the plan before apply | active |
 | FORGE-002 | require explicit user approval before writing target repo files | Harness/entrypoints/forge.md | run apply only with `--approve` | active |
-| FORGE-003 | keep host tool installation request-only | docs/references/tooling_readiness_install_request_contract_v1.md | write install-request artifacts instead of installing tools | active |
+| FORGE-003 | execute only digest-approved, verified user-level tooling actions | docs/references/tooling_readiness_install_execution_contract_v2.md | review the exact plan digest before `tooling-apply` | active |
 | FORGE-004 | preserve root workflows by default | docs/references/moradin_forge_agent_integration_contract_v1.md | write sidecar adapters before root patches | active |
 | FORGE-005 | verify sidecars for portability before handoff | scripts/moradin_forge.py | run `forge verify` or `make forge-verify` | active |
 | FORGE-006 | keep bootstrap separate from adoption | docs/references/moradin_forge_installer_bootstrap_contract_v1.md | run platform bootstrap only to prime Forge and write a start card | active |
 | FORGE-007 | keep beta release visuals portable and local | README.md | scan SVG assets before public release | active |
+| FORGE-008 | inspect only explicitly approved workspace roots | docs/references/tooling_readiness_install_execution_contract_v2.md | show discovered repositories before capability inspection | active |
+| FORGE-009 | require independent approval for each agent file and user configuration change | docs/references/moradin_forge_agent_integration_contract_v1.md | show the owned block and request each consent separately | active |
+| FORGE-010 | never invoke elevation automatically | docs/references/tooling_readiness_install_execution_contract_v2.md | generate a reviewable script for the user to run | active |
+| FORGE-011 | bind upgrades to an exact plan and retain one predecessor | docs/references/moradin_forge_upgrade_contract_v1.md | stage, validate, switch, or restore byte-for-byte | active |
+| FORGE-012 | store sanitized efficiency counters only | docs/references/moradin_agent_efficiency_contract_v1.md | omit prompts, source, commands, paths, and logs | active |
 """,
     "Harness/artifacts/control/current_features.md": """\
 ---
@@ -277,10 +335,15 @@ owner: moradin-forge
 | FORGE-FEAT-001 | consent-gated local sidecar adoption | implemented | scripts/moradin_forge.py |
 | FORGE-FEAT-002 | payload-manifest-driven copy contract | implemented | Harness/moradin_payload/manifest.yaml |
 | FORGE-FEAT-003 | adaptive adapter snippets for common repo tooling | implemented | .moradins-harness/adapters/ |
-| FORGE-FEAT-004 | request-only tooling readiness artifacts | implemented | docs/references/tooling_readiness_install_request_contract_v1.md |
+| FORGE-FEAT-004 | digest-bound workstation plans and verified user-level execution | implemented | docs/references/tooling_readiness_install_execution_contract_v2.md |
 | FORGE-FEAT-005 | public export and sidecar portability scans | implemented | scripts/public_export.py |
 | FORGE-FEAT-006 | low-token clone-and-prime bootstrap entrypoints | implemented | docs/references/moradin_forge_installer_bootstrap_contract_v1.md |
 | FORGE-FEAT-007 | README visual overview for adoption and safety boundaries | implemented | docs/assets/readme/ |
+| FORGE-FEAT-008 | bounded multi-workspace repository discovery | implemented | scripts/moradin_workstation.py |
+| FORGE-FEAT-009 | independent AGENTS.md and CLAUDE.md owned blocks | implemented | scripts/moradin_forge.py |
+| FORGE-FEAT-010 | checksummed offline tooling bundles and privileged user-run scripts | implemented | scripts/moradin_workstation.py |
+| FORGE-FEAT-011 | transactional V1/V2 sidecar upgrades and immediate rollback | implemented | docs/references/moradin_forge_upgrade_contract_v1.md |
+| FORGE-FEAT-012 | portable context primer, briefs, rerun advice, and sanitized counters | implemented | docs/references/moradin_agent_efficiency_contract_v1.md |
 """,
     "Harness/artifacts/control/compatibility_window_status.md": """\
 ---
@@ -318,6 +381,7 @@ owner: moradin-forge
 | PUBLIC-001 | 2026-05-11 | public-alpha | Published Moradin's Forge as an agent-first local integration kit with consent-gated sidecar adoption. | ready |
 | PUBLIC-002 | 2026-06-09 | tooling-inheritance | Adopted current shared-tooling adapter improvements, hardened portability scans, and added request-only bootstrap entrypoints. | ready |
 | PUBLIC-003 | 2026-06-10 | beta-release | Prepared v0.2.0-beta.1 with version normalization, CI fixes, and README visual overview assets. | ready |
+| PUBLIC-004 | 2026-07-28 | universal-agent-baseline | Prepared v0.2.0-beta.3 with bounded onboarding, approved user-level tooling, offline bundles, independent agent blocks, compact context helpers, and transactional upgrades. | candidate |
 """,
 }
 

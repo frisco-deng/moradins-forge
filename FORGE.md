@@ -10,14 +10,17 @@ If the user sent you here as Codex, Claude Code, or another coding agent:
    - a local `.moradins-harness/` sidecar,
    - adaptive snippets under `.moradins-harness/adapters/`,
    - deterministic readiness, brief, and validation commands,
-   - request-only install artifacts for missing host tools.
+   - an adaptive tooling plan for approved workspaces,
+   - independently approved `AGENTS.md` and `CLAUDE.md` marker blocks.
 4. Explain what Moradin will not do:
-   - it will not install host tools,
    - it will not publish or phone home,
    - it will not replace existing repo workflows,
    - it will not patch root workflow files by default,
-   - it will not edit outside the approved target repo.
+   - it will not inspect outside approved workspace roots,
+   - it will not invoke privileged installation automatically.
 5. Ask the user for explicit consent before running any apply command.
+6. After consent, Forge may execute verified user-level installers. Privileged
+   work is emitted as a reviewable script for the user to run.
 
 If the user wants a low-token first pass, run the platform bootstrap first:
 
@@ -40,9 +43,12 @@ Use this deterministic path:
 
 ```sh
 scripts/moradin_forge.sh explain
+scripts/moradin_forge.sh onboard --workspace <workspace-root>
+scripts/moradin_forge.sh tooling-plan --workspace <workspace-root>
 scripts/moradin_forge.sh readiness --target <target-repo>
 scripts/moradin_forge.sh plan --target <target-repo>
-scripts/moradin_forge.sh apply --target <target-repo> --approve
+scripts/moradin_forge.sh apply --target <target-repo> --approve \
+  --approve-agent-file AGENTS.md
 scripts/moradin_forge.sh verify --target <target-repo>
 ```
 
@@ -82,8 +88,10 @@ On Windows PowerShell, use:
 After apply, report the sidecar path, adapter status, install-request artifacts,
 validation commands, rollback path, and any action the user must take manually.
 
-Root `AGENTS.md` patching is opt-in. Use `--patch-agents` only after explaining
-the marked block and receiving explicit user approval.
+Root agent guidance is opt-in. Use `--approve-agent-file AGENTS.md` or
+`--approve-agent-file CLAUDE.md` only after showing the owned block and
+receiving explicit approval for that file. `--patch-agents` remains a
+compatibility alias for `AGENTS.md`.
 
 Forge is a public-candidate repo. Public docs, sidecars, exports, and release
 evidence must not contain raw home paths, usernames, hostnames, Windows user

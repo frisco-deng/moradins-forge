@@ -7,7 +7,7 @@ control_plane_root: Harness
 entrypoint: Harness/entrypoints/agent.md
 template_root: .harness_template
 template_id: base_app
-template_version: 0.2.0-beta.1
+template_version: 0.2.0-beta.3
 path_convention: snake_case
 release_stage: beta
 compatibility_mode: canonical_only

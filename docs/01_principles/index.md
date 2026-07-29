@@ -15,6 +15,8 @@ Canonical operating principles for Moradin's Forge live in this section.
 
 - Agents explain before applying.
 - Users approve before mutation.
-- Host installs stay request-only.
+- Verified user-level installs require an exact approved plan digest.
+- Privileged installs are reviewable scripts the user runs.
+- Workspace scope, agent files, and user configuration are approved separately.
 - Target root workflows stay preserved by default.
 - Sidecars remain local and verifiable.

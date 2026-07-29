@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
+from scripts import moradin_forge
 from scripts.moradin_forge import (
     AGENTS_MARKER_BEGIN,
     ForgeApplyOptions,
@@ -16,13 +18,18 @@ from scripts.moradin_forge import (
     SHARED_TEMPLATES_TOKEN,
     apply_integration,
     build_integration_plan,
+    build_upgrade_plan,
     copy_payload_to_sidecar,
+    detect_readiness,
     detect_target_tooling,
     install_directory_no_replace,
     main,
     normalize_payload_relative_path,
     rollback_integration,
+    rollback_upgrade,
+    upgrade_integration,
     verify_integration,
+    write_upgrade_plan_artifacts,
     write_install_request_artifacts,
 )
 
@@ -53,13 +60,14 @@ def make_forge_root(tmp_path: Path) -> Path:
                 "name: moradin_harness_payload",
                 "kind: moradin_payload",
                 "payload_id: moradin_harness_payload",
-                "payload_version: 0.2.0-beta.1",
+                "payload_version: 0.2.0-beta.3",
                 "source_root: .",
                 "sidecar_default_dir: .moradins-harness",
                 "include_paths:",
                 "  - AGENTS.md",
                 "  - FORGE.md",
                 "  - README.md",
+                "  - Harness/moradin_payload/manifest.yaml",
                 "  - Harness/entrypoints",
                 "  - Harness/artifacts",
                 "  - docs/assets",
@@ -67,6 +75,7 @@ def make_forge_root(tmp_path: Path) -> Path:
                 "  - docs/product_specs",
                 "  - docs/references",
                 "  - scripts/moradin_forge.py",
+                "  - scripts/moradin_workstation.py",
                 "exclude_paths:",
                 f"  - {RELEASE_REPORTS_TOKEN}",
                 "  - .git",
@@ -97,6 +106,7 @@ def make_forge_root(tmp_path: Path) -> Path:
         "excluded discovery history\n",
     )
     write(forge_root / "scripts/moradin_forge.py", "# copied helper\n")
+    write(forge_root / "scripts/moradin_workstation.py", "# copied workstation helper\n")
     return forge_root
 
 
@@ -194,6 +204,30 @@ def test_detect_target_tooling_drives_adaptive_snippets(tmp_path: Path) -> None:
     assert tooling["package_json_present"]
     assert tooling["pyproject_toml_present"]
     assert tooling["package_scripts"] == ["test"]
+
+
+def test_readiness_is_evidence_adaptive_and_has_no_private_bridge_gaps(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = make_blank_target(tmp_path)
+    write(target / "pyproject.toml", "[project]\nname='target'\n")
+    write(target / ".github/workflows/ci.yml", "name: ci\n")
+    present = {"git", "python3", "uv", "rg", "fd", "jq", "yq"}
+    monkeypatch.setattr(
+        moradin_forge,
+        "detect_tool",
+        lambda command: command in present,
+    )
+
+    readiness = detect_readiness(target)
+    ids = {check["id"] for check in readiness["checks"]}
+
+    assert {"git", "python", "uv", "pip_audit", "actionlint", "zizmor"}.issubset(ids)
+    assert {"docker", "kubectl", "playwright", "cad"}.isdisjoint(ids)
+    assert {"tpldeck", "uvbootstrap", "codex_run", "codex_docker", "codex_exec"}.isdisjoint(
+        ids
+    )
 
 
 def test_windows_style_payload_paths_normalize_for_planning() -> None:
@@ -352,7 +386,7 @@ def test_rollback_restores_patched_agents_exactly(tmp_path: Path) -> None:
     assert (target / "AGENTS.md").read_bytes() == original
 
 
-def test_rollback_refuses_modified_managed_agents(tmp_path: Path) -> None:
+def test_rollback_preserves_unrelated_agent_guidance_changes(tmp_path: Path) -> None:
     forge_root = make_forge_root(tmp_path)
     target = make_target(tmp_path)
     apply_integration(
@@ -363,7 +397,31 @@ def test_rollback_refuses_modified_managed_agents(tmp_path: Path) -> None:
     agents_path = target / "AGENTS.md"
     agents_path.write_text(agents_path.read_text(encoding="utf-8") + "changed\n", encoding="utf-8")
 
-    with pytest.raises(ForgeError, match="managed AGENTS.md was modified"):
+    rollback_integration(target, approve=True)
+
+    assert not (target / ".moradins-harness").exists()
+    assert agents_path.read_text(encoding="utf-8").endswith("changed\n")
+    assert AGENTS_MARKER_BEGIN not in agents_path.read_text(encoding="utf-8")
+
+
+def test_rollback_refuses_modified_owned_agent_marker(tmp_path: Path) -> None:
+    forge_root = make_forge_root(tmp_path)
+    target = make_target(tmp_path)
+    apply_integration(
+        forge_root,
+        target,
+        ForgeApplyOptions(approve=True, patch_agents=True),
+    )
+    agents_path = target / "AGENTS.md"
+    agents_path.write_text(
+        agents_path.read_text(encoding="utf-8").replace(
+            "## Moradin Forge",
+            "## Modified Moradin Forge",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ForgeError, match="managed AGENTS.md marker was modified"):
         rollback_integration(target, approve=True)
 
     assert (target / ".moradins-harness").is_dir()
@@ -439,3 +497,321 @@ def test_cli_verify_reports_sidecar_status(tmp_path: Path, capsys: pytest.Captur
     assert code == 0
     assert '"version": "MoradinForgeVerifyResultV1"' in output
     assert '"status": "pass"' in output
+
+
+def test_apply_can_manage_agents_and_claude_independently(tmp_path: Path) -> None:
+    forge_root = make_forge_root(tmp_path)
+    target = make_target(tmp_path)
+    write(target / "CLAUDE.md", "# Existing Claude Guidance\n")
+    original_agents = (target / "AGENTS.md").read_bytes()
+
+    result = apply_integration(
+        forge_root,
+        target,
+        ForgeApplyOptions(
+            approve=True,
+            agent_files=("CLAUDE.md",),
+        ),
+    )
+
+    assert result["agent_file_statuses"] == {"CLAUDE.md": "patched"}
+    assert (target / "AGENTS.md").read_bytes() == original_agents
+    assert AGENTS_MARKER_BEGIN in (target / "CLAUDE.md").read_text(encoding="utf-8")
+    rollback = rollback_integration(target, approve=True)
+    assert rollback["agent_files_restored"] == ["CLAUDE.md"]
+    assert (target / "CLAUDE.md").read_text(encoding="utf-8") == "# Existing Claude Guidance\n"
+
+
+def test_apply_requires_create_consent_for_missing_agent_file(tmp_path: Path) -> None:
+    forge_root = make_forge_root(tmp_path)
+    target = make_target(tmp_path)
+
+    result = apply_integration(
+        forge_root,
+        target,
+        ForgeApplyOptions(
+            approve=True,
+            agent_files=("CLAUDE.md",),
+        ),
+    )
+
+    assert result["agent_file_statuses"] == {"CLAUDE.md": "snippet_only"}
+    assert not (target / "CLAUDE.md").exists()
+
+
+def test_apply_rejects_symlinked_agent_guidance_before_sidecar_write(
+    tmp_path: Path,
+) -> None:
+    forge_root = make_forge_root(tmp_path)
+    target = make_target(tmp_path)
+    outside = tmp_path / "outside-claude.md"
+    write(outside, "# outside\n")
+    (target / "CLAUDE.md").symlink_to(outside)
+
+    with pytest.raises(ForgeError, match="regular root file"):
+        apply_integration(
+            forge_root,
+            target,
+            ForgeApplyOptions(
+                approve=True,
+                agent_files=("CLAUDE.md",),
+            ),
+        )
+
+    assert not (target / ".moradins-harness").exists()
+    assert outside.read_text(encoding="utf-8") == "# outside\n"
+
+
+def test_transactional_upgrade_and_immediate_rollback(tmp_path: Path) -> None:
+    forge_root = make_forge_root(tmp_path)
+    target = make_target(tmp_path)
+    write(target / "CLAUDE.md", "# Claude\n")
+    apply_integration(
+        forge_root,
+        target,
+        ForgeApplyOptions(
+            approve=True,
+            agent_files=("AGENTS.md", "CLAUDE.md"),
+        ),
+    )
+    previous_forge = (target / ".moradins-harness/FORGE.md").read_bytes()
+    write(forge_root / "FORGE.md", "# Forge beta 3 updated\n")
+
+    plan = build_upgrade_plan(forge_root, target)
+    artifacts = write_upgrade_plan_artifacts(forge_root, plan)
+    result = upgrade_integration(
+        forge_root,
+        target,
+        plan_path=Path(artifacts["json"]),
+        approved_sha256=plan["plan_sha256"],
+    )
+
+    assert result["status"] == "pass"
+    assert (target / ".moradins-harness/FORGE.md").read_text(encoding="utf-8") == (
+        "# Forge beta 3 updated\n"
+    )
+    assert verify_integration(target)["status"] == "pass"
+
+    restored = rollback_upgrade(
+        target,
+        upgrade_id=result["upgrade_id"],
+        approve=True,
+    )
+
+    assert restored["status"] == "pass"
+    assert (target / ".moradins-harness/FORGE.md").read_bytes() == previous_forge
+    assert verify_integration(target)["status"] == "pass"
+
+
+def test_second_upgrade_retains_only_its_immediate_predecessor(
+    tmp_path: Path,
+) -> None:
+    forge_root = make_forge_root(tmp_path)
+    target = make_target(tmp_path)
+    apply_integration(forge_root, target, ForgeApplyOptions(approve=True))
+
+    write(forge_root / "FORGE.md", "# first replacement\n")
+    first_plan = build_upgrade_plan(forge_root, target)
+    first_artifacts = write_upgrade_plan_artifacts(forge_root, first_plan)
+    first = upgrade_integration(
+        forge_root,
+        target,
+        plan_path=Path(first_artifacts["json"]),
+        approved_sha256=first_plan["plan_sha256"],
+    )
+
+    write(forge_root / "FORGE.md", "# second replacement\n")
+    second_plan = build_upgrade_plan(forge_root, target)
+    second_artifacts = write_upgrade_plan_artifacts(forge_root, second_plan)
+    second = upgrade_integration(
+        forge_root,
+        target,
+        plan_path=Path(second_artifacts["json"]),
+        approved_sha256=second_plan["plan_sha256"],
+    )
+
+    backup_root = (
+        target
+        / ".moradins-harness/Harness/artifacts/control/forge_integration/upgrade_backups"
+    )
+    assert sorted(path.name for path in backup_root.iterdir()) == [
+        second["upgrade_id"]
+    ]
+    assert first["upgrade_id"] != second["upgrade_id"]
+
+    rollback_upgrade(
+        target,
+        upgrade_id=second["upgrade_id"],
+        approve=True,
+    )
+
+    assert (target / ".moradins-harness/FORGE.md").read_text(
+        encoding="utf-8"
+    ) == "# first replacement\n"
+    assert verify_integration(target)["status"] == "pass"
+
+
+def test_upgrade_accepts_legacy_v1_ownership_record(tmp_path: Path) -> None:
+    forge_root = make_forge_root(tmp_path)
+    target = make_target(tmp_path)
+    apply_integration(forge_root, target, ForgeApplyOptions(approve=True))
+    ownership_path = (
+        target
+        / ".moradins-harness/Harness/artifacts/control/forge_integration/ownership.json"
+    )
+    ownership = json.loads(ownership_path.read_text(encoding="utf-8"))
+    ownership["version"] = "MoradinForgeOwnershipV1"
+    for key in (
+        "agent_files",
+        "compatibility",
+        "payload_manifest_sha256",
+        "payload_version",
+        "upgrade_history",
+    ):
+        ownership.pop(key, None)
+    ownership_path.write_text(
+        json.dumps(ownership, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    write(forge_root / "FORGE.md", "# Forge from legacy upgrade\n")
+
+    plan = build_upgrade_plan(forge_root, target)
+    artifacts = write_upgrade_plan_artifacts(forge_root, plan)
+    result = upgrade_integration(
+        forge_root,
+        target,
+        plan_path=Path(artifacts["json"]),
+        approved_sha256=plan["plan_sha256"],
+    )
+
+    assert result["status"] == "pass"
+    assert verify_integration(target)["status"] == "pass"
+
+
+def test_upgrade_rejects_stale_or_mismatched_plan(tmp_path: Path) -> None:
+    forge_root = make_forge_root(tmp_path)
+    target = make_target(tmp_path)
+    apply_integration(forge_root, target, ForgeApplyOptions(approve=True))
+    write(forge_root / "FORGE.md", "# planned change\n")
+    plan = build_upgrade_plan(forge_root, target)
+    artifacts = write_upgrade_plan_artifacts(forge_root, plan)
+    write(forge_root / "FORGE.md", "# changed after planning\n")
+
+    with pytest.raises(ForgeError, match="source payload contents changed"):
+        upgrade_integration(
+            forge_root,
+            target,
+            plan_path=Path(artifacts["json"]),
+            approved_sha256=plan["plan_sha256"],
+        )
+
+    with pytest.raises(ForgeError, match="approved plan digest"):
+        upgrade_integration(
+            forge_root,
+            target,
+            plan_path=Path(artifacts["json"]),
+            approved_sha256="0" * 64,
+        )
+
+
+def test_interrupted_upgrade_swap_restores_sidecar_and_agent_bytes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    forge_root = make_forge_root(tmp_path)
+    target = make_target(tmp_path)
+    apply_integration(
+        forge_root,
+        target,
+        ForgeApplyOptions(approve=True, patch_agents=True),
+    )
+    sidecar = target / ".moradins-harness"
+    before_sidecar = {
+        path.relative_to(sidecar).as_posix(): path.read_bytes()
+        for path in sidecar.rglob("*")
+        if path.is_file()
+    }
+    before_agents = (target / "AGENTS.md").read_bytes()
+    write(forge_root / "FORGE.md", "# interrupted candidate\n")
+    plan = build_upgrade_plan(forge_root, target)
+    artifacts = write_upgrade_plan_artifacts(forge_root, plan)
+    original_replace = moradin_forge.os.replace
+
+    def interrupt_candidate_swap(source: object, destination: object) -> None:
+        source_path = Path(source)
+        destination_path = Path(destination)
+        if (
+            destination_path == sidecar
+            and source_path.name.startswith(".moradins-harness.upgrade-")
+        ):
+            raise OSError("simulated interruption before candidate switch")
+        original_replace(source, destination)
+
+    monkeypatch.setattr(moradin_forge.os, "replace", interrupt_candidate_swap)
+
+    with pytest.raises(OSError, match="simulated interruption"):
+        upgrade_integration(
+            forge_root,
+            target,
+            plan_path=Path(artifacts["json"]),
+            approved_sha256=plan["plan_sha256"],
+        )
+
+    after_sidecar = {
+        path.relative_to(sidecar).as_posix(): path.read_bytes()
+        for path in sidecar.rglob("*")
+        if path.is_file()
+    }
+    assert after_sidecar == before_sidecar
+    assert (target / "AGENTS.md").read_bytes() == before_agents
+    assert not list(target.glob(".moradins-harness.upgrade-*"))
+    assert not list(target.glob(".moradins-harness.previous-*"))
+
+
+def test_upgrade_validates_staging_before_switch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    forge_root = make_forge_root(tmp_path)
+    target = make_target(tmp_path)
+    apply_integration(forge_root, target, ForgeApplyOptions(approve=True))
+    sidecar = target / ".moradins-harness"
+    before_forge = (sidecar / "FORGE.md").read_bytes()
+    write(forge_root / "FORGE.md", "# approved candidate\n")
+    plan = build_upgrade_plan(forge_root, target)
+    artifacts = write_upgrade_plan_artifacts(forge_root, plan)
+    original_write_adapters = moradin_forge.write_adapter_snippets
+    calls = 0
+
+    def corrupt_only_staging(
+        sidecar_root: Path,
+        sidecar_dir: str,
+        target_root: Path,
+    ) -> list[str]:
+        nonlocal calls
+        calls += 1
+        written = original_write_adapters(
+            sidecar_root,
+            sidecar_dir,
+            target_root,
+        )
+        if calls == 2:
+            write(sidecar_root / "staging-corruption.txt", "unexpected\n")
+        return written
+
+    monkeypatch.setattr(
+        moradin_forge,
+        "write_adapter_snippets",
+        corrupt_only_staging,
+    )
+
+    with pytest.raises(ForgeError, match="staged upgrade payload"):
+        upgrade_integration(
+            forge_root,
+            target,
+            plan_path=Path(artifacts["json"]),
+            approved_sha256=plan["plan_sha256"],
+        )
+
+    assert (sidecar / "FORGE.md").read_bytes() == before_forge
+    assert verify_integration(target)["status"] == "pass"

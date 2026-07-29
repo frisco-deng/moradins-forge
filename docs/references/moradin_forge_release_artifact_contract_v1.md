@@ -10,85 +10,75 @@ source_refs:
 related_docs:
   - moradin_forge_public_export_contract_v1.md
   - repo_operating_model_v1.md
-  - ../releases/v0.2.0-beta.1.md
+  - ../releases/v0.2.0-beta.3.md
 ---
 
 # Moradin Forge Release Artifact Contract V1
 
 ## Purpose
 
-Forge has one reproducible, marker-owned output contract for stable core
-release artifacts. This contract does not enable publication, signing,
-release-candidate promotion, or cross-platform readiness.
+Forge has one reproducible, marker-owned output contract for core prerelease
+artifacts. This contract does not authorize publication, signing, stable
+production promotion, or a `prod` branch or environment.
 
-## Command And Output Boundaries
+## Command and Output Boundaries
 
-- `make forge-dogfood-smoke` keeps disposable proof and a nested release copy
-  under ignored `artifacts/dogfood/`.
-- `make forge-release-artifacts` keeps operator evidence under
-  `artifacts/dogfood/` and writes the stable release set directly under
+- `make forge-dogfood-smoke` keeps disposable proof under ignored
+  `artifacts/dogfood/`.
+- `make forge-release-artifacts` writes the stable release set under
   `artifacts/release/`.
-- Advisory `make release-build` runs `make forge-release-artifacts` through the
-  generated tooling runner and writes its build summary under
+- Advisory `make release-build` executes that path through the generated
+  tooling runner and writes its summary under
   `artifacts/tooling/release-build/`.
 - `scripts/moradin_dogfood.py --release-output <path>` is the underlying
   explicit output interface.
 
-The stable release directory contains:
+The beta.3 release directory contains exactly:
 
-- `moradins-forge-0.2.0-beta.1.tar.gz`
-- `moradins-forge-0.2.0-beta.1.spdx.json`
+- `moradins-forge-0.2.0-beta.3.tar.gz`
+- `moradins-forge-0.2.0-beta.3.spdx.json`
 - `release-manifest.json`
 - `SHA256SUMS`
 
-The hidden `.moradin-release-output.json` file records Forge ownership and is
-not part of the checksummed release set.
+The hidden `.moradin-release-output.json` ownership marker is not part of the
+checksummed release set.
 
-## Ownership And Replacement
+## Ownership and Reproducibility
 
-- Forge replaces an existing dogfood directory only when
-  `.moradin-dogfood-output.json` has the expected schema and owner.
-- Forge replaces an existing stable release directory only when
-  `.moradin-release-output.json` has the expected schema and owner.
-- Missing, malformed, or foreign markers cause a hard refusal without deleting
-  operator-owned content.
-- A separate release output must not equal, contain, or be contained by the
-  dogfood output.
+Forge replaces output only when the expected ownership marker is valid.
+Missing, malformed, foreign, overlapping, or unowned directories cause a hard
+refusal.
 
-## Reproducibility
+The archive uses sorted paths, zeroed ownership, normalized timestamps, and
+Git-portable modes. Generated machine-specific evidence is validated and then
+excluded. The SPDX document derives versions from lockfiles and source commit
+time. The manifest records source SHA, previous release, hashes, rollback, and
+dogfood evidence.
 
-- Promotable release evidence requires a clean Git worktree.
-- The archive uses sorted paths, zeroed ownership, normalized timestamps, and
-  Git-portable executable or non-executable modes.
-- Generated local portability reports are validated, then excluded from the
-  archive so time- and machine-specific audit metadata cannot affect its hash.
-- The SPDX document uses the source commit timestamp and exact Python and npm
-  lockfile versions.
-- The manifest records the source SHA, previous release, archive and SBOM
-  hashes, public-export file count, rollback command, and operator-evidence
-  link.
-- Rebuilding the same commit and lockfiles produces byte-identical archive,
-  SPDX, manifest, and checksum files. Ownership-marker timestamps are excluded
-  from that guarantee.
+The same clean source commit and lockfiles must produce byte-identical archive,
+SPDX, manifest, and checksum files.
 
 ## Required Evidence
 
-Before promotion, run:
+Before prerelease promotion, run:
 
-- `make release-build`
-- `make verify-security`
-- `make public-portability-check`
-- `make verify-paths`
-- `tpl-release-candidate-audit --repo moradins-forge --format md`
-- the remaining gates in `repo_operating_model_v1.md`
+- `make release-build` twice and compare every checksummed byte;
+- `make release-gate-local`;
+- `make verify-security`;
+- `make public-portability-check`;
+- payload, leak, path, CI, and review-ready gates;
+- the Linux, macOS, and Windows universal-agent contract workflow;
+- a fresh public clone build with no private Harness dependency;
+- the release-candidate advisory audit.
 
-Reproduce the release from a fresh public clone and compare `SHA256SUMS`. The
-lock-derived SPDX document complements, but does not replace, the generated
-security scanner and SBOM evidence.
+Download the published assets into fresh scratch and run
+`sha256sum -c SHA256SUMS`. Extract the archive and rerun public portability.
 
 ## Deferred Lanes
 
-`release_platforms` remains empty. Signing, cross-platform release candidates,
-Windows native readiness, macOS signing, WSL smoke, UI visual review, and CAD
-lanes remain disabled until their own evidence and human promotion gates are
-approved.
+The cross-platform workflow validates onboarding plans, wrappers, quoting, and
+generated scripts. It does not activate `release_platforms`.
+
+Signing, production readiness, release-candidate manifest, platform signing,
+UI visual, CAD, GPU, and production promotion remain disabled until their own
+evidence and human gates are approved.

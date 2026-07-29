@@ -1,6 +1,6 @@
 [project]
 name = "moradins-forge"
-version = "0.2.0b1"
+version = "0.2.0b3"
 description = "Agent-first local integration kit for Moradin sidecars"
 readme = "README.md"
 requires-python = ">=3.12"

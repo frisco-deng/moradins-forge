@@ -19,8 +19,11 @@ related_docs:
   - moradin_forge_installer_bootstrap_contract_v1.md
   - moradin_forge_public_export_contract_v1.md
   - moradin_forge_release_artifact_contract_v1.md
+  - moradin_forge_upgrade_contract_v1.md
+  - moradin_agent_efficiency_contract_v1.md
   - repo_operating_model_v1.md
   - tooling_readiness_install_request_contract_v1.md
+  - tooling_readiness_install_execution_contract_v2.md
   - repo_registry_adapter_contract_v1.md
   - assistant_handoff_contract_v1.md
 ---
@@ -52,7 +55,10 @@ Reference assets and external/tooling reference pointers.
 - [Moradin Forge Installer Bootstrap Contract V1](moradin_forge_installer_bootstrap_contract_v1.md)
 - [Moradin Forge Public Export And Portability Contract V1](moradin_forge_public_export_contract_v1.md)
 - [Moradin Forge Release Artifact Contract V1](moradin_forge_release_artifact_contract_v1.md)
+- [Moradin Forge Upgrade Contract V1](moradin_forge_upgrade_contract_v1.md)
+- [Moradin Agent Efficiency Contract V1](moradin_agent_efficiency_contract_v1.md)
 - [Moradin Forge Repo Operating Model V1](repo_operating_model_v1.md)
 - [Tooling Readiness And Install Request Contract V1](tooling_readiness_install_request_contract_v1.md)
+- [Tooling Readiness And Install Execution Contract V2](tooling_readiness_install_execution_contract_v2.md)
 - [Repo Registry And Adapter Contract V1](repo_registry_adapter_contract_v1.md)
 - [Assistant Handoff Contract V1](assistant_handoff_contract_v1.md)

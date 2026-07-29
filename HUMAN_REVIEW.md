@@ -6,7 +6,9 @@ Before approving apply, confirm:
 
 - the agent inspected Forge and the target repo,
 - proposed writes are limited to approved paths,
-- host tool installs are request-only,
+- each user-level install is bound to the reviewed tooling-plan digest,
+- privileged tools remain in a generated script for the user to run,
+- PATH or shell-profile changes have separate consent,
 - rollback is clear,
 - target root workflows remain preserved by default.
 

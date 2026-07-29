@@ -8,10 +8,15 @@ Operate Moradin's Forge as a local, consent-gated integration kit.
    `Harness/entrypoints/forge.md`.
 2. Inspect the target repo before proposing adoption.
 3. Prefer deterministic Forge commands over ad hoc shell chains.
-4. Keep host tool installs request-only.
-5. Preserve target root workflows unless the user explicitly approves a marked
-   root patch.
-6. Report changed paths, validation, install requests, and rollback.
+4. Build an adaptive tooling plan from user-approved workspace roots.
+5. Run verified user-level installers only after plan-digest approval; generate
+   privileged scripts for user execution.
+6. Preserve target root workflows unless the user independently approves a
+   marked `AGENTS.md` or `CLAUDE.md` patch.
+7. Start adopted work with the compact primer and repository brief. Request
+   tools only when they materially improve testing or diagnosis, and consult
+   rerun advice before repeating expensive commands.
+8. Report changed paths, tooling receipts, validation, and rollback.
 
 ## Public Development Rules
 

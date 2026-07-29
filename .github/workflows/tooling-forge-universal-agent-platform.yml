@@ -1,0 +1,65 @@
+name: Forge / Universal Agent Platform
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  platform-contract:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+          - name: macOS
+            os: macos-latest
+          - name: Windows
+            os: windows-latest
+    steps:
+      - name: Checkout
+        # v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Setup Python
+        # v5.6.0
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        # v4
+        uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a
+      - name: Sync locked test environment
+        run: uv sync --group dev --frozen
+      - name: Run universal-agent platform contract
+        run: >-
+          uv run pytest -q
+          tests/scripts/test_universal_agent_platform.py
+          tests/scripts/test_agent_handoffs.py
+      - name: Run Linux native bootstrap
+        if: runner.os == 'Linux'
+        shell: bash
+        run: install/bootstrap-linux.sh --deps none --dry-run --json
+      - name: Run macOS native bootstrap
+        if: runner.os == 'macOS'
+        shell: bash
+        run: install/bootstrap-macos.sh --deps none --dry-run --json
+      - name: Run Windows native bootstrap
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\install\bootstrap-windows.ps1 -Deps none -DryRun -Json

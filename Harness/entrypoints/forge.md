@@ -10,21 +10,28 @@ without breaking that repo's current workflows.
 ## Consent-First Sequence
 
 1. Read `FORGE.md`, `README.md`, and this entrypoint.
-2. Inspect the target repo's `AGENTS.md`, `README.md`, `Makefile`, package files,
-   and deterministic validation commands.
-3. Explain the proposed sidecar, adapter edits, readiness gaps, and rollback path.
-4. Ask for explicit user consent before applying changes.
-5. Run `scripts/moradin_forge.sh plan --target <target-repo>` or the PowerShell
+2. Ask the user which workspace roots Forge may inspect.
+3. Run `scripts/moradin_forge.sh onboard --workspace <workspace-root>` and show
+   the discovered repositories before broader inspection.
+4. Inspect only standard guidance, manifest, CI, container, and deployment
+   files; explain tool recommendations, sidecar writes, agent blocks, and
+   rollback.
+5. Ask for explicit, scoped user consent before applying tools or repository
+   changes.
+6. Run `scripts/moradin_forge.sh plan --target <target-repo>` or the PowerShell
    wrapper to produce a dry-run plan.
-6. Apply only after consent with `scripts/moradin_forge.sh apply --target
+7. Apply only after consent with `scripts/moradin_forge.sh apply --target
    <target-repo> --approve`.
-   Use `--patch-agents` only when the user separately approves a marked root
-   `AGENTS.md` block.
-7. Report changed paths, install-request artifacts, validation commands, and
+   Use `--approve-agent-file AGENTS.md` and/or `--approve-agent-file CLAUDE.md`
+   only when the user separately approves each marked block.
+8. Report changed paths, tooling plans and receipts, validation commands, and
    remaining manual actions.
-8. Verify the sidecar with `scripts/moradin_forge.sh verify --target
+9. Begin adopted work with `context-primer` and `repo-brief`; use
+   `rerun-advice` before repeated expensive commands, and request tools only
+   when they materially improve testing or diagnosis.
+10. Verify the sidecar with `scripts/moradin_forge.sh verify --target
    <target-repo>` or the PowerShell wrapper.
-9. When removal is requested, run `scripts/moradin_forge.sh rollback --target
+11. When removal is requested, run `scripts/moradin_forge.sh rollback --target
    <target-repo> --approve`; never delete an unverified sidecar manually.
 
 ## Authority
@@ -33,13 +40,14 @@ Forge may write only:
 
 - the approved target repo's `.moradins-harness/` sidecar,
 - generated adapter snippets under `.moradins-harness/adapters/`,
-- request-only install artifacts under Moradin control artifacts.
-- a marked Moradin block in an existing target `AGENTS.md` only when
-  `--patch-agents` is explicitly approved.
+- local tooling plans, receipts, counters, and offline bundles,
+- a marked Moradin block in target `AGENTS.md` or `CLAUDE.md` only when that
+  file is explicitly approved.
 
 Forge must not:
 
-- run host install commands,
+- run an installer without an approved plan digest,
+- invoke privileged installation or elevation automatically,
 - overwrite an existing sidecar; the compatibility overwrite flag fails closed,
 - create root repo adapters when a safer snippet is enough,
 - publish, upload, or expose local repo contents.
@@ -56,5 +64,6 @@ Forge must not:
 
 Use the explicit rollback command. It verifies the ownership manifest, refuses
 modified or unowned managed content, removes only the owned sidecar, and
-restores a Forge-owned target `AGENTS.md` change exactly. No host tool
-installation is performed by Forge.
+restores Forge-owned target agent blocks while preserving unrelated guidance.
+Tooling rollback removes only receipt-owned user-local tools; privileged
+package-manager changes remain explicit user operations.

@@ -1,24 +1,34 @@
 # Moradin Forge Agent Handoff
 
-Use this prompt when a user sends an agent to Moradin's Forge for the first
-time.
+Use this prompt when a user sends an agent to Moradin's Forge.
 
 ```text
 You are at Moradin's Forge.
 
-First inspect FORGE.md, AGENTS.md, Harness/entrypoints/forge.md, and the target
-repo's own guidance. Explain what Forge will add, what it will not do, the
-files it proposes to write, the request-only install behavior, validation
-commands, and rollback.
+Read README.md, FORGE.md, AGENTS.md, and Harness/entrypoints/forge.md.
+Ask which workspace roots the user approves. Run onboard once per approved
+root, then show the discovered repository list before inspecting standard
+guidance, manifests, CI, container, deployment, and configuration files. Do
+not inspect arbitrary source or any path outside the approved roots.
 
-Do not apply changes until the user explicitly approves. Keep everything local
-unless the user asks for external tooling. Preserve the target repo's existing
-workflows and root files by default.
+Present the generated plan and request separate consent for workspace scope,
+selected tools, user-level execution, each AGENTS.md or CLAUDE.md change,
+PATH/shell configuration, privileged-script generation and user execution,
+sidecar adoption, and rollback.
 
-Use the deterministic sequence:
-1. scripts/moradin_forge.sh explain
-2. scripts/moradin_forge.sh readiness --target <target-repo>
-3. scripts/moradin_forge.sh plan --target <target-repo>
-4. scripts/moradin_forge.sh apply --target <target-repo> --approve
-5. scripts/moradin_forge.sh verify --target <target-repo>
+Run only digest-approved, verified user-level installers. Never invoke sudo or
+elevation. Give privileged scripts to the user, treat their execution as
+acceptance, and verify afterward.
+
+Apply only approved marker blocks and the local sidecar. Preserve unrelated
+agent guidance and repository workflows. Finish with security, portability,
+and repository-native validation plus exact rollback commands.
+
+After adoption, start with the compact context primer and repository brief.
+Prefer fresh summaries over raw logs, request tools only when they materially
+improve testing or diagnosis, and use rerun advice before repeating expensive
+commands.
+
+Start with:
+scripts/moradin_forge.sh onboard --workspace <approved-workspace>
 ```

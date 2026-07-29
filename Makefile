@@ -1,7 +1,15 @@
-.PHONY: lint-py lint-md test test-py ui-test ui-build payload-validate payload-smoke template-validate template-smoke forge-explain forge-readiness forge-brief forge-plan forge-adopt-dry-run forge-adopt forge-verify forge-rollback forge-smoke forge-dogfood-smoke forge-release-artifacts public-export public-portability-check
+.PHONY: lint-py lint-md test test-py ui-test ui-build payload-validate payload-smoke template-validate template-smoke forge-explain forge-readiness forge-brief forge-onboard forge-tooling-plan forge-tooling-update-plan forge-tooling-apply forge-tooling-bundle forge-tooling-rollback forge-plan forge-adopt-dry-run forge-adopt forge-verify forge-upgrade-plan forge-upgrade forge-upgrade-rollback forge-rollback forge-smoke forge-dogfood-smoke forge-release-artifacts public-export public-portability-check
 
 PUBLIC_EXPORT_DIR ?= /tmp/moradin-forge-public-export-check
 PUBLIC_SIDECAR_SMOKE_DIR ?= /tmp/moradin-forge-sidecar-smoke-check
+WORKSPACE ?=
+PLAN ?=
+PLAN_SHA256 ?=
+OUTPUT ?=
+RECEIPT ?=
+AGENT_FILES ?=
+CREATE_AGENT_FILES ?=
+UPGRADE_ID ?=
 
 lint-py:
 	UV_CACHE_DIR=/tmp/uv-cache uv run ruff check .
@@ -36,6 +44,30 @@ forge-explain forge-brief:
 forge-readiness:
 	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py readiness
 
+forge-onboard:
+	@if [ -z "$(WORKSPACE)" ]; then echo "Usage: make forge-onboard WORKSPACE=<workspace-path>"; exit 1; fi
+	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py onboard --workspace "$(WORKSPACE)"
+
+forge-tooling-plan:
+	@if [ -z "$(WORKSPACE)" ]; then echo "Usage: make forge-tooling-plan WORKSPACE=<workspace-path>"; exit 1; fi
+	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py tooling-plan --workspace "$(WORKSPACE)"
+
+forge-tooling-update-plan:
+	@if [ -z "$(WORKSPACE)" ]; then echo "Usage: make forge-tooling-update-plan WORKSPACE=<workspace-path>"; exit 1; fi
+	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py tooling-update-plan --workspace "$(WORKSPACE)"
+
+forge-tooling-apply:
+	@if [ -z "$(PLAN)" ] || [ -z "$(PLAN_SHA256)" ]; then echo "Usage: make forge-tooling-apply PLAN=<plan.json> PLAN_SHA256=<digest>"; exit 1; fi
+	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py tooling-apply --plan "$(PLAN)" --approve-plan-sha256 "$(PLAN_SHA256)"
+
+forge-tooling-bundle:
+	@if [ -z "$(PLAN)" ] || [ -z "$(OUTPUT)" ]; then echo "Usage: make forge-tooling-bundle PLAN=<plan.json> OUTPUT=<bundle-path>"; exit 1; fi
+	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py tooling-bundle --plan "$(PLAN)" --output "$(OUTPUT)"
+
+forge-tooling-rollback:
+	@if [ -z "$(RECEIPT)" ] || [ "$(APPROVE)" != "1" ]; then echo "Usage: make forge-tooling-rollback RECEIPT=<receipt.json> APPROVE=1"; exit 1; fi
+	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py tooling-rollback --receipt "$(RECEIPT)" --approve
+
 forge-plan forge-adopt-dry-run:
 	@if [ -z "$(TARGET)" ]; then \
 		echo "Usage: make $@ TARGET=<repo-path>"; \
@@ -45,10 +77,10 @@ forge-plan forge-adopt-dry-run:
 
 forge-adopt:
 	@if [ -z "$(TARGET)" ] || [ "$(APPROVE)" != "1" ]; then \
-		echo "Usage: make forge-adopt TARGET=<repo-path> APPROVE=1 [OVERWRITE=1] [PATCH_AGENTS=1]"; \
+		echo "Usage: make forge-adopt TARGET=<repo-path> APPROVE=1 [AGENT_FILES='AGENTS.md CLAUDE.md']"; \
 		exit 1; \
 	fi
-	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py apply --target "$(TARGET)" --approve $(if $(OVERWRITE),--overwrite-sidecar,) $(if $(PATCH_AGENTS),--patch-agents,) --write-install-request
+	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py apply --target "$(TARGET)" --approve $(if $(OVERWRITE),--overwrite-sidecar,) $(if $(PATCH_AGENTS),--patch-agents,) $(foreach file,$(AGENT_FILES),--approve-agent-file $(file)) $(foreach file,$(CREATE_AGENT_FILES),--create-agent-file $(file)) --write-install-request
 
 forge-verify:
 	@if [ -z "$(TARGET)" ]; then \
@@ -56,6 +88,18 @@ forge-verify:
 		exit 1; \
 	fi
 	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py verify --target "$(TARGET)"
+
+forge-upgrade-plan:
+	@if [ -z "$(TARGET)" ]; then echo "Usage: make forge-upgrade-plan TARGET=<repo-path>"; exit 1; fi
+	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py upgrade-plan --target "$(TARGET)"
+
+forge-upgrade:
+	@if [ -z "$(TARGET)" ] || [ -z "$(PLAN)" ] || [ -z "$(PLAN_SHA256)" ]; then echo "Usage: make forge-upgrade TARGET=<repo-path> PLAN=<plan.json> PLAN_SHA256=<digest>"; exit 1; fi
+	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py upgrade --target "$(TARGET)" --plan "$(PLAN)" --approve-plan-sha256 "$(PLAN_SHA256)"
+
+forge-upgrade-rollback:
+	@if [ -z "$(TARGET)" ] || [ -z "$(UPGRADE_ID)" ] || [ "$(APPROVE)" != "1" ]; then echo "Usage: make forge-upgrade-rollback TARGET=<repo-path> UPGRADE_ID=<id> APPROVE=1"; exit 1; fi
+	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py upgrade-rollback --target "$(TARGET)" --upgrade-id "$(UPGRADE_ID)" --approve
 
 forge-rollback:
 	@if [ -z "$(TARGET)" ] || [ "$(APPROVE)" != "1" ]; then \

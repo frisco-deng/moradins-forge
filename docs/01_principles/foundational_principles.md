@@ -15,17 +15,26 @@ related_docs:
 ## Consent First
 
 Forge plans before it applies. Agents must explain proposed writes, risks,
-validation, install requests, and rollback before mutating a target repo.
+validation, tooling actions, agent-file blocks, user configuration, privileged
+scripts, and rollback before mutation.
 
 ## Local First
 
-Forge writes local sidecars and local artifacts. It does not publish target repo
-contents or install host tools.
+Forge writes local sidecars and local artifacts. It does not publish target
+repository contents. It may execute verified user-level tooling actions only
+after exact digest approval and never invokes elevation.
 
 ## Preserve Existing Workflows
 
 Target `Makefile`, package scripts, CI, docs, and agent files remain unchanged by
-default. Root patches require explicit approval.
+default. Each `AGENTS.md` or `CLAUDE.md` owned block requires independent
+approval and preserves unrelated guidance.
+
+## Bounded Discovery
+
+Forge discovers repositories only below explicitly approved workspace roots.
+It reports the repository list before inspecting standard project surfaces and
+does not crawl arbitrary source contents.
 
 ## Deterministic Reflexes
 

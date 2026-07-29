@@ -2,7 +2,7 @@ manifest_version: 1
 name: moradin_harness_payload
 kind: moradin_payload
 payload_id: moradin_harness_payload
-payload_version: 0.2.0-beta.1
+payload_version: 0.2.0-beta.3
 source_root: .
 compatibility_template_root: .harness_template
 materialization_target: target_repo_root
@@ -48,6 +48,7 @@ include_paths:
   - install
   - scripts/forge_bootstrap.py
   - scripts/moradin_forge.py
+  - scripts/moradin_workstation.py
   - scripts/moradin_forge.sh
   - scripts/moradin_forge.ps1
   - scripts/manage_moradin_payload.py
@@ -71,6 +72,9 @@ include_paths:
   - tests/contracts/test_validators.py
   - tests/scripts/test_harness_devops.py
   - tests/scripts/test_moradin_forge.py
+  - tests/scripts/test_moradin_workstation.py
+  - tests/scripts/test_universal_agent_platform.py
+  - tests/scripts/test_agent_handoffs.py
   - tests/scripts/test_public_export.py
   - tests/scripts/test_validate_capture_contract.py
 exclude_paths:
@@ -81,12 +85,17 @@ exclude_paths:
   - Harness/artifacts/control/branch_hygiene_exception.json
   - Harness/artifacts/control/branch_hygiene_exception.md
   - Harness/artifacts/control/forge_runs
+  - Harness/artifacts/control/efficiency
   - Harness/artifacts/control/install_requests
   - Harness/artifacts/control/migration_start
   - Harness/artifacts/control/migration_waves
   - Harness/artifacts/control/review_hardening
   - Harness/artifacts/control/public_export
   - Harness/artifacts/control/repo_registry
+  - Harness/artifacts/control/onboard_runs
+  - Harness/artifacts/control/tooling_plans
+  - Harness/artifacts/control/tooling_receipts
+  - Harness/artifacts/control/upgrade_runs
   - docs/archive
   - docs/exec_plans
   - docs/exec_plans/implementation/completed

@@ -25,8 +25,10 @@ Profile: local agent-first integration kit.
 - `docs/references/moradin_forge_installer_bootstrap_contract_v1.md`
 - `docs/references/moradin_forge_public_export_contract_v1.md`
 - `docs/references/moradin_forge_release_artifact_contract_v1.md`
+- `docs/references/moradin_forge_upgrade_contract_v1.md`
+- `docs/references/moradin_agent_efficiency_contract_v1.md`
 - `docs/references/repo_operating_model_v1.md`
-- `docs/references/tooling_readiness_install_request_contract_v1.md`
+- `docs/references/tooling_readiness_install_execution_contract_v2.md`
 - `Harness/README.md`
 
 ## Agent Adoption Rules
@@ -36,12 +38,16 @@ Profile: local agent-first integration kit.
   validation before apply.
 - Ask for explicit user consent before mutating a target repo.
 - Keep adoption local unless the user explicitly requests external tooling.
-- Do not run host install commands; write request-only install artifacts instead.
+- Run user-level installers only from a digest-bound tooling plan after explicit
+  user approval.
+- Never invoke elevation automatically. Generate a reviewable Bash or
+  PowerShell script for privileged tools and let the user run it.
 - Treat installer bootstrap as repo priming only; it must not run Forge `apply`
   or mutate a target repo.
 - Preserve existing target repo workflows and root files by default.
 - Generate adaptive snippets under `.moradins-harness/adapters/`.
-- Patch a target root `AGENTS.md` only when the user approves `--patch-agents`.
+- Patch target `AGENTS.md` or `CLAUDE.md` marker blocks only when the user
+  approves each file independently.
 
 ## Deterministic Commands
 
@@ -53,9 +59,17 @@ Profile: local agent-first integration kit.
 - `make push-gate`
 - `make forge-explain`
 - `make forge-readiness`
+- `make forge-onboard WORKSPACE=<workspace-path>`
+- `make forge-tooling-plan WORKSPACE=<workspace-path>`
+- `make forge-tooling-update-plan WORKSPACE=<workspace-path>`
+- `make forge-tooling-apply PLAN=<plan.json> PLAN_SHA256=<digest>`
+- `make forge-tooling-rollback RECEIPT=<receipt.json> APPROVE=1`
 - `make forge-plan TARGET=<target-repo>`
-- `make forge-adopt TARGET=<target-repo> APPROVE=1`
+- `make forge-adopt TARGET=<target-repo> APPROVE=1 AGENT_FILES="AGENTS.md CLAUDE.md"`
 - `make forge-verify TARGET=<target-repo>`
+- `make forge-upgrade-plan TARGET=<target-repo>`
+- `make forge-upgrade TARGET=<target-repo> PLAN=<plan.json> PLAN_SHA256=<digest>`
+- `make forge-upgrade-rollback TARGET=<target-repo> UPGRADE_ID=<id> APPROVE=1`
 - `make forge-rollback TARGET=<target-repo> APPROVE=1`
 - `make forge-smoke`
 - `make forge-dogfood-smoke`
@@ -73,34 +87,27 @@ those as the target repo's source of truth.
 ## Baseline Workflow
 
 - Start Forge maintenance with
-  `tpl repo moradins-forge -- make repo-brief TOOLING_SUMMARY_ONLY=1` before
-  broad exploration.
-- Run `tpl context-primer --repo moradins-forge --concern auto --detail compact`
-  after session start, compaction, long resume, or repeated broad reads.
+  `scripts/moradin_forge.sh context-primer --target .` and
+  `scripts/moradin_forge.sh repo-brief --target .` before broad exploration.
+- Run `scripts/moradin_forge.sh state --target .` after session start,
+  compaction, long resume, or repeated broad reads.
 - Read current summaries and named artifacts before reopening source or long
   logs; expand only when evidence is stale, partial, contradictory, or
   release-critical.
 - Use the Python runtime route reported by `make repo-brief`; this repo is a
   `uv` project and raw `python` is not the runtime contract.
-- Run
-  `tpl session-supervisor --mode steering-advisory --watch --live --latest-session --repo moradins-forge`
-  when a session starts polling, rereading the same evidence, or patching
-  through the same failure.
-- Use `tpl session-checkpoint` and `tpl investigation-ledger` before another
-  patch/full rerun when the same failure repeats.
-- Run `tpl rerun-advice moradins-forge -- <command>` before repeating
-  deterministic commands or re-ingesting long logs.
-- Use `tpl state <repo-id>` before repeated raw Git state polling and
-  `tpl skill-summary --all` before rereading shared skill instructions.
-- Run `tpl-ui-review-brief --repo moradins-forge --mode auto --prompt <prompt>`
-  before UI page creation, component additions, existing-surface refinements,
-  screenshot critiques, or formatting/readability fixes.
+- Run `scripts/moradin_forge.sh rerun-advice --target . -- <command>` before
+  repeating deterministic commands or re-ingesting long logs.
+- Record a compact outcome with
+  `scripts/moradin_forge.sh session-checkpoint --target . --outcome
+  <pass|fail|skipped> -- <command>` before another full rerun of the same
+  failure. Use `scripts/moradin_forge.sh diagnostic-brief` to review sanitized
+  local counters.
 - Use `make verify-paths` before public docs, generated sidecars, export
   outputs, or release-facing evidence leave the repo.
-- Do not rely on Codex hooks for routine steering. Keep steering in repo
-  guidance and explicit `.templates` commands; use
-  `tpl codex-hook-status --mode status --format md` only to confirm retired
-  hooks or inspect historical telemetry.
+- These Forge commands are standalone. If a separately installed shared
+  `tpl` deck is available, its summaries and UI review helpers may supplement
+  them, but Forge must never require that private deck at runtime.
 
 ## Operating Rules
 
@@ -115,9 +122,9 @@ those as the target repo's source of truth.
 - The browser UI is optional diagnostics, not the primary install path.
 - Keep UI visual measurement opt-in until Forge has a repo-local screenshot and
   DOM-box capture wrapper.
-- Keep release-candidate promotion, Windows Sandbox/native readiness, macOS
-  signing, WSL smoke, UI visual, CAD, and GPU helper lanes disabled until each
-  has approved evidence and a human promotion gate.
+- Keep signing, UI visual, CAD, GPU, and specialized sandbox lanes opt-in until
+  target evidence selects them. Linux, macOS, Windows, and WSL tooling-plan
+  parity is part of the beta.3 baseline.
 - Before public PRs or releases, run `make public-portability-check` and the
   deterministic gates listed in `docs/references/repo_operating_model_v1.md`.
 

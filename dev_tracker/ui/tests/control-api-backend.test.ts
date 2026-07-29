@@ -1649,7 +1649,10 @@ describe("control-api backend discovery and generate", () => {
     expect(generated.payload.harness_seed_version).toBeTruthy();
     expect(Array.isArray(generated.payload.generated_files)).toBe(true);
     expect(generated.payload.generated_files.length).toBeGreaterThan(10);
-    expect(generated.payload.validation.status).toBe("pass");
+    expect(
+      generated.payload.validation.status,
+      JSON.stringify(generated.payload.validation.checks),
+    ).toBe("pass");
 
     const generatedRepo = path.join(projectsRoot, "mh004-generate-approved");
     const requiredSurface = [

@@ -2,7 +2,7 @@
 title: "Moradin Forge Installer Bootstrap Contract V1"
 status: approved
 owner: moradin-forge
-last_reviewed: 2026-06-09
+last_reviewed: 2026-07-28
 source_refs:
   - ../../scripts/forge_bootstrap.py
   - ../../install/bootstrap-linux.sh
@@ -10,7 +10,7 @@ source_refs:
   - ../../install/bootstrap-windows.ps1
 related_docs:
   - moradin_forge_agent_integration_contract_v1.md
-  - tooling_readiness_install_request_contract_v1.md
+  - tooling_readiness_install_execution_contract_v2.md
   - moradin_forge_public_export_contract_v1.md
 ---
 
@@ -18,10 +18,9 @@ related_docs:
 
 ## Purpose
 
-The installer bootstrap path lets a user clone or prime Forge with a small,
-agent-readable start card before an agent spends tokens rediscovering the repo.
-Bootstrap is not adoption: it must not install host tools, patch a target repo,
-or run Forge `apply`.
+Bootstrap clones or primes Forge and creates a small agent-readable start card
+before an agent spends context rediscovering the repository. Bootstrap is not
+adoption and never runs Forge `apply`.
 
 ## Entrypoints
 
@@ -30,25 +29,26 @@ or run Forge `apply`.
 - Windows PowerShell: `install/bootstrap-windows.ps1`
 - Shared core: `scripts/forge_bootstrap.py`
 
-All entrypoints support the same public options:
+The shared core accepts repository URL, ref, destination, optional target,
+dependency mode, dry-run mode, and JSON output. Existing in-place checkouts are
+reused rather than force-switched.
 
-- repo URL, defaulting to `https://github.com/frisco-deng/moradins-forge.git`
-- ref, defaulting to `main`
-- destination Forge checkout
-- optional target repo placeholder
-- dependency mode: `none`, `minimal`, or `full`
-- dry-run mode
-- JSON output
+## Runtime-Prerequisite Bridge
 
-## Behavior
+When Python 3 is present, bootstrap may prime dependencies already supported by
+the host. It does not install new host tools.
 
-- Existing in-place Forge checkouts are reused and not force-switched.
-- External destinations are cloned or updated with `git` when present.
-- `minimal` dependency mode uses `uv sync --group dev` only when `uv` is
-  already available.
-- `full` mode additionally runs UI dependency priming only when `npm` and the UI
-  package manifest are present.
-- Missing tools are reported as request-only manual actions.
+When Python 3 is absent, the native wrapper generates a reviewable prerequisite
+script under `artifacts/bootstrap/latest/`:
+
+- Linux emits Bash that requires the user to invoke `sudo ... --apply`;
+- macOS emits a user-run Homebrew script;
+- Windows emits PowerShell for a user-approved session.
+
+The wrapper exits without running the generated installer. Dry-run is the
+script default, reversal guidance is printed, and the user must provide the
+explicit apply flag. Elevation is checked only after the dry run so the script
+can be reviewed without privilege.
 
 ## Start Card
 
@@ -57,15 +57,14 @@ Successful non-dry-run bootstrap writes:
 - `artifacts/bootstrap/latest/agent_start.json`
 - `artifacts/bootstrap/latest/agent_start.md`
 
-The start card uses placeholders such as `<forge-root>` and `<target-repo>`.
-It must not contain raw home paths, temp paths, hostnames, usernames, SSH clone
-URLs, Codex session paths, or target repo content.
+The card uses placeholders and excludes raw home paths, temp paths, hostnames,
+usernames, SSH clone URLs, session paths, and target repository content.
 
 ## Safety Rules
 
-- Bootstrap never executes `sudo`, `brew`, `winget`, shell profile edits,
-  credential rewrites, or global Git configuration changes.
-- Bootstrap never runs `scripts/moradin_forge.* apply`.
-- Bootstrap never edits a target repo.
-- Bootstrap artifacts stay under ignored `artifacts/` and are excluded from
-  public exports and sidecar payloads.
+- Bootstrap never invokes `sudo` or elevation.
+- Bootstrap never edits a target repository.
+- Bootstrap never runs Forge adoption or tooling apply.
+- PATH, credentials, and global Git configuration remain untouched.
+- Generated artifacts are ignored and excluded from public exports and
+  sidecar payloads.

@@ -2,84 +2,109 @@
 title: "Moradin Forge Agent Integration Contract V1"
 status: approved
 owner: platform-operations
-last_reviewed: 2026-07-19
+last_reviewed: 2026-07-28
 source_refs:
-  - FORGE.md
-  - Harness/entrypoints/forge.md
-  - Harness/entrypoints/forge_agent_handoff.md
-  - scripts/moradin_forge.py
-  - scripts/forge_bootstrap.py
+  - ../../README.md
+  - ../../FORGE.md
+  - ../../Harness/entrypoints/forge.md
+  - ../../scripts/moradin_forge.py
+  - ../../scripts/moradin_workstation.py
 related_docs:
   - moradin_payload_contract_v1.md
   - moradin_forge_installer_bootstrap_contract_v1.md
   - moradin_forge_public_export_contract_v1.md
-  - tooling_readiness_install_request_contract_v1.md
-  - assistant_handoff_contract_v1.md
+  - tooling_readiness_install_execution_contract_v2.md
+  - moradin_forge_upgrade_contract_v1.md
+  - moradin_agent_efficiency_contract_v1.md
 ---
 
 # Moradin Forge Agent Integration Contract V1
 
 ## Purpose
 
-Moradin's Forge is the agent-first local adoption path. A user can send Codex,
-Claude Code, or another agent to this repo; the agent reads the Forge
-entrypoints, explains the integration, asks for consent, then applies Moradin
-locally through deterministic scripts.
+Moradin's Forge is the agent-first local adoption path. A user may send Codex,
+Claude Code, or another coding agent to Forge and receive the same bounded
+workflow: approved workspace discovery, a reviewable composite plan, separately
+approved tooling and repository changes, deterministic verification, and
+rollback.
 
-## Integration Flow
+## First-Read Sequence
 
-Optional pre-step: run the platform installer bootstrap to clone or prime Forge
-and write `artifacts/bootstrap/latest/agent_start.md`.
+1. Read `README.md`, `FORGE.md`, `AGENTS.md`, and
+   `Harness/entrypoints/forge.md`.
+2. Ask which workspace roots the user approves.
+3. Run `onboard --workspace <approved-root>` for each root.
+4. Show the discovered repository list before deeper inspection.
+5. Inspect only guidance, manifests, CI, container, deployment, and standard
+   configuration files.
+6. Show the exact tool actions and `AGENTS.md` or `CLAUDE.md` owned blocks.
+7. Ask separately for workspace, tool, user-level execution, agent-file,
+   user-configuration, privileged-script, adoption, and rollback approvals.
 
-1. Explain: `scripts/moradin_forge.sh explain` or
-   `.\scripts\moradin_forge.ps1 explain`.
-2. Readiness check: `scripts/moradin_forge.sh readiness --target <target-repo>`.
-3. Dry-run plan: `scripts/moradin_forge.sh plan --target <target-repo>`.
-4. Human review: user reviews proposed writes, readiness gaps, and rollback.
-5. Apply after consent: `scripts/moradin_forge.sh apply --target <target-repo>
-   --approve`.
-6. Verify: `scripts/moradin_forge.sh verify --target <target-repo>`.
-7. Roll back after confirmation: `scripts/moradin_forge.sh rollback --target
-   <target-repo> --approve`.
+Filesystem roots, the full home directory, implicit sibling scope, symlink
+escapes, arbitrary source crawling, and repositories outside approved roots
+are prohibited.
+
+## Adoption Flow
+
+The compatibility sequence remains stable:
+
+1. `scripts/moradin_forge.sh explain`
+2. `scripts/moradin_forge.sh readiness --target <target-repo>`
+3. `scripts/moradin_forge.sh plan --target <target-repo>`
+4. Review proposed writes, readiness gaps, agent blocks, and rollback.
+5. `scripts/moradin_forge.sh apply --target <target-repo> --approve`
+6. `scripts/moradin_forge.sh verify --target <target-repo>`
+7. `scripts/moradin_forge.sh rollback --target <target-repo> --approve`
+
+Readiness and plan remain read-only toward the target. Required runtime gaps
+block apply. Recommended gaps remain selectable through a separate
+digest-bound tooling plan.
 
 ## Write Boundary
 
-Forge may write only:
+After approval, Forge may write only:
 
-- the target repo's `.moradins-harness/` sidecar,
-- adapter snippets under `.moradins-harness/adapters/`,
-- install-request artifacts under `Harness/artifacts/control/install_requests/`,
-- Forge run artifacts under `Harness/artifacts/control/forge_runs/`,
-- a marked Moradin block in an existing target `AGENTS.md` only when
-  `--patch-agents` is explicitly approved.
+- the target repository's `.moradins-harness/` sidecar;
+- adaptive snippets under `.moradins-harness/adapters/`;
+- ignored local plans, requests, receipts, counters, and verification records;
+- a Moradin-owned marker block in canonical root `AGENTS.md` or `CLAUDE.md`
+  when that individual file is approved.
 
-`verify` must report missing sidecar files, copied local-only artifacts,
-forbidden host-specific references, ownership-hash mismatches, unowned sidecar
-content, and mismatches between recorded adapter status and the target
-`AGENTS.md` marker.
+Creating an absent canonical agent file requires both
+`--approve-agent-file <name>` and `--create-agent-file <name>`. Lowercase
+variants are warnings only. `--patch-agents` remains a compatibility alias for
+approving `AGENTS.md`.
 
-Forge must not execute host install commands, publish repo contents, edit
-external source tooling, or overwrite an existing sidecar. The compatibility
-`--overwrite-sidecar` option fails closed until a separately reviewed,
-transactional upgrade contract exists.
+Forge must not overwrite source, manifests, build files, CI workflows,
+deployment configuration, or unrelated agent guidance. An existing sidecar
+must use the transactional upgrade interface; `--overwrite-sidecar` fails
+closed.
+
+## Agent Block Ownership
+
+Each agent file has an independent marker block and ownership record. Plan
+output shows only proposed added/owned lines, so unrelated private guidance is
+not copied into Forge artifacts. Apply stages the sidecar and restores every
+approved agent file if any step fails.
+
+Verification checks the owned block digest while allowing unrelated text to
+evolve. Rollback removes or restores only the owned block and refuses a
+modified marker.
 
 ## Platform Entrypoints
 
-- Linux/macOS: `scripts/moradin_forge.sh`
+- Linux, WSL, and macOS: `scripts/moradin_forge.sh`
 - Windows PowerShell: `scripts/moradin_forge.ps1`
-- Core implementation: `scripts/moradin_forge.py`
-- Bootstrap entrypoints: `install/bootstrap-linux.sh`,
-  `install/bootstrap-macos.sh`, and `install/bootstrap-windows.ps1`
+- Core integration implementation: `scripts/moradin_forge.py`
+- Workstation and efficiency implementation: `scripts/moradin_workstation.py`
 
-The native wrappers choose `uv` when available and fall back to a local Python 3
-interpreter. Missing tools are reported through request-only readiness artifacts.
-Bootstrap uses the same safety boundary and never runs `apply`.
+The wrappers prefer `uv` and fall back to Python 3. Forge has no dependency on
+private `.templates` or Harness repositories at runtime.
 
-## Rollback
+## Verification
 
-Run the explicit rollback command rather than deleting files manually. Rollback
-requires approval, verifies every managed file against the adoption ownership
-record, refuses modified or unowned sidecar content, and restores a Forge-owned
-`AGENTS.md` change byte-for-byte. It removes only the owned sidecar and optional
-owned adapter block. No host tool install rollback is needed because Forge does
-not run host installs.
+`verify` reports missing sidecar files, forbidden host-specific references,
+ownership-hash mismatches, unowned sidecar content, and owned agent-marker
+mismatches. Public release validation additionally proves payload, leak,
+portability, security, SBOM, fresh-clone, and context-preservation contracts.

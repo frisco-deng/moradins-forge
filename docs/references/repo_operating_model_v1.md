@@ -12,6 +12,8 @@ related_docs:
   - moradin_forge_installer_bootstrap_contract_v1.md
   - moradin_forge_release_artifact_contract_v1.md
   - tooling_readiness_install_request_contract_v1.md
+  - tooling_readiness_install_execution_contract_v2.md
+  - moradin_forge_upgrade_contract_v1.md
 ---
 
 # Moradin Forge Repo Operating Model V1
@@ -37,6 +39,10 @@ branches in this repo.
 - Keep optional UI visual, release-candidate promotion, platform signing and
   smoke, CAD, and GPU helper lanes out of default Forge targets until each lane
   has approved evidence and a human promotion gate.
+- Keep dependency submission enabled for the public repository, including the
+  `uv.lock` detector.
+- Run the universal agent contract on Linux, macOS, and Windows CI runners.
+  This platform test matrix does not activate signing or production promotion.
 
 ## Required Public Gates
 
@@ -51,6 +57,7 @@ Use these gates before public PRs and releases:
 - `make release-build`
 - `make public-portability-check`
 - `install/bootstrap-linux.sh --dry-run --json`
+- native Linux, macOS, and Windows onboarding/installer contract CI
 - `npm --prefix dev_tracker/ui ci`
 - `npm --prefix dev_tracker/ui run test`
 - `npm --prefix dev_tracker/ui run build`
