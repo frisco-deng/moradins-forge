@@ -17,7 +17,8 @@ without breaking that repo's current workflows.
    files; explain tool recommendations, sidecar writes, agent blocks, and
    rollback.
 5. Ask for explicit, scoped user consent before applying tools or repository
-   changes.
+   changes. For a complete Linux baseline, offer `install/tooling-suite.sh` and
+   require the human to launch and approve it personally.
 6. Run `scripts/moradin_forge.sh plan --target <target-repo>` or the PowerShell
    wrapper to produce a dry-run plan.
 7. Apply only after consent with `scripts/moradin_forge.sh apply --target
@@ -44,10 +45,11 @@ Forge may write only:
 - a marked Moradin block in target `AGENTS.md` or `CLAUDE.md` only when that
   file is explicitly approved.
 
-Forge must not:
+Forge agents must not:
 
 - run an installer without an approved plan digest,
-- invoke privileged installation or elevation automatically,
+- invoke privileged installation, launch the human installer, enter
+  credentials, or approve its sudo transaction,
 - overwrite an existing sidecar; the compatibility overwrite flag fails closed,
 - create root repo adapters when a safer snippet is enough,
 - publish, upload, or expose local repo contents.
@@ -57,6 +59,7 @@ Forge must not:
 - Linux/macOS: `scripts/moradin_forge.sh`
 - Windows PowerShell: `scripts/moradin_forge.ps1`
 - Python core: `scripts/moradin_forge.py`
+- Human-run Linux tooling suite: `install/tooling-suite.sh`
 - First-use handoff prompt: `Harness/entrypoints/forge_agent_handoff.md`
 - Payload source of truth: `Harness/moradin_payload/manifest.yaml`
 
@@ -65,5 +68,6 @@ Forge must not:
 Use the explicit rollback command. It verifies the ownership manifest, refuses
 modified or unowned managed content, removes only the owned sidecar, and
 restores Forge-owned target agent blocks while preserving unrelated guidance.
-Tooling rollback removes only receipt-owned user-local tools; privileged
-package-manager changes remain explicit user operations.
+Adaptive tooling rollback removes only receipt-owned user-local tools. The
+human-run Linux suite additionally records digest-bound root receipts and can
+roll back only its own package and atomic-shim transactions.

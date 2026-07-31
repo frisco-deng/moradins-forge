@@ -30,6 +30,8 @@ manifest for agent-first local adoption.
 - Agent-first entrypoint: `FORGE.md`
 - Bootstrap entrypoints: `install/bootstrap-linux.sh`,
   `install/bootstrap-macos.sh`, and `install/bootstrap-windows.ps1`
+- Human-run Linux baseline: `install/tooling-suite.sh` with the shared
+  `catalog/workstation-tools.toml`
 
 The compatibility scaffold remains available for one beta release window, but primary
 UI routes, docs, and commands use Moradin payload language.

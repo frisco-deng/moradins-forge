@@ -10,7 +10,9 @@ Operate Moradin's Forge as a local, consent-gated integration kit.
 3. Prefer deterministic Forge commands over ad hoc shell chains.
 4. Build an adaptive tooling plan from user-approved workspace roots.
 5. Run verified user-level installers only after plan-digest approval; generate
-   privileged scripts for user execution.
+   adaptive privileged scripts for user execution. Offer the human-run Linux
+   tooling suite when requested, but never operate its menu or sudo boundary
+   for the user.
 6. Preserve target root workflows unless the user independently approves a
    marked `AGENTS.md` or `CLAUDE.md` patch.
 7. Start adopted work with the compact primer and repository brief. Request

@@ -68,3 +68,10 @@ usernames, SSH clone URLs, session paths, and target repository content.
 - PATH, credentials, and global Git configuration remain untouched.
 - Generated artifacts are ignored and excluded from public exports and
   sidecar payloads.
+
+## Full Linux Tooling Suite
+
+`install/tooling-suite.sh` is a separate human-run workstation installer, not
+bootstrap. It may request sudo after an exact plan review and digest
+confirmation under the Linux tooling-suite contract. This exception does not
+permit bootstrap or an agent to invoke elevation.

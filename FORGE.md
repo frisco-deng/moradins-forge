@@ -17,10 +17,12 @@ If the user sent you here as Codex, Claude Code, or another coding agent:
    - it will not replace existing repo workflows,
    - it will not patch root workflow files by default,
    - it will not inspect outside approved workspace roots,
-   - it will not invoke privileged installation automatically.
+   - an agent will not invoke privileged installation or enter credentials.
 5. Ask the user for explicit consent before running any apply command.
-6. After consent, Forge may execute verified user-level installers. Privileged
-   work is emitted as a reviewable script for the user to run.
+6. After consent, Forge may execute verified user-level installers. Adaptive
+   privileged work is emitted as a reviewable script for the user to run. The
+   separate human-run Linux suite may request sudo only after the user reviews
+   and confirms its exact digest-bound transaction.
 
 If the user wants a low-token first pass, run the platform bootstrap first:
 
@@ -38,6 +40,15 @@ On Windows PowerShell:
 Bootstrap only clones or primes Forge and writes a sanitized start card under
 `artifacts/bootstrap/latest/`; it never installs host tools, patches a target
 repo, or runs `apply`.
+
+For a complete Linux workstation baseline, ask the user to personally run:
+
+```sh
+install/tooling-suite.sh
+```
+
+Agents may explain, plan, and verify this flow but must not select menu options,
+confirm its digest, invoke sudo, or supply credentials for the user.
 
 Use this deterministic path:
 

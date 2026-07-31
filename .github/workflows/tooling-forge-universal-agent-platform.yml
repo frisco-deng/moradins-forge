@@ -26,6 +26,8 @@ jobs:
         include:
           - name: Linux
             os: ubuntu-latest
+          - name: Linux arm64
+            os: ubuntu-24.04-arm
           - name: macOS
             os: macos-latest
           - name: Windows
@@ -55,6 +57,16 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: install/bootstrap-linux.sh --deps none --dry-run --json
+      - name: Run Linux tooling-suite contract
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n install/tooling-suite.sh
+          shellcheck install/tooling-suite.sh
+          uv run pytest -q tests/scripts/test_moradin_tooling_suite.py
+          install/tooling-suite.sh plan --custom --select git \
+            --output "${RUNNER_TEMP}/moradin-tooling-suite-plan.json"
       - name: Run macOS native bootstrap
         if: runner.os == 'macOS'
         shell: bash
@@ -63,3 +75,39 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: .\install\bootstrap-windows.ps1 -Deps none -DryRun -Json
+
+  linux-distro-lifecycle:
+    name: Linux tooling suite / ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - name: Ubuntu 24.04
+            image: ubuntu@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
+          - name: Debian 12
+            image: debian@sha256:9344f8b8992482f80cba753f323adeaf17690076c095ccff6cc9536be98185dc
+          - name: Fedora 44
+            image: fedora@sha256:6c75d5bf57cb0fa5aa4b92c6a83c86c791644496d9ac230de7711f5b8ec3b898
+          - name: Rocky Linux 9
+            image: rockylinux/rockylinux@sha256:8101994123cf3d0a8fee517bee7f39e555c7d92bd2d9eb3303cc988a0eeed00f
+          - name: Arch Linux
+            image: archlinux/archlinux@sha256:a1416966c943087a2339f1d6d6119a591e7e9a2daa2c2f310b6ad84a6042b2ca
+    steps:
+      - name: Checkout
+        # v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Plan, apply, verify, and roll back in a disposable distro
+        env:
+          DISTRO_IMAGE: ${{ matrix.image }}
+        run: >-
+          docker run --rm
+          --volume "${GITHUB_WORKSPACE}:/forge:ro"
+          "${DISTRO_IMAGE}"
+          /forge/tests/scripts/tooling_suite_distro_smoke.sh

@@ -13,6 +13,7 @@ related_docs:
   - tooling_readiness_install_request_contract_v1.md
   - moradin_forge_agent_integration_contract_v1.md
   - moradin_forge_installer_bootstrap_contract_v1.md
+  - moradin_forge_tooling_suite_contract_v1.md
 ---
 
 # Tooling Readiness And Install Execution Contract V2
@@ -110,6 +111,11 @@ and PowerShell for Windows. Each script:
 
 The user running that script is the acceptance event. The agent then reruns
 readiness and project-native verification.
+
+This adaptive contract never invokes elevation. The separate
+`install/tooling-suite.sh` human entrypoint may request sudo only under the
+Linux tooling-suite contract, after the user reviews and confirms the exact
+digest-bound root transaction.
 
 ## Offline Bundles
 

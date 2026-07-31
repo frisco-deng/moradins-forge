@@ -28,10 +28,14 @@ You are at Moradin's Forge.
    - each AGENTS.md or CLAUDE.md file to create or patch;
    - PATH or shell-profile configuration;
    - privileged-script generation and the user's execution of that script.
-6. Execute only the approved user-level actions. Never execute sudo or an
-   elevated PowerShell action. When privileged packages are approved, generate
-   the reviewable script and ask the user to run it; their execution is the
-   acceptance event. Verify the resulting state afterward.
+6. Execute only approved user-level actions. Agents never enter credentials,
+   run sudo, or launch the interactive host installer for the user. A human may
+   run `install/tooling-suite.sh`; for normal tool actions that human-run
+   program may request sudo only after displaying and digest-binding the exact
+   root transaction. A missing runtime/downloader may trigger a separate
+   default-No prompt for named signed-manager prerequisites. The older adaptive
+   flow continues to generate a reviewable privileged script for the user.
+   Verify either path afterward.
 7. Apply the sidecar and each approved agent marker block transactionally.
    Preserve unrelated files and guidance. Run security and repository-native
    validation, then report exact writes and rollback commands.
@@ -67,6 +71,7 @@ Forge separates approval into distinct boundaries:
 | Missing agent file creation | Matching `--create-agent-file` |
 | PATH or shell profile | `--approve-user-config` |
 | Privileged packages | Generate, review, and personally run the script |
+| Interactive Linux suite | Personally launch it and confirm the exact plan digest |
 | Sidecar adoption | `apply --approve` |
 | Sidecar upgrade | Exact upgrade-plan SHA-256 |
 | Rollback | Explicit `--approve` |
@@ -111,6 +116,71 @@ requires the user to run the generated elevated PowerShell script. Forge never
 elevates itself.
 
 ## Onboarding and Tooling
+
+### Interactive Linux baseline
+
+For the simplest complete workstation path on Linux or WSL, the user runs:
+
+```sh
+install/tooling-suite.sh
+```
+
+The first menu offers **Install All** or **Customize**. Install All then offers
+the recommended Practical profile or the broader Extended profile. The program
+runs as the target user, stages checksum-verified assets without privilege, and
+shows additions, upgrades, manual items, repository changes, rollback limits,
+disk estimates, and the exact plan SHA-256. Only after a default-No
+confirmation does the human-run program invoke sudo for the bound root phase.
+If Python 3.11 or download prerequisites are missing, it may first offer a
+separate, minimal signed-package-manager bootstrap; that prompt is also
+default-No and is not plan approval. If a selected full profile needs Python
+3.12, the suite separately offers a user-level, verified-uv install into the
+Forge bootstrap prefix and replans before any host-tool approval.
+
+The suite supports apt, dnf, and pacman families on amd64 and arm64. It never
+uses `curl | bash`, AUR helpers, root pip/npm, or the Docker group. It performs
+no general OS upgrade except the separately shown and approved Arch
+synchronization required to avoid partial upgrades. EPEL also requires a
+separate confirmation. Existing Docker or Podman configuration is preserved.
+
+Planning uses a pinned uv archive whose archive and executable digests are both
+checked; it does not trust an unrelated `uv` or execute arbitrary unowned PATH
+tools for version discovery. Before sudo runs any Forge Python, the approved
+installer snapshot is rehashed and atomically sealed under a root-owned runner
+directory. Python tools are installed against the same Forge-managed Python
+3.12 family used to freeze their wheel lock, with runtime downloads disabled.
+Rollback uses the sealed runner rather than mutable checkout code. A new Podman
+selection includes rootless namespace, network, and storage prerequisites and
+must pass `podman info` as the target user.
+
+Deterministic automation uses the same catalog and transaction engine:
+
+```sh
+install/tooling-suite.sh plan --profile practical --output <tooling-suite-plan.json>
+install/tooling-suite.sh apply \
+  --plan <tooling-suite-plan.json> \
+  --approve-plan-sha256 <sha256>
+install/tooling-suite.sh verify --latest
+```
+
+Use `--profile extended --container-engine podman` for the extended baseline,
+or `--custom --select <tool-id>` with repeatable `--select` and `--exclude`.
+Build a checksummed asset bundle with `bundle --plan ... --output ...`; the
+bundle reports `partial` when signed OS packages remain connected-only.
+
+OS package upgrades occur only when the previous package artifact or an
+equivalent reversible transaction is available. Otherwise the installed
+version is retained and reported. Forge-owned binaries use atomic versioned
+shims and keep one predecessor. Root receipts live under
+`/var/lib/moradins-forge`, backups under `/var/backups/moradins-forge`, and
+matching user receipts under the XDG state directory.
+New direct packages are removed without autoremove during rollback; potentially
+shared dependency packages are retained and reported instead of being purged.
+
+Agents may propose the command, inspect a plan, and verify its receipt. The
+human must launch and approve the sudo-capable path personally.
+
+### Adaptive workspace plan
 
 Create the adaptive practical-full plan:
 
@@ -300,6 +370,12 @@ checks refuse unowned or modified managed content.
 - `make push-gate`
 - `make forge-explain`
 - `make forge-onboard WORKSPACE=<approved-workspace>`
+- `make forge-tooling-suite`
+- `make forge-tooling-suite-plan OUTPUT=<plan.json> PROFILE=practical`
+- `make forge-tooling-suite-apply PLAN=<plan.json> PLAN_SHA256=<digest>`
+- `make forge-tooling-suite-bundle PLAN=<plan.json> OUTPUT=<directory>`
+- `make forge-tooling-suite-verify RECEIPT=<receipt.json>`
+- `make forge-tooling-suite-rollback RECEIPT=<receipt.json> APPROVE_RECEIPT_SHA256=<digest>`
 - `make forge-tooling-plan WORKSPACE=<approved-workspace>`
 - `make forge-tooling-apply PLAN=<plan.json> PLAN_SHA256=<digest>`
 - `make forge-tooling-bundle PLAN=<plan.json> OUTPUT=<directory>`
@@ -342,6 +418,7 @@ host-specific state.
 
 - [Agent integration contract](docs/references/moradin_forge_agent_integration_contract_v1.md)
 - [Tooling execution contract](docs/references/tooling_readiness_install_execution_contract_v2.md)
+- [Linux tooling suite contract](docs/references/moradin_forge_tooling_suite_contract_v1.md)
 - [Installer bootstrap contract](docs/references/moradin_forge_installer_bootstrap_contract_v1.md)
 - [Transactional upgrade contract](docs/references/moradin_forge_upgrade_contract_v1.md)
 - [Agent efficiency contract](docs/references/moradin_agent_efficiency_contract_v1.md)

@@ -68,6 +68,8 @@ Before prerelease promotion, run:
 - `make public-portability-check`;
 - payload, leak, path, CI, and review-ready gates;
 - the Linux, macOS, and Windows universal-agent contract workflow;
+- the Linux interactive tooling-suite plan, transaction, receipt, and rollback
+  contract tests;
 - a fresh public clone build with no private Harness dependency;
 - the release-candidate advisory audit.
 

@@ -23,6 +23,7 @@ include_paths:
   - Makefile
   - pyproject.toml
   - uv.lock
+  - catalog/workstation-tools.toml
   - Harness/moradin_payload/manifest.yaml
   - docs/engineer_entry
   - docs/00_overview
@@ -49,6 +50,7 @@ include_paths:
   - scripts/forge_bootstrap.py
   - scripts/moradin_forge.py
   - scripts/moradin_workstation.py
+  - scripts/moradin_tooling_suite.py
   - scripts/moradin_forge.sh
   - scripts/moradin_forge.ps1
   - scripts/manage_moradin_payload.py
@@ -73,6 +75,8 @@ include_paths:
   - tests/scripts/test_harness_devops.py
   - tests/scripts/test_moradin_forge.py
   - tests/scripts/test_moradin_workstation.py
+  - tests/scripts/test_moradin_tooling_suite.py
+  - tests/scripts/tooling_suite_distro_smoke.sh
   - tests/scripts/test_universal_agent_platform.py
   - tests/scripts/test_agent_handoffs.py
   - tests/scripts/test_public_export.py

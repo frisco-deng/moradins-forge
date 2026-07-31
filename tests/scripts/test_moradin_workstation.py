@@ -67,9 +67,7 @@ def catalog_fields(tool_id: str) -> dict[str, object]:
         "category": spec.category,
         "reason": spec.reason,
         "required": spec.required,
-        "verification_command": (
-            [spec.command, "--version"] if spec.command else []
-        ),
+        "verification_command": ([spec.command, "--version"] if spec.command else []),
     }
 
 
@@ -231,10 +229,10 @@ def test_tooling_apply_requires_exact_digest_and_uses_argv(
                 "status": "missing",
                 "matched_capabilities": ["python"],
                 "resolved": {
-                        "version": "1.2.3",
-                        "source": "pypi",
-                        "cache": "fresh",
-                        "trust": "pypi-hash-verified",
+                    "version": "1.2.3",
+                    "source": "pypi",
+                    "cache": "fresh",
+                    "trust": "pypi-hash-verified",
                     "artifact_sha256s": ["a" * 64],
                 },
                 "install_action": {
@@ -348,10 +346,7 @@ def test_tooling_apply_requires_exact_digest_and_uses_argv(
         verification_receipt_path.read_text(encoding="utf-8")
     )
     assert verification_receipt["status"] == "fail"
-    assert (
-        verification_receipt["executed"][0]["verification_status"]
-        == "fail"
-    )
+    assert verification_receipt["executed"][0]["verification_status"] == "fail"
 
 
 def test_tooling_rollback_only_removes_recorded_uv_tools(
@@ -395,7 +390,7 @@ def test_tooling_rollback_only_removes_recorded_uv_tools(
         {
             "tool_id": "gh",
             "reason": "shared package-manager installs require explicit native removal",
-        }
+        },
     ]
 
 
@@ -657,9 +652,7 @@ def test_network_boundary_rejects_unsafe_sources_and_redirects(url: str) -> None
     handler = moradin_workstation._OfficialSourceRedirectHandler()
     with pytest.raises(WorkstationError):
         handler.redirect_request(
-            moradin_workstation.urllib.request.Request(
-                "https://pypi.org/simple/tool"
-            ),
+            moradin_workstation.urllib.request.Request("https://pypi.org/simple/tool"),
             None,
             302,
             "redirect",
@@ -692,8 +685,10 @@ def test_python_dependency_closure_builds_installable_offline_bundle(
             "",
         ]
     )
+    compiler_argv: list[str] = []
 
-    def compiler(_argv: list[str], **_kwargs: object) -> SimpleNamespace:
+    def compiler(argv: list[str], **_kwargs: object) -> SimpleNamespace:
+        compiler_argv.extend(argv)
         return SimpleNamespace(returncode=0, stdout=lock_text, stderr="")
 
     def fetch_json(url: str) -> dict[str, object]:
@@ -734,6 +729,9 @@ def test_python_dependency_closure_builds_installable_offline_bundle(
     )
     assert closure["status"] == "ready"
     assert len(closure["assets"]) == 2
+    assert compiler_argv[compiler_argv.index("--python-platform") + 1] == (
+        "x86_64-unknown-linux-gnu"
+    )
 
     plan = {
         "version": WORKSTATION_PLAN_VERSION,
@@ -811,9 +809,9 @@ def test_python_dependency_closure_builds_installable_offline_bundle(
     assert 'command -v "$command_name"' in offline_bash
     assert "commands=('semgrep')" in offline_bash
     assert "Unsafe SHA256SUMS entry." in offline_bash
-    offline_powershell = (
-        tmp_path / "bundle/install-user-tools-offline.ps1"
-    ).read_text(encoding="utf-8")
+    offline_powershell = (tmp_path / "bundle/install-user-tools-offline.ps1").read_text(
+        encoding="utf-8"
+    )
     assert "$commands = @('semgrep')" in offline_powershell
     assert "Get-Command $command" in offline_powershell
     assert "Unsafe SHA256SUMS entry." in offline_powershell
@@ -890,6 +888,68 @@ def test_stale_version_metadata_cannot_auto_execute() -> None:
     assert "stale" in action["reason"]
 
 
+def test_github_asset_selector_rejects_distro_packages_for_standalone_linux() -> None:
+    digest = "a" * 64
+    selected = moradin_workstation.select_github_asset(
+        [
+            {
+                "name": "tool_1.0_linux_amd64.deb",
+                "browser_download_url": (
+                    "https://github.com/example/tool/releases/download/v1/tool.deb"
+                ),
+                "digest": f"sha256:{digest}",
+                "size": 10,
+            },
+            {
+                "name": "tool_1.0_linux_amd64.deb.b3",
+                "browser_download_url": (
+                    "https://github.com/example/tool/releases/download/v1/tool.deb.b3"
+                ),
+                "digest": f"sha256:{digest}",
+                "size": 10,
+            },
+            {
+                "name": "tool_1.0_linux_amd64.deb.sha512",
+                "browser_download_url": (
+                    "https://github.com/example/tool/releases/download/v1/tool.deb.sha512"
+                ),
+                "digest": f"sha256:{digest}",
+                "size": 10,
+            },
+            {
+                "name": "tool_1.0_linux_amd64.tar.gz",
+                "browser_download_url": (
+                    "https://github.com/example/tool/releases/download/v1/tool.tar.gz"
+                ),
+                "digest": f"sha256:{digest}",
+                "size": 20,
+            },
+        ],
+        system="linux",
+        arch="amd64",
+    )
+
+    assert selected is not None
+    assert selected["filename"].endswith(".tar.gz")
+
+    deb_only = moradin_workstation.select_github_asset(
+        [
+            {
+                "name": "tool_1.0_linux_amd64.deb",
+                "browser_download_url": (
+                    "https://github.com/example/tool/releases/download/v1/tool.deb"
+                ),
+                "digest": f"sha256:{digest}",
+                "size": 10,
+            }
+        ],
+        system="linux",
+        arch="amd64",
+    )
+    assert deb_only is not None
+    assert deb_only["filename"].endswith(".deb")
+
+
 def test_tooling_rollback_restores_owned_path_block_only(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -963,8 +1023,7 @@ def test_context_primer_and_metrics_are_compact_and_sanitized(tmp_path: Path) ->
     assert advice["action"] == "reuse"
     assert checkpoint["command_sha256"] == advice["command_sha256"]
     metrics_text = (
-        runtime
-        / "Harness/artifacts/control/efficiency/local_counters.json"
+        runtime / "Harness/artifacts/control/efficiency/local_counters.json"
     ).read_text(encoding="utf-8")
     assert repo.as_posix() not in metrics_text
     assert "make verify-fast" not in metrics_text

@@ -8,7 +8,9 @@ When Codex is sent to Moradin's Forge:
    plan before any mutation.
 4. Show tool actions and exact owned agent blocks.
 5. Apply user-level tools or repository changes only with explicit,
-   digest-bound approval. Give privileged scripts to the user.
+   digest-bound approval. Give adaptive privileged scripts to the user. For a
+   complete Linux baseline, offer `install/tooling-suite.sh`; the user must
+   launch it and approve its sudo phase personally.
 6. Use the compact primer, repository brief, and rerun advice before broad
    reads or repeated checks. Request tools only when they materially improve
    testing or diagnosis.

@@ -29,6 +29,7 @@ Profile: local agent-first integration kit.
 - `docs/references/moradin_agent_efficiency_contract_v1.md`
 - `docs/references/repo_operating_model_v1.md`
 - `docs/references/tooling_readiness_install_execution_contract_v2.md`
+- `docs/references/moradin_forge_tooling_suite_contract_v1.md`
 - `Harness/README.md`
 
 ## Agent Adoption Rules
@@ -40,8 +41,10 @@ Profile: local agent-first integration kit.
 - Keep adoption local unless the user explicitly requests external tooling.
 - Run user-level installers only from a digest-bound tooling plan after explicit
   user approval.
-- Never invoke elevation automatically. Generate a reviewable Bash or
-  PowerShell script for privileged tools and let the user run it.
+- Agents never invoke elevation or launch the interactive host installer for
+  the user. The human-run Linux suite may request sudo only after showing and
+  digest-binding its exact root transaction. Adaptive agent flows continue to
+  generate a reviewable privileged script for the user.
 - Treat installer bootstrap as repo priming only; it must not run Forge `apply`
   or mutate a target repo.
 - Preserve existing target repo workflows and root files by default.
@@ -61,6 +64,12 @@ Profile: local agent-first integration kit.
 - `make forge-readiness`
 - `make forge-onboard WORKSPACE=<workspace-path>`
 - `make forge-tooling-plan WORKSPACE=<workspace-path>`
+- `make forge-tooling-suite`
+- `make forge-tooling-suite-plan OUTPUT=<plan.json> PROFILE=practical`
+- `make forge-tooling-suite-apply PLAN=<plan.json> PLAN_SHA256=<digest>`
+- `make forge-tooling-suite-bundle PLAN=<plan.json> OUTPUT=<directory>`
+- `make forge-tooling-suite-verify RECEIPT=<receipt.json>`
+- `make forge-tooling-suite-rollback RECEIPT=<receipt.json> APPROVE_RECEIPT_SHA256=<digest>`
 - `make forge-tooling-update-plan WORKSPACE=<workspace-path>`
 - `make forge-tooling-apply PLAN=<plan.json> PLAN_SHA256=<digest>`
 - `make forge-tooling-rollback RECEIPT=<receipt.json> APPROVE=1`

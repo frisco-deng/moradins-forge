@@ -14,6 +14,7 @@ related_docs:
   - moradin_forge_installer_bootstrap_contract_v1.md
   - moradin_forge_public_export_contract_v1.md
   - tooling_readiness_install_execution_contract_v2.md
+  - moradin_forge_tooling_suite_contract_v1.md
   - moradin_forge_upgrade_contract_v1.md
   - moradin_agent_efficiency_contract_v1.md
 ---
@@ -101,6 +102,11 @@ modified marker.
 
 The wrappers prefer `uv` and fall back to Python 3. Forge has no dependency on
 private `.templates` or Harness repositories at runtime.
+
+The separate human-run Linux baseline is `install/tooling-suite.sh`. Agents may
+offer, plan, and verify that flow but may not operate its interactive menu,
+invoke sudo, enter credentials, or confirm its digest. The program may request
+sudo only after the human reviews and approves the exact root transaction.
 
 ## Verification
 

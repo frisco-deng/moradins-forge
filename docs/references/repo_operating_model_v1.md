@@ -13,6 +13,7 @@ related_docs:
   - moradin_forge_release_artifact_contract_v1.md
   - tooling_readiness_install_request_contract_v1.md
   - tooling_readiness_install_execution_contract_v2.md
+  - moradin_forge_tooling_suite_contract_v1.md
   - moradin_forge_upgrade_contract_v1.md
 ---
 
@@ -57,6 +58,8 @@ Use these gates before public PRs and releases:
 - `make release-build`
 - `make public-portability-check`
 - `install/bootstrap-linux.sh --dry-run --json`
+- `install/tooling-suite.sh plan --custom --select git --output <temp-dir>/plan.json`
+- ShellCheck and shfmt for `install/tooling-suite.sh`
 - native Linux, macOS, and Windows onboarding/installer contract CI
 - `npm --prefix dev_tracker/ui ci`
 - `npm --prefix dev_tracker/ui run test`

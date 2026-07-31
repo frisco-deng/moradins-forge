@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import tomllib
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -93,415 +94,110 @@ class ToolSpec:
     python_package: str = ""
     github_repo: str = ""
     apt_package: str = ""
+    dnf_package: str = ""
+    pacman_package: str = ""
+    dnf_repository: str = ""
     brew_formula: str = ""
     winget_id: str = ""
+    profiles: tuple[str, ...] = ()
+    verification_argv: tuple[str, ...] = ()
+    command_candidates: tuple[str, ...] = ()
+    install_strategy: str = ""
+    protected_existing: bool = False
+    service_impact: bool = False
     manual_only: bool = False
 
 
-TOOL_CATALOG: tuple[ToolSpec, ...] = (
-    ToolSpec(
-        "git",
-        "Git",
-        "git",
-        "core",
-        "source control and deterministic repository state",
-        always_consider=True,
-        required=True,
-        apt_package="git",
-        brew_formula="git",
-        winget_id="Git.Git",
-    ),
-    ToolSpec(
-        "python",
-        "Python 3",
-        "python3",
-        "core",
-        "portable Forge runtime and Python project validation",
-        always_consider=True,
-        required=True,
-        apt_package="python3",
-        brew_formula="python",
-        winget_id="Python.Python.3.12",
-    ),
-    ToolSpec(
-        "uv",
-        "uv",
-        "uv",
-        "core",
-        "reproducible Python environments and isolated user tools",
-        always_consider=True,
-        github_repo="astral-sh/uv",
-        winget_id="astral-sh.uv",
-    ),
-    ToolSpec(
-        "ripgrep",
-        "ripgrep",
-        "rg",
-        "core",
-        "fast bounded source and guidance search",
-        always_consider=True,
-        apt_package="ripgrep",
-        brew_formula="ripgrep",
-        winget_id="BurntSushi.ripgrep.MSVC",
-    ),
-    ToolSpec(
-        "fd",
-        "fd",
-        "fd",
-        "core",
-        "fast bounded file discovery",
-        always_consider=True,
-        apt_package="fd-find",
-        brew_formula="fd",
-        winget_id="sharkdp.fd",
-    ),
-    ToolSpec(
-        "jq",
-        "jq",
-        "jq",
-        "structured-data",
-        "deterministic JSON inspection",
-        always_consider=True,
-        apt_package="jq",
-        brew_formula="jq",
-        winget_id="jqlang.jq",
-    ),
-    ToolSpec(
-        "yq",
-        "yq",
-        "yq",
-        "structured-data",
-        "deterministic YAML inspection",
-        always_consider=True,
-        apt_package="yq",
-        brew_formula="yq",
-        winget_id="MikeFarah.yq",
-    ),
-    ToolSpec(
-        "shellcheck",
-        "ShellCheck",
-        "shellcheck",
-        "shell-qa",
-        "shell installer and automation validation",
-        always_consider=True,
-        apt_package="shellcheck",
-        brew_formula="shellcheck",
-        winget_id="koalaman.shellcheck",
-    ),
-    ToolSpec(
-        "shfmt",
-        "shfmt",
-        "shfmt",
-        "shell-qa",
-        "stable shell formatting",
-        always_consider=True,
-        apt_package="shfmt",
-        brew_formula="shfmt",
-        winget_id="mvdan.shfmt",
-    ),
-    ToolSpec(
-        "yamllint",
-        "yamllint",
-        "yamllint",
-        "shell-qa",
-        "YAML validation for workflows and deployment files",
-        always_consider=True,
-        python_package="yamllint",
-        apt_package="yamllint",
-        brew_formula="yamllint",
-    ),
-    ToolSpec(
-        "pre_commit",
-        "pre-commit",
-        "pre-commit",
-        "core",
-        "repeatable local repository gates",
-        always_consider=True,
-        python_package="pre-commit",
-        apt_package="pre-commit",
-        brew_formula="pre-commit",
-    ),
-    ToolSpec(
-        "gh",
-        "GitHub CLI",
-        "gh",
-        "core",
-        "bounded pull-request and workflow inspection",
-        always_consider=True,
-        apt_package="gh",
-        brew_formula="gh",
-        winget_id="GitHub.cli",
-    ),
-    ToolSpec(
-        "gitleaks",
-        "Gitleaks",
-        "gitleaks",
-        "security",
-        "secret scanning before publication",
-        triggers=("git", "ci", "release"),
-        apt_package="gitleaks",
-        brew_formula="gitleaks",
-        winget_id="Gitleaks.Gitleaks",
-        github_repo="gitleaks/gitleaks",
-    ),
-    ToolSpec(
-        "semgrep",
-        "Semgrep CE",
-        "semgrep",
-        "security",
-        "portable static analysis",
-        triggers=("python", "node", "go", "rust", "java"),
-        python_package="semgrep",
-        brew_formula="semgrep",
-    ),
-    ToolSpec(
-        "pip_audit",
-        "pip-audit",
-        "pip-audit",
-        "security",
-        "Python dependency vulnerability scanning",
-        triggers=("python",),
-        python_package="pip-audit",
-    ),
-    ToolSpec(
-        "actionlint",
-        "actionlint",
-        "actionlint",
-        "security",
-        "GitHub Actions syntax and semantic validation",
-        triggers=("github-actions",),
-        brew_formula="actionlint",
-        winget_id="rhysd.actionlint",
-        github_repo="rhysd/actionlint",
-    ),
-    ToolSpec(
-        "zizmor",
-        "zizmor",
-        "zizmor",
-        "security",
-        "GitHub Actions security analysis",
-        triggers=("github-actions",),
-        python_package="zizmor",
-        brew_formula="zizmor",
-        github_repo="woodruffw/zizmor",
-    ),
-    ToolSpec(
-        "hadolint",
-        "Hadolint",
-        "hadolint",
-        "security",
-        "Dockerfile policy validation",
-        triggers=("container",),
-        brew_formula="hadolint",
-        winget_id="hadolint.hadolint",
-        github_repo="hadolint/hadolint",
-    ),
-    ToolSpec(
-        "conftest",
-        "Conftest",
-        "conftest",
-        "security",
-        "policy-as-code validation for structured configuration",
-        triggers=("container", "kubernetes", "terraform"),
-        brew_formula="conftest",
-        github_repo="open-policy-agent/conftest",
-    ),
-    ToolSpec(
-        "trivy",
-        "Trivy",
-        "trivy",
-        "security",
-        "filesystem, container, dependency, and IaC scanning",
-        triggers=("container", "kubernetes", "terraform", "release"),
-        apt_package="trivy",
-        brew_formula="trivy",
-        winget_id="AquaSecurity.Trivy",
-        github_repo="aquasecurity/trivy",
-    ),
-    ToolSpec(
-        "syft",
-        "Syft",
-        "syft",
-        "supply-chain",
-        "SPDX and CycloneDX software bills of materials",
-        triggers=("container", "release", "production"),
-        brew_formula="syft",
-        winget_id="Anchore.Syft",
-        github_repo="anchore/syft",
-    ),
-    ToolSpec(
-        "grype",
-        "Grype",
-        "grype",
-        "supply-chain",
-        "SBOM and filesystem vulnerability scanning",
-        triggers=("container", "release", "production"),
-        brew_formula="grype",
-        winget_id="Anchore.Grype",
-        github_repo="anchore/grype",
-    ),
-    ToolSpec(
-        "osv_scanner",
-        "OSV-Scanner",
-        "osv-scanner",
-        "supply-chain",
-        "open-source dependency vulnerability scanning",
-        triggers=("python", "node", "go", "rust", "release"),
-        brew_formula="osv-scanner",
-        winget_id="Google.OSV-Scanner",
-        github_repo="google/osv-scanner",
-    ),
-    ToolSpec(
-        "docker",
-        "Docker",
-        "docker",
-        "container",
-        "container build and reproducible test environments",
-        triggers=("container",),
-        apt_package="docker.io",
-        brew_formula="docker",
-        winget_id="Docker.DockerDesktop",
-        manual_only=True,
-    ),
-    ToolSpec(
-        "kubectl",
-        "kubectl",
-        "kubectl",
-        "kubernetes",
-        "Kubernetes manifest and cluster validation",
-        triggers=("kubernetes",),
-        apt_package="kubectl",
-        brew_formula="kubectl",
-        winget_id="Kubernetes.kubectl",
-        github_repo="kubernetes/kubernetes",
-    ),
-    ToolSpec(
-        "helm",
-        "Helm",
-        "helm",
-        "kubernetes",
-        "Helm chart validation and packaging",
-        triggers=("helm", "kubernetes"),
-        brew_formula="helm",
-        winget_id="Helm.Helm",
-        github_repo="helm/helm",
-    ),
-    ToolSpec(
-        "kind",
-        "kind",
-        "kind",
-        "kubernetes",
-        "disposable Kubernetes integration tests",
-        triggers=("kubernetes",),
-        brew_formula="kind",
-        winget_id="Kubernetes.kind",
-        github_repo="kubernetes-sigs/kind",
-    ),
-    ToolSpec(
-        "kubeconform",
-        "kubeconform",
-        "kubeconform",
-        "kubernetes",
-        "offline Kubernetes schema validation",
-        triggers=("kubernetes",),
-        brew_formula="kubeconform",
-        github_repo="yannh/kubeconform",
-    ),
-    ToolSpec(
-        "cosign",
-        "Cosign",
-        "cosign",
-        "release",
-        "artifact and container signature verification",
-        triggers=("signing", "release"),
-        brew_formula="cosign",
-        winget_id="Sigstore.Cosign",
-        github_repo="sigstore/cosign",
-    ),
-    ToolSpec(
-        "scorecard",
-        "OpenSSF Scorecard",
-        "scorecard",
-        "release",
-        "repository supply-chain posture checks",
-        triggers=("release", "github-actions"),
-        brew_formula="scorecard",
-        github_repo="ossf/scorecard",
-    ),
-    ToolSpec(
-        "sops",
-        "SOPS",
-        "sops",
-        "release",
-        "encrypted configuration workflows",
-        triggers=("sops", "kubernetes", "production"),
-        brew_formula="sops",
-        winget_id="Mozilla.SOPS",
-        github_repo="getsops/sops",
-    ),
-    ToolSpec(
-        "just",
-        "just",
-        "just",
-        "developer-experience",
-        "deterministic project command entrypoints",
-        triggers=("just",),
-        apt_package="just",
-        brew_formula="just",
-        winget_id="Casey.Just",
-        github_repo="casey/just",
-    ),
-    ToolSpec(
-        "watchexec",
-        "watchexec",
-        "watchexec",
-        "developer-experience",
-        "bounded watch-mode validation",
-        triggers=("watch",),
-        apt_package="watchexec",
-        brew_formula="watchexec",
-        winget_id="Watchexec.Watchexec",
-        github_repo="watchexec/watchexec",
-    ),
-    ToolSpec(
-        "node",
-        "Node.js",
-        "node",
-        "ui",
-        "Node and browser project validation",
-        triggers=("node", "ui"),
-        apt_package="nodejs",
-        brew_formula="node",
-        winget_id="OpenJS.NodeJS.LTS",
-    ),
-    ToolSpec(
-        "playwright",
-        "Playwright",
-        "playwright",
-        "ui",
-        "headless browser and visual validation",
-        triggers=("ui",),
-        manual_only=True,
-    ),
-    ToolSpec(
-        "sandbox",
-        "Sandbox runtime",
-        "",
-        "sandbox",
-        "isolation for untrusted tools and destructive tests",
-        triggers=("untrusted-tools",),
-        manual_only=True,
-    ),
-    ToolSpec(
-        "cad",
-        "CAD validation lane",
-        "",
-        "cad",
-        "mechanical CAD validation and export",
-        triggers=("cad",),
-        manual_only=True,
-    ),
+CATALOG_PATH = (
+    Path(__file__).resolve().parents[1] / "catalog" / "workstation-tools.toml"
 )
+
+
+def load_tool_catalog(path: Path = CATALOG_PATH) -> tuple[ToolSpec, ...]:
+    """Load and strictly validate the public workstation catalog."""
+    if path.is_symlink() or not path.is_file():
+        raise WorkstationError(f"workstation catalog must be a regular file: {path}")
+    try:
+        document = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError) as error:
+        raise WorkstationError("workstation catalog is not valid TOML") from error
+    if document.get("schema_version") != 1 or not isinstance(
+        document.get("tools"), list
+    ):
+        raise WorkstationError("workstation catalog schema_version must be 1")
+    known_fields = set(ToolSpec.__dataclass_fields__)
+    rows: list[ToolSpec] = []
+    seen: set[str] = set()
+    for raw in document["tools"]:
+        if not isinstance(raw, dict):
+            raise WorkstationError("workstation catalog contains a malformed tool")
+        unknown = sorted(set(raw) - known_fields)
+        if unknown:
+            raise WorkstationError(
+                "workstation catalog contains unknown fields: " + ", ".join(unknown)
+            )
+        values = dict(raw)
+        for field in (
+            "profiles",
+            "triggers",
+            "verification_argv",
+            "command_candidates",
+        ):
+            value = values.get(field, [])
+            if not isinstance(value, list) or not all(
+                isinstance(item, str) for item in value
+            ):
+                raise WorkstationError(
+                    f"workstation catalog {field} must be a string array"
+                )
+            values[field] = tuple(value)
+        try:
+            spec = ToolSpec(**values)
+        except TypeError as error:
+            raise WorkstationError(
+                "workstation catalog tool fields are incomplete"
+            ) from error
+        if (
+            not re.fullmatch(r"[a-z][a-z0-9_]*", spec.id)
+            or spec.id in seen
+            or not spec.label
+            or not spec.category
+            or not spec.reason
+        ):
+            raise WorkstationError(f"workstation catalog tool is invalid: {spec.id!r}")
+        if any(profile not in {"practical", "extended"} for profile in spec.profiles):
+            raise WorkstationError(f"workstation catalog profile is invalid: {spec.id}")
+        if spec.dnf_repository not in {"", "epel"}:
+            raise WorkstationError(
+                f"workstation catalog repository is invalid: {spec.id}"
+            )
+        if spec.install_strategy not in {"", "uv-python"}:
+            raise WorkstationError(
+                f"workstation catalog install strategy is invalid: {spec.id}"
+            )
+        if spec.github_repo and not re.fullmatch(
+            r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", spec.github_repo
+        ):
+            raise WorkstationError(
+                f"workstation catalog GitHub repository is invalid: {spec.id}"
+            )
+        for package in (spec.apt_package, spec.dnf_package, spec.pacman_package):
+            if package and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9+_.:@/-]*", package):
+                raise WorkstationError(
+                    f"workstation catalog package is invalid: {spec.id}"
+                )
+        seen.add(spec.id)
+        rows.append(spec)
+    return tuple(rows)
+
+
+def verification_argv(spec: ToolSpec) -> list[str]:
+    if spec.verification_argv:
+        return list(spec.verification_argv)
+    return [spec.command, "--version"] if spec.command else []
+
+
+TOOL_CATALOG: tuple[ToolSpec, ...] = load_tool_catalog()
 
 
 def utc_now() -> str:
@@ -576,13 +272,46 @@ def normalized_arch(machine: str | None = None) -> str:
     return value or "unknown"
 
 
+def linux_package_manager(os_release_path: Path = Path("/etc/os-release")) -> str:
+    if normalized_platform() != "linux":
+        return ""
+    values: dict[str, str] = {}
+    try:
+        lines = os_release_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        lines = []
+    for line in lines:
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key] = value.strip().strip('"').lower()
+    os_id = values.get("ID", "")
+    id_like = set(values.get("ID_LIKE", "").split())
+    if (
+        os_id in {"ubuntu", "debian"} or id_like.intersection({"ubuntu", "debian"})
+    ) and shutil.which("apt-cache"):
+        return "apt"
+    if (
+        os_id in {"fedora", "rhel", "rocky", "almalinux"}
+        or id_like.intersection({"fedora", "rhel"})
+    ) and shutil.which("dnf"):
+        return "dnf"
+    if (os_id == "arch" or "arch" in id_like) and shutil.which("pacman"):
+        return "pacman"
+    return ""
+
+
 def ensure_approved_workspace(path: Path) -> Path:
     expanded = path.expanduser()
     if not expanded.exists() or not expanded.is_dir():
-        raise WorkstationError(f"approved workspace must be an existing directory: {path}")
+        raise WorkstationError(
+            f"approved workspace must be an existing directory: {path}"
+        )
     resolved = expanded.resolve()
     if resolved == Path(resolved.anchor):
-        raise WorkstationError("filesystem roots cannot be approved as Forge workspaces")
+        raise WorkstationError(
+            "filesystem roots cannot be approved as Forge workspaces"
+        )
     if resolved == Path.home().resolve():
         raise WorkstationError(
             "the full home directory is too broad; approve one or more workspace subdirectories"
@@ -694,11 +423,16 @@ def inspect_repository_capabilities(repo_root: Path) -> dict[str, Any]:
         if present:
             capabilities.add(capability)
 
-    github_actions = _directory_has_suffix(repo_root, ".github/workflows", (".yml", ".yaml"))
-    kubernetes = any(
-        (repo_root / directory).is_dir()
-        for directory in ("k8s", "kubernetes", "manifests", "charts")
-    ) or markers["helm"]
+    github_actions = _directory_has_suffix(
+        repo_root, ".github/workflows", (".yml", ".yaml")
+    )
+    kubernetes = (
+        any(
+            (repo_root / directory).is_dir()
+            for directory in ("k8s", "kubernetes", "manifests", "charts")
+        )
+        or markers["helm"]
+    )
     production = _has_any_file(
         repo_root,
         (
@@ -710,8 +444,12 @@ def inspect_repository_capabilities(repo_root: Path) -> dict[str, Any]:
             "helmfile.yml",
         ),
     )
-    signing = _has_any_file(repo_root, ("cosign.pub", "cosign.key", "signing-policy.yaml"))
-    untrusted_tools = (repo_root / "plugins").is_dir() or (repo_root / "extensions").is_dir()
+    signing = _has_any_file(
+        repo_root, ("cosign.pub", "cosign.key", "signing-policy.yaml")
+    )
+    untrusted_tools = (repo_root / "plugins").is_dir() or (
+        repo_root / "extensions"
+    ).is_dir()
     watch = _has_any_file(repo_root, ("watchexec.toml", ".watchexec.toml"))
     for capability, present in (
         ("github-actions", github_actions),
@@ -854,6 +592,14 @@ def _fetch_json(url: str, timeout: float = 8.0) -> dict[str, Any]:
 
 
 def _run_metadata_command(argv: list[str]) -> str:
+    environment = None
+    if platform.system().lower() == "linux":
+        environment = {
+            "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            "LANG": "C.UTF-8",
+            "LC_ALL": "C.UTF-8",
+            "HOME": Path.home().as_posix(),
+        }
     try:
         completed = subprocess.run(
             argv,
@@ -861,11 +607,10 @@ def _run_metadata_command(argv: list[str]) -> str:
             capture_output=True,
             text=True,
             timeout=15,
+            env=environment,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
-        raise WorkstationError(
-            f"package metadata command failed: {argv[0]}"
-        ) from error
+        raise WorkstationError(f"package metadata command failed: {argv[0]}") from error
     if completed.returncode != 0:
         raise WorkstationError(
             f"package metadata command failed: {argv[0]} exited {completed.returncode}"
@@ -880,7 +625,8 @@ def resolve_package_manager_version(
     now: datetime,
 ) -> dict[str, Any] | None:
     checked_at = now.replace(microsecond=0).isoformat()
-    if system == "linux" and spec.apt_package and shutil.which("apt-cache"):
+    manager = linux_package_manager() if system == "linux" else ""
+    if manager == "apt" and spec.apt_package:
         output = _run_metadata_command(["apt-cache", "policy", spec.apt_package])
         candidate = ""
         for line in output.splitlines():
@@ -891,6 +637,51 @@ def resolve_package_manager_version(
             return {
                 "version": candidate,
                 "source": "apt",
+                "source_url": "",
+                "asset_url": "",
+                "sha256": "",
+                "artifact_sha256s": [],
+                "trust": "signed-package-manager",
+                "checked_at": checked_at,
+            }
+    if manager == "dnf" and spec.dnf_package:
+        output = _run_metadata_command(
+            [
+                "dnf",
+                "--quiet",
+                "repoquery",
+                "--latest-limit",
+                "1",
+                "--qf",
+                "%{EVR}",
+                spec.dnf_package,
+            ]
+        )
+        candidate = next(
+            (line.strip() for line in output.splitlines() if line.strip()), ""
+        )
+        if candidate:
+            return {
+                "version": candidate,
+                "source": "dnf",
+                "source_url": "",
+                "asset_url": "",
+                "sha256": "",
+                "artifact_sha256s": [],
+                "trust": "signed-package-manager",
+                "checked_at": checked_at,
+            }
+    if manager == "pacman" and spec.pacman_package:
+        output = _run_metadata_command(["pacman", "-Si", spec.pacman_package])
+        candidate = ""
+        for line in output.splitlines():
+            if line.startswith("Version") and ":" in line:
+                candidate = line.split(":", 1)[1].strip()
+                break
+        if candidate:
+            return {
+                "version": candidate,
+                "source": "pacman",
                 "source_url": "",
                 "asset_url": "",
                 "sha256": "",
@@ -964,14 +755,21 @@ def resolve_package_manager_version(
     return None
 
 
-def _wheel_platform_score(filename: str, *, system: str, arch: str) -> int | None:
+def _wheel_platform_score(
+    filename: str,
+    *,
+    system: str,
+    arch: str,
+    python_version: str | None = None,
+) -> int | None:
     lowered = filename.lower()
     if not lowered.endswith(".whl"):
         return None
-    python_version = f"cp{platform.python_version_tuple()[0]}{platform.python_version_tuple()[1]}"
+    selected_python = python_version or ".".join(platform.python_version_tuple()[:2])
+    python_tag = "cp" + selected_python.replace(".", "")
     if "-py3-none-any.whl" in lowered:
         return 0
-    if f"-{python_version}-" not in lowered and "-abi3-" not in lowered:
+    if f"-{python_tag}-" not in lowered and "-abi3-" not in lowered:
         return None
     arch_tokens = {
         "amd64": ("x86_64", "amd64", "win_amd64", "universal2"),
@@ -993,13 +791,19 @@ def select_pypi_wheel(
     *,
     system: str,
     arch: str,
-) -> dict[str, str] | None:
+    python_version: str | None = None,
+) -> dict[str, Any] | None:
     candidates: list[tuple[int, str, dict[str, Any]]] = []
     for item in files:
         if not isinstance(item, dict) or item.get("yanked"):
             continue
         filename = str(item.get("filename", ""))
-        score = _wheel_platform_score(filename, system=system, arch=arch)
+        score = _wheel_platform_score(
+            filename,
+            system=system,
+            arch=arch,
+            python_version=python_version,
+        )
         digest = str(item.get("digests", {}).get("sha256", "")).lower()
         url = str(item.get("url", ""))
         if (
@@ -1017,6 +821,7 @@ def select_pypi_wheel(
         "filename": filename,
         "url": str(selected["url"]),
         "sha256": str(selected["digests"]["sha256"]).lower(),
+        "size": int(selected.get("size", 0)),
     }
 
 
@@ -1025,7 +830,7 @@ def select_github_asset(
     *,
     system: str,
     arch: str,
-) -> dict[str, str] | None:
+) -> dict[str, Any] | None:
     system_tokens = {
         "linux": ("linux",),
         "macos": ("darwin", "macos", "mac"),
@@ -1035,7 +840,7 @@ def select_github_asset(
         "amd64": ("x86_64", "amd64", "x64"),
         "arm64": ("aarch64", "arm64"),
     }.get(arch, (arch,))
-    candidates: list[tuple[str, dict[str, Any], str]] = []
+    candidates: list[tuple[int, str, dict[str, Any], str]] = []
     for item in assets:
         if not isinstance(item, dict):
             continue
@@ -1044,9 +849,37 @@ def select_github_asset(
         if (
             not any(token in lowered for token in system_tokens)
             or not any(token in lowered for token in arch_tokens)
+            or (system == "linux" and lowered.endswith((".rpm", ".apk")))
+            or lowered.endswith(
+                (
+                    ".7z",
+                    ".asc",
+                    ".b3",
+                    ".json",
+                    ".jsonl",
+                    ".minisig",
+                    ".pem",
+                    ".sigstore",
+                    ".tar.zst",
+                    ".txt",
+                    ".xml",
+                    ".yaml",
+                    ".yml",
+                    ".zst",
+                )
+            )
             or any(
                 token in lowered
-                for token in ("checksum", "checksums", "sha256", "sbom", ".sig")
+                for token in (
+                    "checksum",
+                    "checksums",
+                    "sha256",
+                    "sha512",
+                    "sha1",
+                    "md5",
+                    "sbom",
+                    ".sig",
+                )
             )
         ):
             continue
@@ -1055,14 +888,18 @@ def select_github_asset(
         url = str(item.get("browser_download_url", ""))
         if not re.fullmatch(r"[0-9a-f]{64}", digest) or not url:
             continue
-        candidates.append((name, item, digest))
+        package_priority = 1 if system == "linux" and lowered.endswith(".deb") else 0
+        candidates.append((package_priority, name, item, digest))
     if not candidates:
         return None
-    name, item, digest = sorted(candidates, key=lambda row: row[0])[0]
+    _priority, name, item, digest = sorted(
+        candidates, key=lambda row: (row[0], row[1])
+    )[0]
     return {
         "filename": name,
         "url": str(item["browser_download_url"]),
         "sha256": digest,
+        "size": int(item.get("size", 0)),
     }
 
 
@@ -1082,9 +919,7 @@ def resolve_latest_version(
     arch = arch or normalized_arch()
     cache = _cache_payload(cache_path)
     tools = cache.setdefault("tools", {})
-    cache_key = (
-        f"{system}:{arch}:{'python' if prefer_python else 'native'}:{spec.id}"
-    )
+    cache_key = f"{system}:{arch}:{'python' if prefer_python else 'native'}:{spec.id}"
     cached = tools.get(cache_key)
     if isinstance(cached, dict) and not refresh and _cache_entry_fresh(cached, now):
         return {**cached, "cache": "fresh"}
@@ -1116,12 +951,13 @@ def resolve_latest_version(
                 {
                     str(item.get("digests", {}).get("sha256", ""))
                     for item in releases
-                    if isinstance(item, dict)
-                    and item.get("digests", {}).get("sha256")
+                    if isinstance(item, dict) and item.get("digests", {}).get("sha256")
                 }
             )
             if not version:
-                raise WorkstationError(f"PyPI did not report a stable version for {spec.id}")
+                raise WorkstationError(
+                    f"PyPI did not report a stable version for {spec.id}"
+                )
             resolved.update(
                 {
                     "version": version,
@@ -1143,10 +979,13 @@ def resolve_latest_version(
                         "asset_url": selected["url"],
                         "asset_filename": selected["filename"],
                         "sha256": selected["sha256"],
+                        "asset_size": selected["size"],
                     }
                 )
         elif spec.github_repo:
-            source_url = f"https://api.github.com/repos/{spec.github_repo}/releases/latest"
+            source_url = (
+                f"https://api.github.com/repos/{spec.github_repo}/releases/latest"
+            )
             payload = fetch_json(source_url)
             version = str(payload.get("tag_name", "")).strip()
             html_url = str(payload.get("html_url", "")).strip()
@@ -1163,11 +1002,7 @@ def resolve_latest_version(
                 }
             )
             selected = select_github_asset(
-                [
-                    item
-                    for item in payload.get("assets", [])
-                    if isinstance(item, dict)
-                ],
+                [item for item in payload.get("assets", []) if isinstance(item, dict)],
                 system=system,
                 arch=arch,
             )
@@ -1177,6 +1012,7 @@ def resolve_latest_version(
                         "asset_url": selected["url"],
                         "asset_filename": selected["filename"],
                         "sha256": selected["sha256"],
+                        "asset_size": selected["size"],
                         "trust": "official-release-digest",
                     }
                 )
@@ -1195,11 +1031,7 @@ def resolve_latest_version(
             }
         )
 
-    tools[cache_key] = {
-        key: value
-        for key, value in resolved.items()
-        if key != "cache"
-    }
+    tools[cache_key] = {key: value for key, value in resolved.items() if key != "cache"}
     cache["updated_at"] = now.replace(microsecond=0).isoformat()
     write_json(cache_path, cache)
     return resolved
@@ -1251,18 +1083,25 @@ def _install_action(
             }
         )
         return action
+    linux_manager = str(resolved.get("source", ""))
+    linux_package = {
+        "apt": spec.apt_package,
+        "dnf": spec.dnf_package,
+        "pacman": spec.pacman_package,
+    }.get(linux_manager, "")
     if (
         system == "linux"
-        and spec.apt_package
+        and linux_package
         and resolution_current
-        and resolved.get("source") == "apt"
+        and linux_manager in {"apt", "dnf", "pacman"}
         and resolved.get("trust") == "signed-package-manager"
         and version not in {"", "latest-stable"}
     ):
         action.update(
             {
                 "kind": "privileged-script",
-                "package": spec.apt_package,
+                "package": linux_package,
+                "manager": linux_manager,
                 "version": version,
                 "requires_elevation": True,
                 "reason": "signed operating-system package manager",
@@ -1362,8 +1201,9 @@ def _resolve_python_bundle_asset(
     *,
     system: str,
     arch: str,
+    python_version: str,
     fetch_json: Callable[[str], dict[str, Any]],
-) -> tuple[dict[str, str] | None, str]:
+) -> tuple[dict[str, Any] | None, str]:
     source_url = (
         "https://pypi.org/pypi/"
         + urllib.parse.quote(package, safe="")
@@ -1374,13 +1214,10 @@ def _resolve_python_bundle_asset(
     try:
         payload = fetch_json(source_url)
         selected = select_pypi_wheel(
-            [
-                item
-                for item in payload.get("urls", [])
-                if isinstance(item, dict)
-            ],
+            [item for item in payload.get("urls", []) if isinstance(item, dict)],
             system=system,
             arch=arch,
+            python_version=python_version,
         )
     except (WorkstationError, urllib.error.URLError, TimeoutError, ValueError) as error:
         return None, str(error)
@@ -1396,6 +1233,7 @@ def _resolve_python_bundle_asset(
         "filename": selected["filename"],
         "url": selected["url"],
         "sha256": selected["sha256"],
+        "size": int(selected.get("size", 0)),
         "source": "pypi",
     }, ""
 
@@ -1405,6 +1243,9 @@ def build_python_tool_lock(
     *,
     system: str,
     arch: str,
+    python_version: str | None = None,
+    uv_command: str | Path | None = None,
+    environment: dict[str, str] | None = None,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     fetch_json: Callable[[str], dict[str, Any]] = _fetch_json,
 ) -> dict[str, Any]:
@@ -1426,7 +1267,8 @@ def build_python_tool_lock(
             "assets": [],
             "blockers": [],
         }
-    if shutil.which("uv") is None:
+    uv_executable = str(uv_command) if uv_command is not None else shutil.which("uv")
+    if not uv_executable:
         return {
             "status": "unavailable",
             "direct_requirements": direct_requirements,
@@ -1441,9 +1283,20 @@ def build_python_tool_lock(
             "\n".join(direct_requirements) + "\n",
             encoding="utf-8",
         )
+        python_target = {
+            ("linux", "amd64"): "x86_64-unknown-linux-gnu",
+            ("linux", "arm64"): "aarch64-unknown-linux-gnu",
+            ("macos", "amd64"): "x86_64-apple-darwin",
+            ("macos", "arm64"): "aarch64-apple-darwin",
+            ("windows", "amd64"): "x86_64-pc-windows-msvc",
+            ("windows", "arm64"): "aarch64-pc-windows-msvc",
+        }.get((system, arch), system)
+        selected_python = python_version or ".".join(
+            platform.python_version_tuple()[:2]
+        )
         completed = runner(
             [
-                "uv",
+                uv_executable,
                 "pip",
                 "compile",
                 requirements_in.as_posix(),
@@ -1453,9 +1306,9 @@ def build_python_tool_lock(
                 "--only-binary",
                 ":all:",
                 "--python-platform",
-                system,
+                python_target,
                 "--python-version",
-                ".".join(platform.python_version_tuple()[:2]),
+                selected_python,
                 "--default-index",
                 "https://pypi.org/simple",
                 "--no-config",
@@ -1463,6 +1316,7 @@ def build_python_tool_lock(
             check=False,
             capture_output=True,
             text=True,
+            env=environment,
         )
     if completed.returncode != 0:
         return {
@@ -1492,7 +1346,7 @@ def build_python_tool_lock(
             "assets": [],
             "blockers": [{"reason": str(error)}],
         }
-    assets: list[dict[str, str]] = []
+    assets: list[dict[str, Any]] = []
     blockers: list[dict[str, str]] = []
     with ThreadPoolExecutor(max_workers=min(8, max(1, len(pinned)))) as executor:
         futures = {
@@ -1502,6 +1356,7 @@ def build_python_tool_lock(
                 version,
                 system=system,
                 arch=arch,
+                python_version=selected_python,
                 fetch_json=fetch_json,
             ): (package, version)
             for package, version in pinned
@@ -1560,13 +1415,17 @@ def build_agent_adapter_section(sidecar_dir: str, agent_file: str) -> str:
 
 def _read_guidance(path: Path) -> str:
     if path.is_symlink():
-        raise WorkstationError(f"agent guidance symlinks are not patchable: {path.name}")
+        raise WorkstationError(
+            f"agent guidance symlinks are not patchable: {path.name}"
+        )
     if not path.exists():
         return ""
     if not path.is_file():
         raise WorkstationError(f"agent guidance path is not a file: {path.name}")
     if path.stat().st_size > MAX_GUIDANCE_BYTES:
-        raise WorkstationError(f"agent guidance exceeds {MAX_GUIDANCE_BYTES} bytes: {path.name}")
+        raise WorkstationError(
+            f"agent guidance exceeds {MAX_GUIDANCE_BYTES} bytes: {path.name}"
+        )
     return path.read_text(encoding="utf-8")
 
 
@@ -1574,7 +1433,9 @@ def render_owned_agent_patch(existing: str, section: str) -> tuple[str, str]:
     begin_count = existing.count(AGENT_MARKER_BEGIN)
     end_count = existing.count(AGENT_MARKER_END)
     if begin_count != end_count or begin_count > 1:
-        raise WorkstationError("agent guidance contains ambiguous Moradin marker blocks")
+        raise WorkstationError(
+            "agent guidance contains ambiguous Moradin marker blocks"
+        )
     if begin_count == 1:
         start = existing.index(AGENT_MARKER_BEGIN)
         end = existing.index(AGENT_MARKER_END, start) + len(AGENT_MARKER_END)
@@ -1583,7 +1444,9 @@ def render_owned_agent_patch(existing: str, section: str) -> tuple[str, str]:
         return existing[:start] + section + existing[end:], "update"
     if not existing:
         return section, "create"
-    separator = "" if existing.endswith("\n\n") else "\n" if existing.endswith("\n") else "\n\n"
+    separator = (
+        "" if existing.endswith("\n\n") else "\n" if existing.endswith("\n") else "\n\n"
+    )
     return existing + separator + section, "patch"
 
 
@@ -1675,14 +1538,11 @@ def build_tooling_plan(
     )
     uv_present = command_present("uv")
     catalog_by_id = {spec.id: spec for spec in TOOL_CATALOG}
-    unknown = sorted(
-        (set(include_tools) | set(exclude_tools)) - set(catalog_by_id)
-    )
+    unknown = sorted((set(include_tools) | set(exclude_tools)) - set(catalog_by_id))
     if unknown:
         raise WorkstationError("unknown tooling ids: " + ", ".join(unknown))
     selected_specs = {
-        spec.id: spec
-        for spec in recommended_tool_specs(capability_union)
+        spec.id: spec for spec in recommended_tool_specs(capability_union)
     }
     selected_specs.update(
         {tool_id: catalog_by_id[tool_id] for tool_id in include_tools}
@@ -1719,12 +1579,12 @@ def build_tooling_plan(
                 "required": spec.required,
                 "present": present,
                 "status": "present" if present else "missing",
-                "matched_capabilities": sorted(capability_union.intersection(spec.triggers)),
+                "matched_capabilities": sorted(
+                    capability_union.intersection(spec.triggers)
+                ),
                 "resolved": resolved,
                 "install_action": action,
-                "verification_command": (
-                    [spec.command, "--version"] if spec.command else []
-                ),
+                "verification_command": verification_argv(spec),
             }
         )
 
@@ -1745,7 +1605,11 @@ def build_tooling_plan(
         "profile": profile,
         "explicitly_included_tools": sorted(set(include_tools)),
         "explicitly_excluded_tools": sorted(set(exclude_tools)),
-        "platform": {"system": system, "arch": arch},
+        "platform": {
+            "system": system,
+            "arch": arch,
+            "package_manager": linux_package_manager() if system == "linux" else "",
+        },
         "approved_workspaces": [path.as_posix() for path in approved],
         "discovered_repository_count": len(repository_rows),
         "repositories": repository_rows,
@@ -1798,7 +1662,9 @@ def tooling_plan_markdown(plan: dict[str, Any]) -> str:
         if repo.get("lowercase_agent_file_warnings"):
             lines.append(
                 "  - non-canonical agent files: "
-                + ", ".join(f"`{name}`" for name in repo["lowercase_agent_file_warnings"])
+                + ", ".join(
+                    f"`{name}`" for name in repo["lowercase_agent_file_warnings"]
+                )
             )
     lines.extend(["", "## Tool Recommendations", ""])
     for row in plan["tools"]:
@@ -1850,14 +1716,7 @@ def write_tooling_plan_artifacts(
     run_id: str | None = None,
 ) -> dict[str, str]:
     run_id = run_id or datetime.now(tz=UTC).strftime("tooling_%Y%m%dT%H%M%S%fZ")
-    root = (
-        forge_root
-        / "Harness"
-        / "artifacts"
-        / "control"
-        / "tooling_plans"
-        / run_id
-    )
+    root = forge_root / "Harness" / "artifacts" / "control" / "tooling_plans" / run_id
     json_path = root / "tooling_plan.json"
     markdown_path = root / "tooling_plan.md"
     write_json(json_path, plan)
@@ -1871,9 +1730,7 @@ def write_tooling_plan_artifacts(
         "privileged_bash": privileged["bash"],
         "privileged_bash_sha256": sha256_file(Path(privileged["bash"])),
         "privileged_powershell": privileged["powershell"],
-        "privileged_powershell_sha256": sha256_file(
-            Path(privileged["powershell"])
-        ),
+        "privileged_powershell_sha256": sha256_file(Path(privileged["powershell"])),
     }
 
 
@@ -1960,12 +1817,12 @@ def validate_tooling_plan(
             raise WorkstationError("tooling plan contains a malformed tool row")
         tool_id = str(row.get("id", ""))
         if tool_id in seen or tool_id not in catalog:
-            raise WorkstationError(f"tooling plan contains an invalid tool id: {tool_id}")
+            raise WorkstationError(
+                f"tooling plan contains an invalid tool id: {tool_id}"
+            )
         seen.add(tool_id)
         spec = catalog[tool_id]
-        expected_verification = (
-            [spec.command, "--version"] if spec.command else []
-        )
+        expected_verification = verification_argv(spec)
         if (
             row.get("label") != spec.label
             or row.get("command") != spec.command
@@ -1991,11 +1848,15 @@ def validate_tooling_plan(
         argv = action.get("argv", [])
         if kind == "manual":
             if argv:
-                raise WorkstationError(f"manual tooling action must not contain argv: {tool_id}")
+                raise WorkstationError(
+                    f"manual tooling action must not contain argv: {tool_id}"
+                )
             continue
         version = str(resolved.get("version", ""))
         if not version or version == "latest-stable":
-            raise WorkstationError(f"automatic tooling action is not version-frozen: {tool_id}")
+            raise WorkstationError(
+                f"automatic tooling action is not version-frozen: {tool_id}"
+            )
         if kind == "user-local":
             expected = [
                 "uv",
@@ -2011,10 +1872,7 @@ def validate_tooling_plan(
                 or resolved.get("cache") not in {"fresh", "refreshed"}
                 or resolved.get("source") != "pypi"
                 or resolved.get("trust") != "pypi-hash-verified"
-                or not (
-                    resolved.get("artifact_sha256s")
-                    or resolved.get("sha256")
-                )
+                or not (resolved.get("artifact_sha256s") or resolved.get("sha256"))
                 or action.get("auto_execute") is not True
             ):
                 raise WorkstationError(
@@ -2037,10 +1895,16 @@ def validate_tooling_plan(
                 )
             continue
         if kind == "privileged-script":
+            expected_source = str(resolved.get("source", ""))
             expected_package = (
-                spec.apt_package if system == "linux" else spec.winget_id
+                {
+                    "apt": spec.apt_package,
+                    "dnf": spec.dnf_package,
+                    "pacman": spec.pacman_package,
+                }.get(expected_source, "")
+                if system == "linux"
+                else spec.winget_id
             )
-            expected_source = "apt" if system == "linux" else "winget"
             if (
                 system not in {"linux", "windows"}
                 or not expected_package
@@ -2050,7 +1914,11 @@ def validate_tooling_plan(
                 or action.get("auto_execute") is not False
                 or argv
                 or resolved.get("cache") not in {"fresh", "refreshed"}
-                or resolved.get("source") != expected_source
+                or (
+                    system == "linux"
+                    and expected_source not in {"apt", "dnf", "pacman"}
+                )
+                or (system == "windows" and expected_source != "winget")
                 or resolved.get("trust") != "signed-package-manager"
             ):
                 raise WorkstationError(
@@ -2071,8 +1939,7 @@ def validate_tooling_plan(
         else:
             pinned = []
         pinned_pairs = {
-            (normalized_package_name(package), version)
-            for package, version in pinned
+            (normalized_package_name(package), version) for package, version in pinned
         }
         if len(pinned_pairs) != len(pinned):
             raise WorkstationError("Python tool lock contains duplicate packages")
@@ -2131,19 +1998,26 @@ def validate_tooling_plan(
 
 def _safe_action_argv(action: dict[str, Any]) -> list[str]:
     argv = action.get("argv")
-    if not isinstance(argv, list) or not argv or not all(
-        isinstance(item, str) and item and "\x00" not in item for item in argv
+    if (
+        not isinstance(argv, list)
+        or not argv
+        or not all(
+            isinstance(item, str) and item and "\x00" not in item for item in argv
+        )
     ):
         raise WorkstationError("approved user-level install action has invalid argv")
     executable = argv[0]
     if executable not in {"uv", "brew", "winget"}:
-        raise WorkstationError(f"approved installer executable is not allowlisted: {executable}")
+        raise WorkstationError(
+            f"approved installer executable is not allowlisted: {executable}"
+        )
     return argv
 
 
 def render_privileged_bash(plan: dict[str, Any]) -> str:
     catalog = {spec.id: spec for spec in TOOL_CATALOG}
     plan_system = str(plan.get("platform", {}).get("system", ""))
+    manager = str(plan.get("platform", {}).get("package_manager", "")) or "apt"
     package_versions = {
         str(row["install_action"]["package"]): str(
             row["install_action"].get("version", "")
@@ -2155,14 +2029,21 @@ def render_privileged_bash(plan: dict[str, Any]) -> str:
         and row["install_action"]["package"]
     }
     packages = sorted(
-        f"{package}={version}" if version else package
+        (
+            f"{package}={version}"
+            if manager == "apt" and version
+            else f"{package}-{version}"
+            if manager == "dnf" and version
+            else package
+        )
         for package, version in package_versions.items()
     )
     reversal_packages = sorted(package_versions)
-    quoted = " ".join("'" + package.replace("'", "'\"'\"'") + "'" for package in packages)
+    quoted = " ".join(
+        "'" + package.replace("'", "'\"'\"'") + "'" for package in packages
+    )
     reversal_quoted = " ".join(
-        "'" + package.replace("'", "'\"'\"'") + "'"
-        for package in reversal_packages
+        "'" + package.replace("'", "'\"'\"'") + "'" for package in reversal_packages
     )
     verify_commands = sorted(
         {
@@ -2170,7 +2051,8 @@ def render_privileged_bash(plan: dict[str, Any]) -> str:
             for row in plan["tools"]
             if plan_system in {"", "linux"}
             if str(row.get("id", "")) in catalog
-            if row["id"] in {
+            if row["id"]
+            in {
                 item["tool_id"]
                 for item in (
                     candidate["install_action"]
@@ -2181,10 +2063,13 @@ def render_privileged_bash(plan: dict[str, Any]) -> str:
             and catalog[str(row["id"])].command
         }
     )
-    checks = "\n".join(f"command -v {command!s} >/dev/null" for command in verify_commands)
+    checks = "\n".join(
+        f"command -v {command!s} >/dev/null" for command in verify_commands
+    )
     return f"""#!/usr/bin/env bash
 set -euo pipefail
 
+manager={manager!r}
 packages=({quoted})
 reversal_packages=({reversal_quoted})
 if [[ "${{#packages[@]}}" -eq 0 ]]; then
@@ -2202,11 +2087,32 @@ if [[ "${{EUID}}" -ne 0 ]]; then
   exit 2
 fi
 
-apt-get update
-apt-get install -y -- "${{packages[@]}}"
+case "$manager" in
+  apt)
+    apt-get update
+    apt-get install -y --no-install-recommends -- "${{packages[@]}}"
+    reversal="apt-get remove -- ${{reversal_packages[*]}}"
+    ;;
+  dnf)
+    dnf install -y --setopt=install_weak_deps=False -- "${{packages[@]}}"
+    reversal="dnf remove -- ${{reversal_packages[*]}}"
+    ;;
+  pacman)
+    if [[ "${{2:-}}" != "--approve-arch-system-upgrade" ]]; then
+      printf '%s\\n' "Arch requires --apply --approve-arch-system-upgrade." >&2
+      exit 2
+    fi
+    pacman -Syu --needed --noconfirm -- "${{packages[@]}}"
+    reversal="pacman -R -- ${{reversal_packages[*]}}"
+    ;;
+  *)
+    printf 'unsupported package manager: %s\\n' "$manager" >&2
+    exit 2
+    ;;
+esac
 {checks}
 printf '%s\\n' "Moradin privileged tooling verification passed."
-printf '%s\\n' "reversal: apt-get remove -- ${{reversal_packages[*]}}"
+printf 'reversal: %s\\n' "$reversal"
 """
 
 
@@ -2309,13 +2215,16 @@ def apply_user_path_config(bin_root: Path) -> dict[str, Any]:
     if profile_path.exists() and not profile_path.is_file():
         raise WorkstationError("user profile must be a regular file")
     existing = (
-        profile_path.read_text(encoding="utf-8")
-        if profile_path.is_file()
-        else ""
+        profile_path.read_text(encoding="utf-8") if profile_path.is_file() else ""
     )
     if PATH_MARKER_BEGIN in existing or PATH_MARKER_END in existing:
-        if existing.count(PATH_MARKER_BEGIN) != 1 or existing.count(PATH_MARKER_END) != 1:
-            raise WorkstationError("user profile contains ambiguous Moradin PATH markers")
+        if (
+            existing.count(PATH_MARKER_BEGIN) != 1
+            or existing.count(PATH_MARKER_END) != 1
+        ):
+            raise WorkstationError(
+                "user profile contains ambiguous Moradin PATH markers"
+            )
         return {
             "status": "already_present",
             "path": "<user-home>/.profile",
@@ -2328,7 +2237,13 @@ def apply_user_path_config(bin_root: Path) -> dict[str, Any]:
             "",
         ]
     )
-    separator = "" if not existing or existing.endswith("\n\n") else "\n" if existing.endswith("\n") else "\n\n"
+    separator = (
+        ""
+        if not existing or existing.endswith("\n\n")
+        else "\n"
+        if existing.endswith("\n")
+        else "\n\n"
+    )
     rendered = existing + separator + block
     atomic_write_text(profile_path, rendered)
     return {
@@ -2386,11 +2301,7 @@ def apply_tooling_plan(
             "UV_TOOL_DIR": install_root.as_posix(),
             "UV_TOOL_BIN_DIR": bin_root.as_posix(),
             "HOMEBREW_NO_AUTO_UPDATE": "1",
-            "PATH": (
-                bin_root.as_posix()
-                + os.pathsep
-                + environment.get("PATH", "")
-            ),
+            "PATH": (bin_root.as_posix() + os.pathsep + environment.get("PATH", "")),
         }
     )
     receipt_root = (
@@ -2452,8 +2363,7 @@ def apply_tooling_plan(
                 "tool_id": row["id"],
                 "exit_code": install_exit_code,
                 "reason": (
-                    install_reason
-                    or "approved user-level installer returned a failure"
+                    install_reason or "approved user-level installer returned a failure"
                 ),
             }
             break
@@ -2583,12 +2493,17 @@ def rollback_tooling_receipt(
     if not approve:
         raise WorkstationError("tooling rollback requires --approve")
     if receipt_path.is_symlink() or not receipt_path.is_file():
-        raise WorkstationError(f"tooling receipt must be a regular file: {receipt_path}")
+        raise WorkstationError(
+            f"tooling receipt must be a regular file: {receipt_path}"
+        )
     try:
         receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise WorkstationError("tooling receipt is not valid JSON") from error
-    if not isinstance(receipt, dict) or receipt.get("version") != TOOLING_RECEIPT_VERSION:
+    if (
+        not isinstance(receipt, dict)
+        or receipt.get("version") != TOOLING_RECEIPT_VERSION
+    ):
         raise WorkstationError(f"receipt version must be {TOOLING_RECEIPT_VERSION}")
     install_base = (
         Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
@@ -2613,7 +2528,9 @@ def rollback_tooling_receipt(
         if not isinstance(item, dict):
             continue
         tool_id = str(item.get("tool_id", ""))
-        spec = next((candidate for candidate in TOOL_CATALOG if candidate.id == tool_id), None)
+        spec = next(
+            (candidate for candidate in TOOL_CATALOG if candidate.id == tool_id), None
+        )
         action_kind = str(item.get("action_kind", ""))
         if spec and spec.python_package and action_kind in {"", "user-local"}:
             expected_shim = str(item.get("shim_identity_sha256", ""))
@@ -2722,9 +2639,7 @@ def rollback_tooling_receipt(
         "version": TOOLING_ROLLBACK_VERSION,
         "generated_at": utc_now(),
         "status": (
-            "pass"
-            if all(item["status"] == "pass" for item in removed)
-            else "fail"
+            "pass" if all(item["status"] == "pass" for item in removed) else "fail"
         ),
         "removed": removed,
         "manual": manual,
@@ -2793,8 +2708,7 @@ def render_offline_user_bash(plan: dict[str, Any]) -> str:
         else []
     )
     quoted = " ".join(
-        "'" + requirement.replace("'", "'\"'\"'") + "'"
-        for requirement in requirements
+        "'" + requirement.replace("'", "'\"'\"'") + "'" for requirement in requirements
     )
     commands = " ".join(
         "'" + command.replace("'", "'\"'\"'") + "'"
@@ -2859,8 +2773,7 @@ def render_offline_user_powershell(plan: dict[str, Any]) -> str:
         else []
     )
     rendered = ", ".join(
-        "'" + requirement.replace("'", "''") + "'"
-        for requirement in requirements
+        "'" + requirement.replace("'", "''") + "'" for requirement in requirements
     )
     commands = ", ".join(
         "'" + command.replace("'", "''") + "'"
@@ -2918,7 +2831,9 @@ Write-Output 'Moradin offline user-tool installation passed.'
 """
 
 
-def write_offline_user_scripts(output_root: Path, plan: dict[str, Any]) -> dict[str, str]:
+def write_offline_user_scripts(
+    output_root: Path, plan: dict[str, Any]
+) -> dict[str, str]:
     bash_path = output_root / "install-user-tools-offline.sh"
     powershell_path = output_root / "install-user-tools-offline.ps1"
     bash_path.write_text(render_offline_user_bash(plan), encoding="utf-8")
@@ -2945,7 +2860,9 @@ def build_offline_bundle(
         raise WorkstationError(f"offline bundle output already exists: {output}")
     staging_parent = output.parent
     staging_parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="moradin-bundle-", dir=staging_parent) as temporary:
+    with tempfile.TemporaryDirectory(
+        prefix="moradin-bundle-", dir=staging_parent
+    ) as temporary:
         root = Path(temporary) / "bundle"
         assets_root = root / "assets"
         assets_root.mkdir(parents=True)
@@ -3042,9 +2959,10 @@ def build_offline_bundle(
                     }
                 )
                 continue
-            filename = str(resolved.get("asset_filename", "")) or Path(
-                urllib.parse.urlparse(asset_url).path
-            ).name
+            filename = (
+                str(resolved.get("asset_filename", ""))
+                or Path(urllib.parse.urlparse(asset_url).path).name
+            )
             if not filename or Path(filename).name != filename:
                 raise WorkstationError(
                     f"offline bundle asset filename is unsafe for {row['id']}"
@@ -3094,8 +3012,12 @@ def build_offline_bundle(
         write_json(root / "bundle-manifest.json", manifest)
         checksum_lines = []
         for path in sorted(item for item in root.rglob("*") if item.is_file()):
-            checksum_lines.append(f"{sha256_file(path)}  {path.relative_to(root).as_posix()}")
-        (root / "SHA256SUMS").write_text("\n".join(checksum_lines) + "\n", encoding="utf-8")
+            checksum_lines.append(
+                f"{sha256_file(path)}  {path.relative_to(root).as_posix()}"
+            )
+        (root / "SHA256SUMS").write_text(
+            "\n".join(checksum_lines) + "\n", encoding="utf-8"
+        )
         os.replace(root, output)
     return {
         **manifest,
@@ -3135,9 +3057,7 @@ def compact_repo_state(repo_root: Path) -> dict[str, Any]:
             "head": head if head_code == 0 else "",
             "changed_path_count": changed_count,
             "worktree_sha256": (
-                sha256_bytes(status.encode("utf-8"))
-                if status_code == 0
-                else ""
+                sha256_bytes(status.encode("utf-8")) if status_code == 0 else ""
             ),
         },
         "capabilities": inspection["capabilities"],
@@ -3184,7 +3104,9 @@ def detected_repo_commands(repo_root: Path) -> list[str]:
                 if name in scripts:
                     commands.append(f"npm run {name}")
     if (repo_root / "pyproject.toml").is_file():
-        commands.append("uv run pytest" if (repo_root / "uv.lock").is_file() else "python -m pytest")
+        commands.append(
+            "uv run pytest" if (repo_root / "uv.lock").is_file() else "python -m pytest"
+        )
     if (repo_root / "Cargo.toml").is_file():
         commands.append("cargo test")
     if (repo_root / "go.mod").is_file():
@@ -3200,7 +3122,9 @@ def repo_brief(repo_root: Path) -> dict[str, Any]:
         "generated_at": utc_now(),
         "state": state,
         "preferred_commands": commands,
-        "next_action": commands[0] if commands else "Inspect the repository README and guidance files.",
+        "next_action": commands[0]
+        if commands
+        else "Inspect the repository README and guidance files.",
     }
 
 
@@ -3222,7 +3146,10 @@ def load_efficiency_metrics(runtime_root: Path) -> dict[str, Any]:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             payload = {}
-        if isinstance(payload, dict) and payload.get("version") == EFFICIENCY_METRICS_VERSION:
+        if (
+            isinstance(payload, dict)
+            and payload.get("version") == EFFICIENCY_METRICS_VERSION
+        ):
             return payload
     return {
         "version": EFFICIENCY_METRICS_VERSION,
@@ -3277,7 +3204,9 @@ def context_primer(repo_root: Path, *, runtime_root: Path) -> str:
     rendered = "\n".join(lines)
     encoded = rendered.encode("utf-8")
     if len(encoded) > CONTEXT_PRIMER_LIMIT:
-        rendered = encoded[: CONTEXT_PRIMER_LIMIT - 1].decode("utf-8", errors="ignore") + "\n"
+        rendered = (
+            encoded[: CONTEXT_PRIMER_LIMIT - 1].decode("utf-8", errors="ignore") + "\n"
+        )
     metrics = load_efficiency_metrics(runtime_root)
     metrics["counters"]["primer_runs"] += 1
     metrics["counters"]["summarized_bytes"] += len(rendered.encode("utf-8"))
@@ -3379,7 +3308,9 @@ def diagnostic_brief(*, runtime_root: Path) -> dict[str, Any]:
     if failed:
         next_action = "Inspect the latest distinct failure before another rerun."
     elif counters["reruns_avoided"]:
-        next_action = "Reuse current evidence and continue with the next unresolved task."
+        next_action = (
+            "Reuse current evidence and continue with the next unresolved task."
+        )
     else:
         next_action = "Run the shortest repository-native validation command."
     return {

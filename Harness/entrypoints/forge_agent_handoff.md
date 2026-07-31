@@ -16,9 +16,11 @@ selected tools, user-level execution, each AGENTS.md or CLAUDE.md change,
 PATH/shell configuration, privileged-script generation and user execution,
 sidecar adoption, and rollback.
 
-Run only digest-approved, verified user-level installers. Never invoke sudo or
-elevation. Give privileged scripts to the user, treat their execution as
-acceptance, and verify afterward.
+Run only digest-approved, verified user-level installers. Never invoke sudo,
+enter credentials, or operate the interactive installer for the user. Offer
+`install/tooling-suite.sh` when the user wants the complete Linux baseline;
+the user launches it and confirms its exact digest-bound root transaction.
+Adaptive privileged scripts remain user-run. Verify either path afterward.
 
 Apply only approved marker blocks and the local sidecar. Preserve unrelated
 agent guidance and repository workflows. Finish with security, portability,

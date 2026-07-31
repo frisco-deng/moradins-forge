@@ -315,7 +315,7 @@ PORTABLE_TEXT_REPLACEMENTS: list[tuple[re.Pattern[str], str]] = [
 ]
 
 PORTABLE_SIDECAR_MAKEFILE_TEXT = """\
-.PHONY: test payload-validate payload-smoke forge-explain forge-readiness forge-onboard forge-tooling-plan forge-tooling-update-plan forge-tooling-apply forge-tooling-bundle forge-tooling-rollback forge-plan forge-adopt forge-verify forge-upgrade-plan forge-upgrade forge-upgrade-rollback forge-rollback forge-smoke
+.PHONY: test payload-validate payload-smoke forge-explain forge-readiness forge-onboard forge-tooling-suite forge-tooling-suite-plan forge-tooling-suite-apply forge-tooling-suite-bundle forge-tooling-suite-verify forge-tooling-suite-rollback forge-tooling-plan forge-tooling-update-plan forge-tooling-apply forge-tooling-bundle forge-tooling-rollback forge-plan forge-adopt forge-verify forge-upgrade-plan forge-upgrade forge-upgrade-rollback forge-rollback forge-smoke
 
 TARGET ?=
 APPROVE ?=
@@ -326,9 +326,14 @@ PLAN ?=
 PLAN_SHA256 ?=
 OUTPUT ?=
 RECEIPT ?=
+APPROVE_RECEIPT_SHA256 ?=
 AGENT_FILES ?=
 CREATE_AGENT_FILES ?=
 UPGRADE_ID ?=
+PROFILE ?=
+SELECT ?=
+EXCLUDE ?=
+CONTAINER_ENGINE ?=
 
 test:
 \tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run pytest
@@ -348,6 +353,29 @@ forge-readiness:
 forge-onboard:
 \t@if [ -z "$(WORKSPACE)" ]; then echo "Usage: make forge-onboard WORKSPACE=<workspace-path>"; exit 1; fi
 \tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py onboard --workspace "$(WORKSPACE)"
+
+forge-tooling-suite:
+\tinstall/tooling-suite.sh
+
+forge-tooling-suite-plan:
+\t@if [ -z "$(OUTPUT)" ]; then echo "Usage: make forge-tooling-suite-plan OUTPUT=<plan.json> [PROFILE=practical|extended] [SELECT='tool ...']"; exit 1; fi
+\t@if [ -z "$(PROFILE)" ] && [ -z "$(SELECT)" ]; then echo "Set PROFILE=practical|extended or SELECT='tool ...'"; exit 1; fi
+\tinstall/tooling-suite.sh plan $(if $(PROFILE),--profile "$(PROFILE)",--custom) $(foreach tool,$(SELECT),--select "$(tool)") $(foreach tool,$(EXCLUDE),--exclude "$(tool)") $(if $(CONTAINER_ENGINE),--container-engine "$(CONTAINER_ENGINE)",) --output "$(OUTPUT)"
+
+forge-tooling-suite-apply:
+\t@if [ -z "$(PLAN)" ] || [ -z "$(PLAN_SHA256)" ]; then echo "Usage: make forge-tooling-suite-apply PLAN=<plan.json> PLAN_SHA256=<digest>"; exit 1; fi
+\tinstall/tooling-suite.sh apply --plan "$(PLAN)" --approve-plan-sha256 "$(PLAN_SHA256)"
+
+forge-tooling-suite-bundle:
+\t@if [ -z "$(PLAN)" ] || [ -z "$(OUTPUT)" ]; then echo "Usage: make forge-tooling-suite-bundle PLAN=<plan.json> OUTPUT=<bundle-path>"; exit 1; fi
+\tinstall/tooling-suite.sh bundle --plan "$(PLAN)" --output "$(OUTPUT)"
+
+forge-tooling-suite-verify:
+\tinstall/tooling-suite.sh verify --receipt "$(if $(RECEIPT),$(RECEIPT),latest)"
+
+forge-tooling-suite-rollback:
+\t@if [ -z "$(RECEIPT)" ] || [ -z "$(APPROVE_RECEIPT_SHA256)" ]; then echo "Usage: make forge-tooling-suite-rollback RECEIPT=<receipt.json> APPROVE_RECEIPT_SHA256=<digest>"; exit 1; fi
+\tinstall/tooling-suite.sh rollback --receipt "$(RECEIPT)" --approve-receipt-sha256 "$(APPROVE_RECEIPT_SHA256)"
 
 forge-tooling-plan:
 \t@if [ -z "$(WORKSPACE)" ]; then echo "Usage: make forge-tooling-plan WORKSPACE=<workspace-path>"; exit 1; fi

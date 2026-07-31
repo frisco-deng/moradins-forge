@@ -28,7 +28,9 @@ def test_readme_starts_with_self_contained_agent_intercept() -> None:
     assert "selected tooling modules" in first_read_lower
     assert "each agents.md or claude.md file" in first_read_lower
     assert "path or shell-profile configuration" in first_read_lower
-    assert "never execute sudo or an elevated powershell action" in first_read_lower
+    assert "agents never enter credentials, run sudo" in first_read_lower
+    assert "install/tooling-suite.sh" in first_read_lower
+    assert "digest-binding the exact root transaction" in first_read_lower
     assert "verified checksum/signature" in first_read_lower
 
 
@@ -66,3 +68,10 @@ def test_first_read_surfaces_do_not_teach_request_only_install_model() -> None:
     ]
 
     assert all("host tool installation request-only" not in text for text in surfaces)
+    assert all(
+        "never operate its menu" in text
+        or "user must" in text
+        or "must not select menu" in text
+        or "launch the human installer" in text
+        for text in surfaces[2:]
+    )

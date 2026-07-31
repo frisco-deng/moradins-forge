@@ -5,7 +5,9 @@ Use this when changing Forge itself.
 - Keep public docs generic and agent-first.
 - Keep target repo adoption consent-gated.
 - Keep user-level execution bound to an exact approved plan digest.
-- Never invoke elevation; generate privileged scripts for user execution.
+- Agents never invoke elevation. Adaptive flows generate privileged scripts;
+  the separate human-run Linux suite may request sudo only after exact plan
+  review and digest confirmation.
 - Preserve independently approved agent blocks and user configuration.
 - Preserve target root files by default.
 - Update contracts before changing payload or sidecar behavior.
