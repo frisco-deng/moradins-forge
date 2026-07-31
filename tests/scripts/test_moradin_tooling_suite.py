@@ -1161,6 +1161,26 @@ def test_interactive_install_all_and_custom_category_paths(
     assert set(selected) == {spec.id for spec in suite.TOOL_CATALOG}
 
 
+def test_rhel_smoke_preserves_minimal_command_providers() -> None:
+    smoke = Path("tests/scripts/tooling_suite_distro_smoke.sh").read_text(
+        encoding="utf-8"
+    )
+    rhel_bootstrap = smoke.split("rocky | almalinux | rhel)", maxsplit=1)[1].split(
+        ";;", maxsplit=1
+    )[0]
+    bootstrap_tokens = {
+        token.rstrip("\\")
+        for line in rhel_bootstrap.splitlines()
+        if not line.lstrip().startswith("#")
+        for token in line.split()
+    }
+
+    assert "coreutils-single" in rhel_bootstrap
+    assert "curl-minimal" in rhel_bootstrap
+    assert "coreutils" not in bootstrap_tokens
+    assert "curl" not in bootstrap_tokens
+
+
 def test_interactive_verify_cancelled_rollback_and_exit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

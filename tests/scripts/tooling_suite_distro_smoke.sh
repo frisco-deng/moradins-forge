@@ -20,8 +20,11 @@ fedora)
 		ca-certificates coreutils curl findutils git python3 shadow-utils tar util-linux
 	;;
 rocky | almalinux | rhel)
+	# UBI-style minimal images provide the required commands through
+	# coreutils-single and curl-minimal. Preserve those valid providers instead
+	# of replacing them with their mutually exclusive full-package variants.
 	dnf install -y --setopt=install_weak_deps=False \
-		ca-certificates coreutils curl findutils git python3.11 shadow-utils tar util-linux
+		ca-certificates findutils git python3.11 shadow-utils tar util-linux
 	;;
 arch)
 	pacman -Syu --needed --noconfirm \
