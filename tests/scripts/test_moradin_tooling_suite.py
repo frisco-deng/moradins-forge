@@ -992,14 +992,14 @@ def test_new_podman_is_verified_as_the_target_user_rootless() -> None:
 def test_portable_plan_removes_machine_and_workspace_values() -> None:
     plan = {
         "plan_sha256": "d" * 64,
-        "approved_workspaces": ["/home/private/project"],
-        "repositories": [{"path": "/home/private/project/repo"}],
+        "approved_workspaces": ["/home/example/project"],
+        "repositories": [{"path": "/home/example/project/repo"}],
         "platform": {"host_fingerprint_sha256": "e" * 64},
         "target_uid": 1000,
     }
     portable = suite._portable_suite_plan(plan)
     rendered = json.dumps(portable)
-    assert "/home/private" not in rendered
+    assert "/home/example" not in rendered
     assert "e" * 64 not in rendered
     assert portable["source_plan_sha256"] == "d" * 64
 

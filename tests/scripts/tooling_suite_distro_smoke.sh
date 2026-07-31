@@ -34,7 +34,7 @@ arch)
 esac
 
 smoke_user=moradin-smoke
-smoke_home=/home/$smoke_user
+smoke_home=/tmp/moradin-smoke-home
 useradd --create-home --home-dir "$smoke_home" --shell /bin/bash "$smoke_user"
 install -d -o "$smoke_user" -g "$smoke_user" -m 0700 /tmp/moradin-suite-smoke
 
