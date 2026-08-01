@@ -25,19 +25,19 @@ podman run --detach --name "$container_name" --platform "$target_platform" \
 case $target_kind in
 ubuntu | debian)
 	podman exec "$container_name" /bin/sh -eu -c \
-		'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq; apt-get install -qq -y --no-install-recommends ca-certificates coreutils curl findutils git gzip python3 sudo tar'
+		'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq; apt-get install -qq -y --no-install-recommends ca-certificates coreutils curl findutils git gzip python3 sudo tar >/dev/null'
 	;;
 fedora)
 	podman exec "$container_name" /bin/sh -eu -c \
-		'dnf -q install -y --setopt=install_weak_deps=False ca-certificates coreutils curl findutils git gzip python3 shadow-utils sudo tar'
+		'dnf -q install -y --setopt=install_weak_deps=False ca-certificates coreutils curl findutils git gzip python3 shadow-utils sudo tar >/dev/null'
 	;;
 rocky)
 	podman exec "$container_name" /bin/sh -eu -c \
-		'dnf -q install -y --setopt=install_weak_deps=False ca-certificates coreutils-single findutils git gzip python3 shadow-utils sudo tar'
+		'dnf -q install -y --setopt=install_weak_deps=False ca-certificates coreutils-single findutils git gzip python3 shadow-utils sudo tar >/dev/null'
 	;;
 arch)
 	podman exec "$container_name" /bin/sh -eu -c \
-		'pacman -Syu --needed --noconfirm --quiet ca-certificates coreutils curl findutils git gzip python sudo tar'
+		'pacman -Syu --needed --noconfirm --quiet ca-certificates coreutils curl findutils git gzip python sudo tar >/dev/null'
 	;;
 *)
 	printf 'Unsupported qualification target: %s\n' "$target_kind" >&2
@@ -119,9 +119,9 @@ podman exec --user forge --env HOME=/home/forge "$container_name" \
 podman exec --user forge --env HOME=/home/forge "$container_name" /bin/bash -eu -c '
 mkdir -p /home/forge/extracted /home/forge/workspace/repository
 tar -xzf /home/forge/KIT.tar.gz -C /home/forge/extracted
-git clone /home/forge/extracted/forge/moradins-forge-public.bundle /home/forge/offline-forge
+git clone --quiet /home/forge/extracted/forge/moradins-forge-public.bundle /home/forge/offline-forge
 test "$(git -C /home/forge/offline-forge rev-list --count HEAD)" = 1
-git -C /home/forge/workspace/repository init
+git -C /home/forge/workspace/repository init --quiet --initial-branch=main
 runtime=$(find /home/forge/.local/share/moradins-forge/bootstrap/python \
   -mindepth 4 -maxdepth 4 -type f -path "*/bin/python3.12" -print -quit)
 test -x "$runtime"
