@@ -2,7 +2,7 @@
 title: "Moradin Agent Efficiency Contract V1"
 status: approved
 owner: moradin-forge
-last_reviewed: 2026-07-28
+last_reviewed: 2026-07-31
 source_refs:
   - ../../scripts/moradin_workstation.py
 related_docs:
@@ -31,7 +31,7 @@ standard capabilities, and repository-native deterministic commands.
 
 ## Generated Agent Guidance
 
-Owned `AGENTS.md` and `CLAUDE.md` blocks direct agents to:
+Owned Codex, Claude, Gemini, Copilot, and Cursor blocks direct agents to:
 
 - begin with the compact primer and repository brief;
 - use repository-native commands;
@@ -58,3 +58,8 @@ ignored, and excluded from payload and public export.
 
 These counters support evidence-backed comparisons over time; they are not a
 claim that every session will use fewer tokens.
+
+README measurements compare byte counts from checked-in public release-dogfood
+fixtures. The deterministic figure generator fails when its evidence JSON,
+SVG, or text equivalent is stale; it does not convert bytes into model tokens
+or promise universal task savings.

@@ -1,4 +1,4 @@
-.PHONY: lint-py lint-md test test-py ui-test ui-build payload-validate payload-smoke template-validate template-smoke forge-explain forge-readiness forge-brief forge-onboard forge-tooling-suite forge-tooling-suite-plan forge-tooling-suite-apply forge-tooling-suite-bundle forge-tooling-suite-verify forge-tooling-suite-rollback forge-tooling-plan forge-tooling-update-plan forge-tooling-apply forge-tooling-bundle forge-tooling-rollback forge-plan forge-adopt-dry-run forge-adopt forge-verify forge-upgrade-plan forge-upgrade forge-upgrade-rollback forge-rollback forge-smoke forge-dogfood-smoke forge-release-artifacts public-export public-portability-check
+.PHONY: lint-py lint-md test test-py ui-test ui-build payload-validate payload-smoke template-validate template-smoke forge-explain forge-readiness forge-brief forge-onboard forge-tooling-suite forge-tooling-suite-plan forge-tooling-suite-apply forge-tooling-suite-bundle forge-tooling-suite-verify forge-tooling-suite-rollback forge-airgap-request forge-airgap-build forge-airgap-verify forge-airgap-apply forge-tooling-plan forge-tooling-update-plan forge-tooling-apply forge-tooling-bundle forge-tooling-rollback forge-plan forge-adopt-dry-run forge-adopt forge-verify forge-upgrade-plan forge-upgrade forge-upgrade-rollback forge-rollback forge-smoke forge-dogfood-smoke forge-release-artifacts generate-readme-figures verify-readme-figures public-export public-portability-check
 
 PUBLIC_EXPORT_DIR ?= /tmp/moradin-forge-public-export-check
 PUBLIC_SIDECAR_SMOKE_DIR ?= /tmp/moradin-forge-sidecar-smoke-check
@@ -15,6 +15,11 @@ PROFILE ?=
 SELECT ?=
 EXCLUDE ?=
 CONTAINER_ENGINE ?=
+REQUEST ?=
+LOCK ?=
+BUNDLE ?=
+BUNDLE_SHA256 ?=
+STALE_BUNDLE_SHA256 ?=
 
 lint-py:
 	UV_CACHE_DIR=/tmp/uv-cache uv run ruff check .
@@ -75,6 +80,22 @@ forge-tooling-suite-verify:
 forge-tooling-suite-rollback:
 	@if [ -z "$(RECEIPT)" ] || [ -z "$(APPROVE_RECEIPT_SHA256)" ]; then echo "Usage: make forge-tooling-suite-rollback RECEIPT=<receipt.json> APPROVE_RECEIPT_SHA256=<digest>"; exit 1; fi
 	install/tooling-suite.sh rollback --receipt "$(RECEIPT)" --approve-receipt-sha256 "$(APPROVE_RECEIPT_SHA256)"
+
+forge-airgap-request:
+	@if [ -z "$(PROFILE)" ] || [ -z "$(OUTPUT)" ]; then echo "Usage: make forge-airgap-request PROFILE=practical|extended OUTPUT=<request.json>"; exit 1; fi
+	install/tooling-suite.sh airgap-request --profile "$(PROFILE)" --output "$(OUTPUT)" $(foreach tool,$(EXCLUDE),--exclude "$(tool)")
+
+forge-airgap-build:
+	@if [ -z "$(OUTPUT)" ] || { [ -z "$(REQUEST)" ] && [ -z "$(LOCK)" ]; } || { [ -n "$(REQUEST)" ] && [ -n "$(LOCK)" ]; }; then echo "Usage: make forge-airgap-build REQUEST=<request.json>|LOCK=<lock.json> OUTPUT=<kit.tar.gz>"; exit 1; fi
+	install/tooling-suite.sh airgap-build $(if $(REQUEST),--request "$(REQUEST)",--lock "$(LOCK)") --output "$(OUTPUT)"
+
+forge-airgap-verify:
+	@if [ -z "$(BUNDLE)" ] || [ -z "$(BUNDLE_SHA256)" ]; then echo "Usage: make forge-airgap-verify BUNDLE=<kit.tar.gz> BUNDLE_SHA256=<digest>"; exit 1; fi
+	install/tooling-suite.sh airgap-verify --bundle "$(BUNDLE)" --expected-sha256 "$(BUNDLE_SHA256)"
+
+forge-airgap-apply:
+	@if [ -z "$(BUNDLE)" ] || [ -z "$(BUNDLE_SHA256)" ] || [ -z "$(PLAN_SHA256)" ]; then echo "Usage: make forge-airgap-apply BUNDLE=<kit.tar.gz> BUNDLE_SHA256=<digest> PLAN_SHA256=<digest>"; exit 1; fi
+	install/tooling-suite.sh airgap-apply --bundle "$(BUNDLE)" --approve-bundle-sha256 "$(BUNDLE_SHA256)" --approve-offline-plan-sha256 "$(PLAN_SHA256)" $(if $(STALE_BUNDLE_SHA256),--approve-stale-bundle-sha256 "$(STALE_BUNDLE_SHA256)",)
 
 forge-tooling-plan:
 	@if [ -z "$(WORKSPACE)" ]; then echo "Usage: make forge-tooling-plan WORKSPACE=<workspace-path>"; exit 1; fi
@@ -144,6 +165,12 @@ forge-dogfood-smoke:
 
 forge-release-artifacts:
 	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_dogfood.py --release-output artifacts/release
+
+generate-readme-figures:
+	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/generate_readme_figures.py
+
+verify-readme-figures:
+	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/generate_readme_figures.py --check
 
 public-export:
 	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/public_export.py export --output "$(PUBLIC_EXPORT_DIR)" --force --init-git

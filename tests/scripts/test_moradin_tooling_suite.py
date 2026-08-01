@@ -904,11 +904,11 @@ def test_new_signed_package_is_verified_receipted_and_removed_on_rollback(
     def runner(argv: list[str], **_kwargs: object) -> SimpleNamespace:
         calls.append(argv)
         if argv[0] == "dpkg-query":
-            return (
-                completed(stdout="ii \t2.0")
-                if state["installed"]
-                else completed(returncode=1)
-            )
+            if not state["installed"]:
+                return completed(returncode=1)
+            if any("${Status}" in argument for argument in argv):
+                return completed(stdout="install ok installed\t2.0")
+            return completed(stdout="ii \t2.0")
         if argv[:2] == ["apt-cache", "policy"]:
             return completed(stdout="Candidate: 2.0\n")
         if argv[:2] == ["apt-get", "install"]:
@@ -938,6 +938,80 @@ def test_new_signed_package_is_verified_receipted_and_removed_on_rollback(
         "removed-direct-package-dependencies-retained"
     )
     assert state["installed"] is False
+
+
+def test_package_rollback_preserves_post_install_drift(tmp_path: Path) -> None:
+    calls: list[list[str]] = []
+
+    def runner(argv: list[str], **_kwargs: object) -> SimpleNamespace:
+        calls.append(argv)
+        if argv[0] == "dpkg-query":
+            return completed(stdout="install ok installed\t3.0")
+        return completed()
+
+    result = suite._rollback_root_operations(
+        [
+            {
+                "kind": "system-package",
+                "tool_id": "git",
+                "manager": "apt",
+                "package": "git",
+                "version": "2.0",
+                "previous_version": "1.0",
+                "rollback_asset": (tmp_path / "git_1.0.deb").as_posix(),
+            }
+        ],
+        runner=runner,
+        owned_root=tmp_path / "tools",
+    )
+    assert result == [{"tool_id": "git", "status": "preserved-newer"}]
+    assert all(argv[0] != "apt-get" for argv in calls)
+
+
+def test_offline_pacman_rollback_reverifies_signature(tmp_path: Path) -> None:
+    rollback_asset = tmp_path / "git.pkg.tar.zst"
+    rollback_signature = tmp_path / "git.pkg.tar.zst.sig"
+    rollback_asset.write_bytes(b"package")
+    rollback_signature.write_bytes(b"signature")
+    calls: list[list[str]] = []
+
+    def runner(argv: list[str], **_kwargs: object) -> SimpleNamespace:
+        calls.append(argv)
+        if argv[:2] == ["pacman", "-Q"]:
+            return completed(stdout="git 2.0\n")
+        return completed()
+
+    result = suite._rollback_root_operations(
+        [
+            {
+                "kind": "system-package",
+                "tool_id": "git",
+                "manager": "pacman",
+                "package": "git",
+                "version": "2.0",
+                "previous_version": "1.0",
+                "rollback_asset": rollback_asset.as_posix(),
+                "rollback_signature": rollback_signature.as_posix(),
+                "offline": True,
+            }
+        ],
+        runner=runner,
+        owned_root=tmp_path / "tools",
+    )
+    assert result == [{"tool_id": "git", "status": "restored"}]
+    assert calls[1] == [
+        "pacman-key",
+        "--verify",
+        rollback_signature.as_posix(),
+        rollback_asset.as_posix(),
+    ]
+    assert calls[2] == [
+        "pacman",
+        "-U",
+        "--noconfirm",
+        "--",
+        rollback_asset.as_posix(),
+    ]
 
 
 @pytest.mark.parametrize(
@@ -1112,7 +1186,14 @@ def test_sudo_phase_launches_only_a_sealed_root_runner(
 ) -> None:
     observed: list[str] = []
     digest = "a" * 64
-    monkeypatch.setattr(suite, "_trusted_root_python", lambda: Path("/usr/bin/python3"))
+    monkeypatch.setattr(
+        suite, "_trusted_root_bootstrap_python", lambda: Path("/usr/bin/python3")
+    )
+    monkeypatch.setattr(
+        suite,
+        "_root_runtime_arguments",
+        lambda _python: ["-", "-", "-", "-"],
+    )
     monkeypatch.setattr(suite, "_trusted_sudo", lambda: Path("/usr/bin/sudo"))
 
     def runner(argv: list[str], **_kwargs: object) -> SimpleNamespace:
@@ -1135,6 +1216,49 @@ def test_sudo_phase_launches_only_a_sealed_root_runner(
         suite.REPO_ROOT / "scripts/moradin_tooling_suite.py"
     ).as_posix() not in observed
     assert f"/var/lib/moradins-forge/runners/{digest}" in observed
+
+
+def test_python39_root_bootstrap_requires_exact_managed_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "runtime"
+    source.mkdir()
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text("{}\n", encoding="utf-8")
+    digest = suite.sha256_file(manifest)
+    monkeypatch.setenv("MORADIN_FORGE_ROOT_PYTHON_SOURCE", str(source))
+    monkeypatch.setenv("MORADIN_FORGE_ROOT_PYTHON_MANIFEST", str(manifest))
+    monkeypatch.setenv("MORADIN_FORGE_ROOT_PYTHON_MANIFEST_SHA256", digest)
+    monkeypatch.setenv(
+        "MORADIN_FORGE_ROOT_PYTHON_EXECUTABLE",
+        "cpython-3.12.8/bin/python3.12",
+    )
+    monkeypatch.setattr(suite, "_run", lambda *_args, **_kwargs: completed(1))
+
+    assert suite._root_runtime_arguments(Path("/usr/bin/python3.9")) == [
+        str(source),
+        str(manifest),
+        digest,
+        "cpython-3.12.8/bin/python3.12",
+    ]
+
+    monkeypatch.setenv("MORADIN_FORGE_ROOT_PYTHON_MANIFEST_SHA256", "0" * 64)
+    with pytest.raises(suite.ToolingSuiteError, match="kit-bound"):
+        suite._root_runtime_arguments(Path("/usr/bin/python3.9"))
+
+
+def test_copyable_handoff_distinguishes_connected_and_offline(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    suite._print_onboard_handoff()
+    connected = capsys.readouterr().out
+    assert "onboard --workspace <approved-workspace>" in connected
+    assert "--offline" not in connected
+
+    suite._print_onboard_handoff(offline=True)
+    offline = capsys.readouterr().out
+    assert "onboard --workspace <approved-workspace> --offline" in offline
 
 
 def test_interactive_install_all_and_custom_category_paths(
@@ -1184,7 +1308,7 @@ def test_rhel_smoke_preserves_minimal_command_providers() -> None:
 def test_interactive_verify_cancelled_rollback_and_exit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    answers = iter(["3", "latest", "4", "latest", "n", "5"])
+    answers = iter(["3", "latest", "4", "latest", "n", "6"])
     monkeypatch.setattr(suite, "_prompt", lambda _message: next(answers))
     monkeypatch.setattr(
         suite,
@@ -1204,7 +1328,7 @@ def test_interactive_verify_cancelled_rollback_and_exit(
 def test_interactive_approved_rollback_uses_the_exact_receipt_digest(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    answers = iter(["4", "latest", "y", "5"])
+    answers = iter(["4", "latest", "y", "6"])
     observed: dict[str, str] = {}
     monkeypatch.setattr(suite, "_prompt", lambda _message: next(answers))
     monkeypatch.setattr(

@@ -6,13 +6,18 @@ Use this prompt when a user sends an agent to Moradin's Forge.
 You are at Moradin's Forge.
 
 Read README.md, FORGE.md, AGENTS.md, and Harness/entrypoints/forge.md.
+Confirm Forge was cloned over HTTPS. Explain the three-step path: clone; ask
+the user to run the guided tooling suite; then onboard approved repositories.
+The agent explains and verifies the installer, while the user operates its
+interactive menu and owns every sudo approval.
+
 Ask which workspace roots the user approves. Run onboard once per approved
 root, then show the discovered repository list before inspecting standard
 guidance, manifests, CI, container, deployment, and configuration files. Do
 not inspect arbitrary source or any path outside the approved roots.
 
 Present the generated plan and request separate consent for workspace scope,
-selected tools, user-level execution, each AGENTS.md or CLAUDE.md change,
+selected tools, user-level execution, each allowlisted provider-file change,
 PATH/shell configuration, privileged-script generation and user execution,
 sidecar adoption, and rollback.
 
@@ -33,4 +38,7 @@ commands.
 
 Start with:
 scripts/moradin_forge.sh onboard --workspace <approved-workspace>
+
+For disconnected Linux, follow docs/11_ops/air_gapped_tooling_suite.md and use
+onboard --offline only after exact kit verification and offline apply.
 ```

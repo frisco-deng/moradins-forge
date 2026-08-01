@@ -9,6 +9,7 @@ import json
 import os
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -73,8 +74,24 @@ DISCOVERY_SKIP_DIRS = {
     "vendor",
 }
 
-STANDARD_AGENT_FILES = ("AGENTS.md", "CLAUDE.md")
-LOWERCASE_AGENT_FILES = ("agents.md", "agent.md", "claude.md", "claud.md")
+AGENT_PROVIDER_FILES = {
+    "codex": "AGENTS.md",
+    "claude": "CLAUDE.md",
+    "gemini": "GEMINI.md",
+    "copilot": ".github/copilot-instructions.md",
+    "cursor": ".cursor/rules/moradin-forge.mdc",
+}
+STANDARD_AGENT_FILES = tuple(AGENT_PROVIDER_FILES.values())
+LOWERCASE_AGENT_FILES = (
+    "agents.md",
+    "agent.md",
+    "claude.md",
+    "claud.md",
+    "gemini.md",
+    ".github/copilot_instructions.md",
+    ".cursor/rules/moradin-forge.md",
+)
+CURSOR_AGENT_FILE = AGENT_PROVIDER_FILES["cursor"]
 
 
 class WorkstationError(RuntimeError):
@@ -911,6 +928,7 @@ def resolve_latest_version(
     system: str | None = None,
     arch: str | None = None,
     prefer_python: bool = True,
+    offline: bool = False,
     now: datetime | None = None,
     fetch_json: Callable[[str], dict[str, Any]] = _fetch_json,
 ) -> dict[str, Any]:
@@ -923,6 +941,29 @@ def resolve_latest_version(
     cached = tools.get(cache_key)
     if isinstance(cached, dict) and not refresh and _cache_entry_fresh(cached, now):
         return {**cached, "cache": "fresh"}
+
+    if offline:
+        if isinstance(cached, dict):
+            return {
+                **cached,
+                "cache": "offline-cache",
+                "resolution_warning": (
+                    "offline onboarding used frozen local metadata without a network refresh"
+                ),
+            }
+        return {
+            "version": "unresolved-offline",
+            "source": "offline",
+            "source_url": "",
+            "asset_url": "",
+            "sha256": "",
+            "trust": "manual-review",
+            "checked_at": now.replace(microsecond=0).isoformat(),
+            "cache": "unavailable",
+            "resolution_warning": (
+                "no cached official metadata is available while offline"
+            ),
+        }
 
     resolved: dict[str, Any] = {
         "version": "latest-stable",
@@ -1386,12 +1427,23 @@ def build_python_tool_lock(
     }
 
 
+def agent_provider_for_file(agent_file: str) -> str:
+    for provider, relative in AGENT_PROVIDER_FILES.items():
+        if relative == agent_file:
+            return provider
+    raise WorkstationError(f"unsupported agent guidance file: {agent_file}")
+
+
 def build_agent_adapter_section(sidecar_dir: str, agent_file: str) -> str:
-    provider_note = (
-        "- Claude-specific guidance remains subordinate to repository-wide `AGENTS.md` rules."
-        if agent_file == "CLAUDE.md"
-        else "- Provider-specific files may add rules but must not bypass this repository contract."
-    )
+    provider = agent_provider_for_file(agent_file)
+    provider_notes = {
+        "codex": "- This repository-wide block is the canonical Forge route for Codex-compatible agents.",
+        "claude": "- Claude-specific guidance remains subordinate to repository-wide `AGENTS.md` rules.",
+        "gemini": "- Gemini loads this root context file; repository-wide rules still take precedence.",
+        "copilot": "- Copilot repository instructions supplement, and do not replace, existing project policy.",
+        "cursor": "- This dedicated project rule is owned by Forge and must not replace an unowned Cursor rule.",
+    }
+    provider_note = provider_notes[provider]
     return "\n".join(
         [
             AGENT_MARKER_BEGIN,
@@ -1429,7 +1481,29 @@ def _read_guidance(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def render_owned_agent_patch(existing: str, section: str) -> tuple[str, str]:
+def initial_agent_file_content(agent_file: str, section: str) -> str:
+    agent_provider_for_file(agent_file)
+    if agent_file == CURSOR_AGENT_FILE:
+        return "\n".join(
+            [
+                "---",
+                "description: Moradin Forge repository workflow",
+                "alwaysApply: true",
+                "---",
+                "",
+                section.rstrip(),
+                "",
+            ]
+        )
+    return f"# {Path(agent_file).name}\n\n{section}"
+
+
+def render_owned_agent_patch(
+    existing: str,
+    section: str,
+    *,
+    agent_file: str = "AGENTS.md",
+) -> tuple[str, str]:
     begin_count = existing.count(AGENT_MARKER_BEGIN)
     end_count = existing.count(AGENT_MARKER_END)
     if begin_count != end_count or begin_count > 1:
@@ -1443,7 +1517,7 @@ def render_owned_agent_patch(existing: str, section: str) -> tuple[str, str]:
             end += 1
         return existing[:start] + section + existing[end:], "update"
     if not existing:
-        return section, "create"
+        return initial_agent_file_content(agent_file, section), "create"
     separator = (
         "" if existing.endswith("\n\n") else "\n" if existing.endswith("\n") else "\n\n"
     )
@@ -1459,9 +1533,45 @@ def agent_file_proposal(
     if agent_file not in STANDARD_AGENT_FILES:
         raise WorkstationError(f"unsupported agent guidance file: {agent_file}")
     path = repo_root / agent_file
+    current = repo_root
+    for part in Path(agent_file).parent.parts:
+        current /= part
+        if current.is_symlink():
+            raise WorkstationError(
+                f"agent guidance parent symlinks are not patchable: {agent_file}"
+            )
+        if current.exists() and not current.is_dir():
+            raise WorkstationError(
+                f"agent guidance parent is not a directory: {agent_file}"
+            )
     existing = _read_guidance(path)
+    if (
+        agent_file == CURSOR_AGENT_FILE
+        and existing
+        and AGENT_MARKER_BEGIN not in existing
+        and AGENT_MARKER_END not in existing
+    ):
+        return {
+            "path": agent_file,
+            "provider": agent_provider_for_file(agent_file),
+            "action": "conflict",
+            "present": True,
+            "before_sha256": sha256_bytes(existing.encode("utf-8")),
+            "after_sha256": "",
+            "owned_block": "",
+            "owned_block_sha256": "",
+            "patch_preview": "",
+            "requires_explicit_approval": True,
+            "blocked_reason": (
+                "the dedicated Cursor rule already exists without a Forge ownership marker"
+            ),
+        }
     section = build_agent_adapter_section(sidecar_dir, agent_file)
-    rendered, action = render_owned_agent_patch(existing, section)
+    rendered, action = render_owned_agent_patch(
+        existing,
+        section,
+        agent_file=agent_file,
+    )
     existing_owned = ""
     if existing.count(AGENT_MARKER_BEGIN) == 1:
         start = existing.index(AGENT_MARKER_BEGIN)
@@ -1481,6 +1591,7 @@ def agent_file_proposal(
     )
     return {
         "path": agent_file,
+        "provider": agent_provider_for_file(agent_file),
         "action": action,
         "present": path.is_file(),
         "before_sha256": sha256_bytes(existing.encode("utf-8")) if existing else "",
@@ -1501,6 +1612,8 @@ def build_tooling_plan(
     sidecar_dir: str = ".moradins-harness",
     include_tools: Sequence[str] = (),
     exclude_tools: Sequence[str] = (),
+    agent_providers: Sequence[str] = (),
+    offline: bool = False,
     discovery_callback: Callable[[Sequence[Path]], None] | None = None,
 ) -> dict[str, Any]:
     if profile != DEFAULT_PROFILE:
@@ -1509,11 +1622,25 @@ def build_tooling_plan(
     repos = discover_repositories(approved)
     if discovery_callback is not None:
         discovery_callback(repos)
+    unknown_providers = sorted(set(agent_providers) - set(AGENT_PROVIDER_FILES))
+    if unknown_providers:
+        raise WorkstationError(
+            "unsupported agent providers: " + ", ".join(unknown_providers)
+        )
+    requested_agent_files = {
+        AGENT_PROVIDER_FILES[provider] for provider in agent_providers
+    }
     repository_rows: list[dict[str, Any]] = []
     capability_union: set[str] = set()
     for repo in repos:
         inspection = inspect_repository_capabilities(repo)
         capability_union.update(inspection["capabilities"])
+        detected_agent_files = {
+            name
+            for name, state in inspection["agent_files"].items()
+            if state["present"] or state["symlink"]
+        }
+        proposal_files = sorted(requested_agent_files | detected_agent_files)
         repository_rows.append(
             {
                 "id": repository_id(repo),
@@ -1521,8 +1648,9 @@ def build_tooling_plan(
                 **inspection,
                 "agent_file_proposals": [
                     agent_file_proposal(repo, name, sidecar_dir=sidecar_dir)
-                    for name in STANDARD_AGENT_FILES
+                    for name in proposal_files
                 ],
+                "available_agent_providers": dict(AGENT_PROVIDER_FILES),
             }
         )
 
@@ -1562,6 +1690,7 @@ def build_tooling_plan(
             system=system,
             arch=arch,
             prefer_python=uv_present,
+            offline=offline,
         )
         action = _install_action(
             spec,
@@ -1603,6 +1732,9 @@ def build_tooling_plan(
         "version": WORKSTATION_PLAN_VERSION,
         "generated_at": utc_now(),
         "profile": profile,
+        "offline": offline,
+        "agent_providers": sorted(set(agent_providers)),
+        "available_agent_providers": dict(AGENT_PROVIDER_FILES),
         "explicitly_included_tools": sorted(set(include_tools)),
         "explicitly_excluded_tools": sorted(set(exclude_tools)),
         "platform": {
@@ -1694,14 +1826,27 @@ def tooling_plan_markdown(plan: dict[str, Any]) -> str:
         lines.append(f"- `{repo['path']}`")
         for proposal in repo.get("agent_file_proposals", []):
             lines.append(
-                f"  - `{proposal['path']}`: `{proposal['action']}`, explicit approval required"
+                f"  - `{proposal['path']}` (`{proposal['provider']}`): "
+                f"`{proposal['action']}`, explicit approval required"
             )
+            if proposal.get("blocked_reason"):
+                lines.append(f"    - blocked: {proposal['blocked_reason']}")
+            if proposal.get("patch_preview"):
+                lines.extend(
+                    [
+                        "",
+                        "```diff",
+                        str(proposal["patch_preview"]),
+                        "```",
+                        "",
+                    ]
+                )
     lines.extend(["", "## Required User Decisions", ""])
     lines.extend(
         [
             "- Confirm the approved workspace list.",
             "- Select recommended tooling modules and approve user-level execution.",
-            "- Approve each `AGENTS.md` or `CLAUDE.md` patch independently.",
+            "- Approve each allowlisted provider guidance file independently.",
             "- Approve PATH or shell-profile changes separately.",
             "- Review and run any privileged script, then ask the agent to verify.",
         ]
@@ -1742,6 +1887,9 @@ def build_onboard_plan(
     refresh_versions: bool = False,
     include_tools: Sequence[str] = (),
     exclude_tools: Sequence[str] = (),
+    agent_providers: Sequence[str] = (),
+    offline: bool = False,
+    tooling_receipt: dict[str, Any] | None = None,
     discovery_callback: Callable[[Sequence[Path]], None] | None = None,
 ) -> dict[str, Any]:
     tooling = build_tooling_plan(
@@ -1751,16 +1899,55 @@ def build_onboard_plan(
         refresh_versions=refresh_versions,
         include_tools=include_tools,
         exclude_tools=exclude_tools,
+        agent_providers=agent_providers,
+        offline=offline,
         discovery_callback=discovery_callback,
     )
+    receipt = tooling_receipt or {
+        "status": "missing",
+        "verified": False,
+        "message": "no tooling-suite receipt was found",
+    }
+    repository_apply_commands: dict[str, dict[str, Any]] = {}
+    for repository in tooling["repositories"]:
+        base_arguments = [
+            "scripts/moradin_forge.sh",
+            "apply",
+            "--target",
+            str(repository["path"]),
+            "--approve",
+        ]
+        approval_flags: dict[str, str] = {}
+        for proposal in repository.get("agent_file_proposals", []):
+            if proposal.get("action") == "conflict":
+                continue
+            path = str(proposal["path"])
+            arguments = ["--approve-agent-file", path]
+            if proposal.get("action") == "create":
+                arguments.extend(["--create-agent-file", path])
+            approval_flags[path] = shlex.join(arguments)
+        repository_apply_commands[str(repository["id"])] = {
+            "base_command": shlex.join(base_arguments),
+            "provider_approval_flags": approval_flags,
+            "instruction": (
+                "After independent consent, append only the approved provider "
+                "flag groups to the base command and show the final argv."
+            ),
+        }
     payload: dict[str, Any] = {
         "version": ONBOARD_PLAN_VERSION,
         "generated_at": utc_now(),
         "tooling_plan": tooling,
+        "offline": offline,
+        "tooling_receipt": receipt,
+        "tooling_receipt_checked_before_recommendations": True,
+        "agent_providers": sorted(set(agent_providers)),
+        "agent_provider_choices": dict(AGENT_PROVIDER_FILES),
         "questions": [
             "Are these the complete workspace roots Forge may inspect?",
             "Which recommended tooling modules may Forge install at user level?",
-            "Which AGENTS.md and CLAUDE.md proposals may Forge apply?",
+            "Which agent providers do you use in addition to detected guidance files?",
+            "Which proposed provider file may Forge patch or create? Approve each separately.",
             "May Forge change user PATH or shell configuration?",
             "Will you review and run the generated privileged script if needed?",
         ],
@@ -1769,10 +1956,7 @@ def build_onboard_plan(
                 "scripts/moradin_forge.sh tooling-apply --plan <tooling-plan.json> "
                 f"--approve-plan-sha256 {tooling['plan_sha256']}"
             ),
-            "integration": (
-                "scripts/moradin_forge.sh apply --target <target-repo> --approve "
-                "--approve-agent-file AGENTS.md"
-            ),
+            "integration_by_repository": repository_apply_commands,
         },
     }
     payload["plan_sha256"] = plan_digest(payload)

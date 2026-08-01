@@ -1,5 +1,105 @@
 # Moradin's Forge
 
+## Three-Step Setup
+
+Moradin's Forge turns a public clone into a consent-gated tooling baseline and
+repository guide. The primary path is deliberately short:
+
+1. **User or Agent — Clone Forge.** Pull this public repository yourself, or
+   ask your coding agent to clone it over HTTPS and read this page.
+2. **User — Run the guided Linux installer.** The agent may explain the menu
+   and later verify its receipt, but the user launches the installer, reviews
+   the exact plan, and personally approves any sudo phase.
+3. **Agent, then User — Link approved repositories.** The agent discovers only
+   approved workspace roots, shows every proposed provider-file change, and
+   asks separately before creating or patching each file.
+
+```sh
+git clone https://github.com/frisco-deng/moradins-forge.git <forge-root>
+cd <forge-root>
+./install/tooling-suite.sh
+scripts/moradin_forge.sh onboard --workspace <approved-workspace>
+```
+
+After installation, the suite prints a copyable prompt containing the third
+command. Repeat `--workspace` for each independently approved root. Add
+`--agent-provider codex|claude|copilot|gemini|cursor` for providers whose
+canonical file does not already exist. Planning is read-only; apply still
+requires separate approval for every file.
+
+![Three-Step Setup — Illustrative](docs/assets/readme/three-step-setup.svg)
+
+Text equivalent — **Illustrative:** clone the public repository; the user runs
+and approves the tooling installer; then an agent discovers approved repos and
+shows each guidance patch for separate user consent. This figure makes no
+performance claim.
+
+![Trust Architecture — Qualitative](docs/assets/readme/trust-architecture.svg)
+
+Text equivalent — **Qualitative:** official sources feed unprivileged staging,
+then a human-approved digest enters the sealed root phase. Receipts and
+rollback follow installation; agent-file links have a separate consent
+boundary. This is an architecture explanation, not a quantitative claim.
+
+### Air-Gapped Alternative
+
+The complete offline path is target-specific: create a sanitized request on
+the disconnected Linux target, build the sealed kit on a connected rootless
+Forge machine, then return the kit and transport its exact digest through a
+separate trusted channel. The compatibility `bundle` command is asset-only and
+may be partial; only this air-gap path may report a complete installation.
+
+```sh
+# Disconnected target
+./install/tooling-suite.sh airgap-request \
+  --profile practical --output REQUEST.json
+
+# Connected rootless builder
+./install/tooling-suite.sh airgap-build \
+  --request REQUEST.json --output KIT.tar.gz
+
+# Disconnected target; use the separately transported digest
+./install/tooling-suite.sh airgap-verify \
+  --bundle KIT.tar.gz --expected-sha256 <sha256>
+./install/tooling-suite.sh airgap-apply \
+  --bundle KIT.tar.gz --approve-bundle-sha256 <sha256>
+scripts/moradin_forge.sh onboard \
+  --workspace <approved-workspace> --offline
+```
+
+Interactive apply displays the newly rebound offline-plan digest and asks a
+default-No confirmation. Automation must also pass
+`--approve-offline-plan-sha256 <displayed-sha256>`.
+
+The disconnected request, verify, and apply entrypoints can start from a
+root-owned Python 3.9+. Forge verifies the kit's materialized Python 3.12.8
+closure before launching the full engine and seals that same runtime under a
+root-owned prefix before privileged execution. Air-gap targets are Ubuntu,
+Debian, Fedora, and Rocky on amd64/arm64 plus frozen Arch on amd64; Arch arm64
+fails closed because the official dated Arch snapshot/container lane is
+x86-64-only.
+
+![Air-Gap Round Trip — Qualitative](docs/assets/readme/airgap-round-trip.svg)
+
+Text equivalent — **Qualitative:** a disconnected target emits distro,
+architecture, profile, and relevant package state without machine identity or
+workspace content. A connected pinned rootless builder returns a complete
+lock, kit, and digest; the target verifies, installs with online repositories
+disabled, receipts the result, and onboards offline.
+
+### Measured Release-Dogfood Benefits
+
+![Measured Benefits — Measured](docs/assets/readme/measured-benefits.svg)
+
+<!-- measured-benefits-text:start -->
+Text equivalent — **Measured release-dogfood fixtures:** startup context was 18,242 raw bytes versus 484 primer bytes; repeated output was 1,606 raw bytes versus 136 rerun-advice bytes. These checked-in fixture results are not a universal token-reduction guarantee.
+<!-- measured-benefits-text:end -->
+
+The evidence is checked in at
+[`docs/assets/readme/measured-benefits.json`](docs/assets/readme/measured-benefits.json).
+It compares bytes, not model tokens, task quality, or elapsed time, and is not a
+universal token-reduction guarantee.
+
 ## Agent: Start Here
 
 Moradin's Forge is a public, standalone baseline for Codex, Claude Code, and
@@ -25,7 +125,8 @@ You are at Moradin's Forge.
    - the workspace scope;
    - selected tooling modules;
    - user-level installation execution;
-   - each AGENTS.md or CLAUDE.md file to create or patch;
+   - each allowlisted Codex, Claude, Gemini, Copilot, or Cursor guidance file
+     to create or patch;
    - PATH or shell-profile configuration;
    - privileged-script generation and the user's execution of that script.
 6. Execute only approved user-level actions. Agents never enter credentials,
@@ -68,6 +169,9 @@ Forge separates approval into distinct boundaries:
 | User-owned installs | Exact tooling-plan SHA-256 |
 | `AGENTS.md` | `--approve-agent-file AGENTS.md` |
 | `CLAUDE.md` | `--approve-agent-file CLAUDE.md` |
+| `GEMINI.md` | `--approve-agent-file GEMINI.md` |
+| Copilot | `--approve-agent-file .github/copilot-instructions.md` |
+| Cursor | `--approve-agent-file .cursor/rules/moradin-forge.mdc` |
 | Missing agent file creation | Matching `--create-agent-file` |
 | PATH or shell profile | `--approve-user-config` |
 | Privileged packages | Generate, review, and personally run the script |
@@ -76,9 +180,16 @@ Forge separates approval into distinct boundaries:
 | Sidecar upgrade | Exact upgrade-plan SHA-256 |
 | Rollback | Explicit `--approve` |
 
-Lowercase `agents.md`, `agent.md`, `claude.md`, and `claud.md` are reported as
-warnings; Forge patches only the canonical root `AGENTS.md` and `CLAUDE.md`.
-Their independently owned marker blocks preserve all unrelated guidance.
+Lowercase and near-miss variants such as `agents.md`, `claud.md`, `gemini.md`,
+`.github/copilot_instructions.md`, and `.cursor/rules/moradin-forge.md` are
+warnings only. Forge patches only the five reviewed paths above. Each marker
+block is independently owned; the dedicated Cursor rule is never allowed to
+replace an existing unowned file.
+
+These paths follow the providers' documented conventions for
+[Copilot repository instructions](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-repository-instructions),
+[Gemini context files](https://geminicli.com/docs/cli/gemini-md/), and
+[Cursor project rules](https://docs.cursor.com/context/rules).
 
 ## Platform Bootstrap
 
@@ -112,8 +223,8 @@ Set-Location <forge-root>
 When the Python prerequisite is absent, bootstrap generates a small,
 reviewable prerequisite script under `artifacts/bootstrap/latest/`. Linux
 privileged installation requires the user to run its `sudo` command; Windows
-requires the user to run the generated elevated PowerShell script. Forge never
-elevates itself.
+prerequisite installation requires the user to review and run the generated
+elevated PowerShell script. Forge never elevates itself.
 
 ## Onboarding and Tooling
 
@@ -165,8 +276,9 @@ install/tooling-suite.sh verify --latest
 
 Use `--profile extended --container-engine podman` for the extended baseline,
 or `--custom --select <tool-id>` with repeatable `--select` and `--exclude`.
-Build a checksummed asset bundle with `bundle --plan ... --output ...`; the
-bundle reports `partial` when signed OS packages remain connected-only.
+Build a compatibility asset bundle with `bundle --plan ... --output ...`; it
+is explicitly partial when signed OS packages remain connected-only. Only the
+target-specific `airgap-build` flow may report a complete offline install.
 
 OS package upgrades occur only when the previous package artifact or an
 equivalent reversible transaction is available. Otherwise the installed
@@ -225,7 +337,7 @@ scripts/moradin_forge.sh tooling-rollback \
   --approve
 ```
 
-Build a portable offline bundle:
+Build a portable asset-only compatibility bundle:
 
 ```sh
 scripts/moradin_forge.sh tooling-bundle \
@@ -238,7 +350,9 @@ data only. They exclude repositories, source content, credentials, prompts,
 logs, and machine paths. Python tools use a complete wheel-only closure,
 frozen constraints, and offline/no-index/no-config installation. Unavailable
 verified assets leave an honest `partial` bundle instead of silently weakening
-integrity.
+integrity. For a complete air-gap kit containing the target's signed
+OS-package dependency and rollback closure, use the
+[air-gap runbook](docs/11_ops/air_gapped_tooling_suite.md).
 
 Tool update checks run only when Forge is invoked and the 24-hour cache is
 stale:
@@ -273,12 +387,14 @@ scripts/moradin_forge.sh apply \
   --target <target-repo> \
   --approve \
   --approve-agent-file AGENTS.md \
-  --approve-agent-file CLAUDE.md
+  --approve-agent-file CLAUDE.md \
+  --approve-agent-file GEMINI.md \
+  --approve-agent-file .github/copilot-instructions.md \
+  --approve-agent-file .cursor/rules/moradin-forge.mdc
 ```
 
-For an absent canonical file, add the matching
-`--create-agent-file AGENTS.md` or `--create-agent-file CLAUDE.md`. Forge shows
-the exact marked patch first and never replaces unrelated content.
+For an absent allowlisted file, add its matching `--create-agent-file` option.
+Forge shows the exact marked patch first and never replaces unrelated content.
 `--patch-agents` remains a compatibility alias for approving `AGENTS.md`.
 
 The adoption writes:
@@ -286,7 +402,7 @@ The adoption writes:
 - `.moradins-harness/`, copied from the public payload manifest;
 - adaptive sidecar snippets for detected repository surfaces;
 - an ownership record and deterministic verification evidence;
-- only the separately approved Moradin marker blocks in root agent files.
+- only separately approved Moradin marker blocks in the fixed provider paths.
 
 Existing build files, workflows, manifests, source, and unrelated agent
 guidance remain untouched.
@@ -374,6 +490,10 @@ checks refuse unowned or modified managed content.
 - `make forge-tooling-suite-plan OUTPUT=<plan.json> PROFILE=practical`
 - `make forge-tooling-suite-apply PLAN=<plan.json> PLAN_SHA256=<digest>`
 - `make forge-tooling-suite-bundle PLAN=<plan.json> OUTPUT=<directory>`
+- `make forge-airgap-request PROFILE=practical OUTPUT=<request.json>`
+- `make forge-airgap-build REQUEST=<request.json> OUTPUT=<kit.tar.gz>`
+- `make forge-airgap-verify BUNDLE=<kit.tar.gz> BUNDLE_SHA256=<digest>`
+- `make forge-airgap-apply BUNDLE=<kit.tar.gz> BUNDLE_SHA256=<digest> PLAN_SHA256=<digest>`
 - `make forge-tooling-suite-verify RECEIPT=<receipt.json>`
 - `make forge-tooling-suite-rollback RECEIPT=<receipt.json> APPROVE_RECEIPT_SHA256=<digest>`
 - `make forge-tooling-plan WORKSPACE=<approved-workspace>`
@@ -394,6 +514,7 @@ checks refuse unowned or modified managed content.
 - `make payload-validate`
 - `make payload-smoke`
 - `make public-portability-check`
+- `make verify-readme-figures`
 - `make test`
 
 `make public-portability-check` validates a sanitized public tree and sidecar

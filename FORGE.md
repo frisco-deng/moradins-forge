@@ -2,6 +2,11 @@
 
 Moradin's Forge is the agent-first entrypoint for this repo.
 
+The public handoff has three steps: clone Forge, ask the user to run the guided
+Linux tooling suite, then onboard only user-approved workspace roots. The agent
+explains and verifies the suite; the user operates its menu and approves sudo.
+Onboarding shows exact provider diffs and requires separate consent per file.
+
 If the user sent you here as Codex, Claude Code, or another coding agent:
 
 1. Inspect this repo before proposing changes.
@@ -11,7 +16,8 @@ If the user sent you here as Codex, Claude Code, or another coding agent:
    - adaptive snippets under `.moradins-harness/adapters/`,
    - deterministic readiness, brief, and validation commands,
    - an adaptive tooling plan for approved workspaces,
-   - independently approved `AGENTS.md` and `CLAUDE.md` marker blocks.
+   - independently approved Codex, Claude, Gemini, Copilot, and Cursor marker
+     blocks at the fixed public paths.
 4. Explain what Moradin will not do:
    - it will not publish or phone home,
    - it will not replace existing repo workflows,
@@ -49,6 +55,12 @@ install/tooling-suite.sh
 
 Agents may explain, plan, and verify this flow but must not select menu options,
 confirm its digest, invoke sudo, or supply credentials for the user.
+
+For a disconnected Linux target, follow
+`docs/11_ops/air_gapped_tooling_suite.md`. Generate a sanitized request on the
+target, build the complete kit on a connected rootless host, return the kit and
+its digest through separate channels, then verify/apply with network sources
+disabled and onboard with `--offline`.
 
 Use this deterministic path:
 
@@ -99,10 +111,12 @@ On Windows PowerShell, use:
 After apply, report the sidecar path, adapter status, install-request artifacts,
 validation commands, rollback path, and any action the user must take manually.
 
-Root agent guidance is opt-in. Use `--approve-agent-file AGENTS.md` or
-`--approve-agent-file CLAUDE.md` only after showing the owned block and
-receiving explicit approval for that file. `--patch-agents` remains a
-compatibility alias for `AGENTS.md`.
+Agent guidance is opt-in. Use `--approve-agent-file` only after showing the
+owned block and receiving explicit approval for that fixed provider path; use
+the matching `--create-agent-file` for an absent file. The allowlist is
+`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, and
+`.cursor/rules/moradin-forge.mdc`. `--patch-agents` remains a compatibility
+alias for `AGENTS.md`.
 
 Forge is a public-candidate repo. Public docs, sidecars, exports, and release
 evidence must not contain raw home paths, usernames, hostnames, Windows user

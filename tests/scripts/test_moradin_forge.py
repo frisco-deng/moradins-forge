@@ -522,6 +522,94 @@ def test_apply_can_manage_agents_and_claude_independently(tmp_path: Path) -> Non
     assert (target / "CLAUDE.md").read_text(encoding="utf-8") == "# Existing Claude Guidance\n"
 
 
+@pytest.mark.parametrize(
+    "agent_file",
+    [
+        "AGENTS.md",
+        "CLAUDE.md",
+        "GEMINI.md",
+        ".github/copilot-instructions.md",
+        ".cursor/rules/moradin-forge.mdc",
+    ],
+)
+def test_each_provider_file_requires_independent_create_and_rolls_back_cleanly(
+    tmp_path: Path,
+    agent_file: str,
+) -> None:
+    forge_root = make_forge_root(tmp_path)
+    target = make_blank_target(tmp_path)
+
+    result = apply_integration(
+        forge_root,
+        target,
+        ForgeApplyOptions(
+            approve=True,
+            agent_files=(agent_file,),
+            create_agent_files=(agent_file,),
+        ),
+    )
+
+    path = target / agent_file
+    assert result["agent_file_statuses"] == {agent_file: "created"}
+    text = path.read_text(encoding="utf-8")
+    assert AGENTS_MARKER_BEGIN in text
+    if agent_file.endswith(".mdc"):
+        assert text.startswith("---\ndescription: Moradin Forge repository workflow")
+    rollback = rollback_integration(target, approve=True)
+    assert rollback["agent_files_restored"] == [agent_file]
+    assert not path.exists()
+    if agent_file == ".github/copilot-instructions.md":
+        assert not (target / ".github").exists()
+    if agent_file == ".cursor/rules/moradin-forge.mdc":
+        assert not (target / ".cursor").exists()
+
+
+def test_cursor_rule_refuses_to_replace_an_existing_unowned_file(
+    tmp_path: Path,
+) -> None:
+    forge_root = make_forge_root(tmp_path)
+    target = make_target(tmp_path)
+    cursor = target / ".cursor/rules/moradin-forge.mdc"
+    write(cursor, "---\ndescription: Existing project rule\n---\n")
+
+    with pytest.raises(ForgeError, match="unowned"):
+        apply_integration(
+            forge_root,
+            target,
+            ForgeApplyOptions(
+                approve=True,
+                agent_files=(".cursor/rules/moradin-forge.mdc",),
+            ),
+        )
+
+    assert cursor.read_text(encoding="utf-8").startswith("---\ndescription: Existing")
+    assert not (target / ".moradins-harness").exists()
+
+
+def test_provider_parent_symlink_is_rejected_before_any_write(
+    tmp_path: Path,
+) -> None:
+    forge_root = make_forge_root(tmp_path)
+    target = make_target(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (target / ".github").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ForgeError, match="unsafe parent"):
+        apply_integration(
+            forge_root,
+            target,
+            ForgeApplyOptions(
+                approve=True,
+                agent_files=(".github/copilot-instructions.md",),
+                create_agent_files=(".github/copilot-instructions.md",),
+            ),
+        )
+
+    assert not (outside / "copilot-instructions.md").exists()
+    assert not (target / ".moradins-harness").exists()
+
+
 def test_apply_requires_create_consent_for_missing_agent_file(tmp_path: Path) -> None:
     forge_root = make_forge_root(tmp_path)
     target = make_target(tmp_path)

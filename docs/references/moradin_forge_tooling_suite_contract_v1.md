@@ -11,6 +11,7 @@ related_docs:
   - tooling_readiness_install_execution_contract_v2.md
   - moradin_forge_installer_bootstrap_contract_v1.md
   - moradin_forge_agent_integration_contract_v1.md
+  - ../11_ops/air_gapped_tooling_suite.md
 ---
 
 # Moradin Forge Linux Tooling Suite Contract V1
@@ -48,10 +49,11 @@ on the user's behalf.
 
 ## Profiles and Commands
 
-The interactive menu offers Install All, Customize, Verify, Rollback, and Exit.
-Install All offers Practical and Extended profiles. Customize first selects
-categories, then individual tools, and shows every manual/service
-classification.
+The interactive menu offers Install All, Customize, Verify, Rollback,
+Air-Gapped Setup, and Exit. Install All offers Practical and Extended profiles.
+Customize first selects categories, then individual tools, and shows every
+manual/service classification. Air-Gapped Setup offers request, build, verify,
+and apply without silently selecting a target or profile.
 
 Deterministic commands are:
 
@@ -61,6 +63,11 @@ Deterministic commands are:
 - `tooling-suite.sh bundle --plan FILE --output PATH`
 - `tooling-suite.sh verify --receipt ID` or `tooling-suite.sh verify --latest`
 - `tooling-suite.sh rollback --receipt FILE --approve-receipt-sha256 SHA`
+- `tooling-suite.sh airgap-request --profile practical|extended --output FILE`
+- `tooling-suite.sh airgap-build --request FILE --output KIT.tar.gz`
+- `tooling-suite.sh airgap-build --lock FILE --output KIT.tar.gz`
+- `tooling-suite.sh airgap-verify --bundle KIT.tar.gz --expected-sha256 SHA`
+- `tooling-suite.sh airgap-apply --bundle KIT.tar.gz --approve-bundle-sha256 SHA`
 
 Non-interactive planning requires an explicit profile or non-empty custom
 selection. Extended planning requires an explicit rootless engine choice when
@@ -72,6 +79,9 @@ Docker or Podman is absent. Missing TTY input never selects a default.
   dnf, and Arch with pacman.
 - Supported architectures are amd64 and arm64. Missing verified assets fail
   closed per tool.
+- Complete air-gap kits support both architectures for apt and dnf targets;
+  frozen Arch air-gap kits currently support amd64 only. Arch arm64 fails
+  closed until a separately reviewed Arch Linux ARM trust/snapshot lane exists.
 - Latest metadata uses the existing 24-hour official-source cache. The plan
   freezes versions, package candidates, URLs, digests, trust class, selection,
   host fingerprint hash, target UID, catalog hash, and installer manifest hash.
@@ -79,9 +89,14 @@ Docker or Podman is absent. Missing TTY input never selects a default.
 - The sudo command first seals the manifest-bound installer files into a
   root-owned, non-writable runner. No Python module from the user-writable
   checkout is executed as root; later rollback uses the same sealed runner.
-- The entrypoint needs Python 3.11+ to plan; the Practical and Extended
-  contracts fail closed until Python 3.12+ is actually available.
+- Connected planning needs Python 3.11+. A disconnected request, kit verify,
+  and kit apply may start from root-owned Python 3.9+; they verify and launch
+  the kit-bound Python 3.12.8 runtime before using the full engine.
 - Root network access is restricted to the selected signed package manager.
+- A complete air-gap kit freezes and verifies APT Release/Packages trust, RPM
+  package signatures and repository evidence, or Pacman package signatures and
+  synchronized metadata. Offline apply disables online repositories and
+  rejects every network URL.
 - EPEL is a separate digest-bound repository-bootstrap transaction followed by
   replanning. Arch package work requires separately approved full
   synchronization; partial upgrades are prohibited.
@@ -104,20 +119,34 @@ reversible transaction is available at apply time. Otherwise Forge retains the
 installed version and records the skip. Rollback never purges configuration or
 performs an ambiguous autoremove. When a newly installed direct package is
 removed, any now-ambiguous dependency packages are retained and explicitly
-reported as drift.
+reported as drift. Rollback preserves package state changed after the Forge
+transaction and re-verifies an offline RPM or Pacman rollback artifact before
+using it.
 
 Root receipts and backups live under `/var/lib/moradins-forge` and
 `/var/backups/moradins-forge`. User receipts and path-sanitized approved-plan
 copies live under the XDG state directory. Rollback requires the exact receipt
 digest and preserves a shim changed by a newer generation.
 
-## Privacy and Offline Bundles
+## Privacy and Offline Interfaces
 
 The suite has no telemetry and uploads no workspace contents. Local plans may
 contain approved workspace paths needed for discovery; portable bundles replace
 them with placeholders and remove the target UID and host fingerprint.
 
-Bundles contain only verified tool assets, frozen Python wheels, portable plan
-metadata, manifests, and checksums. They report `partial` when signed OS package
-assets remain connected-only. Repositories, source content, prompts,
-credentials, logs, usernames, hostnames, and machine paths are excluded.
+The compatibility `bundle` command contains verified tool assets, frozen
+Python wheels, portable plan metadata, manifests, and checksums. It reports
+`partial` when signed OS-package assets remain connected-only and never claims
+a complete installation.
+
+Only `airgap-build` may produce a complete target-specific kit. It includes a
+sanitized single-commit Forge export and self-contained Git bundle, pinned
+runtime bootstrap, standalone assets, the complete wheel and native-package
+dependency closure, native trust evidence, rollback closure, a portable plan,
+frozen lock, sealed root runner, SPDX SBOM, manifest, checksums, and an offline
+runbook. Its request excludes workspaces, hostnames, raw paths, credentials,
+prompts, and machine identifiers. Kits older than 30 days require a warning and
+a second approval of the same exact digest.
+
+Repositories, project source, prompts, credentials, logs, usernames, hostnames,
+and machine paths are excluded from both portable interfaces.

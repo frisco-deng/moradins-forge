@@ -30,6 +30,7 @@ Profile: local agent-first integration kit.
 - `docs/references/repo_operating_model_v1.md`
 - `docs/references/tooling_readiness_install_execution_contract_v2.md`
 - `docs/references/moradin_forge_tooling_suite_contract_v1.md`
+- `docs/11_ops/air_gapped_tooling_suite.md`
 - `Harness/README.md`
 
 ## Agent Adoption Rules
@@ -49,8 +50,9 @@ Profile: local agent-first integration kit.
   or mutate a target repo.
 - Preserve existing target repo workflows and root files by default.
 - Generate adaptive snippets under `.moradins-harness/adapters/`.
-- Patch target `AGENTS.md` or `CLAUDE.md` marker blocks only when the user
-  approves each file independently.
+- Patch only the fixed Codex, Claude, Gemini, Copilot, and Cursor provider
+  paths, and only when the user approves each file independently. Creating an
+  absent file requires separate creation consent.
 
 ## Deterministic Commands
 
@@ -68,6 +70,10 @@ Profile: local agent-first integration kit.
 - `make forge-tooling-suite-plan OUTPUT=<plan.json> PROFILE=practical`
 - `make forge-tooling-suite-apply PLAN=<plan.json> PLAN_SHA256=<digest>`
 - `make forge-tooling-suite-bundle PLAN=<plan.json> OUTPUT=<directory>`
+- `make forge-airgap-request PROFILE=practical OUTPUT=<request.json>`
+- `make forge-airgap-build REQUEST=<request.json> OUTPUT=<kit.tar.gz>`
+- `make forge-airgap-verify BUNDLE=<kit.tar.gz> BUNDLE_SHA256=<digest>`
+- `make forge-airgap-apply BUNDLE=<kit.tar.gz> BUNDLE_SHA256=<digest> PLAN_SHA256=<digest>`
 - `make forge-tooling-suite-verify RECEIPT=<receipt.json>`
 - `make forge-tooling-suite-rollback RECEIPT=<receipt.json> APPROVE_RECEIPT_SHA256=<digest>`
 - `make forge-tooling-update-plan WORKSPACE=<workspace-path>`
@@ -86,6 +92,7 @@ Profile: local agent-first integration kit.
 - `make payload-validate`
 - `make payload-smoke`
 - `make public-portability-check`
+- `make verify-readme-figures`
 - `make test`
 - `install/bootstrap-linux.sh --dry-run --json`
 

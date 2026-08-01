@@ -22,6 +22,7 @@ from typing import Any
 
 try:
     from scripts.moradin_workstation import (
+        AGENT_PROVIDER_FILES,
         ONBOARD_PLAN_VERSION,
         WORKSTATION_PLAN_VERSION,
         WorkstationError,
@@ -35,6 +36,7 @@ try:
         context_primer,
         diagnostic_brief,
         inspect_repository_capabilities,
+        initial_agent_file_content,
         plan_digest,
         recommended_tool_specs,
         repo_brief,
@@ -46,6 +48,7 @@ try:
     )
 except ModuleNotFoundError:  # pragma: no cover - direct script execution path
     from moradin_workstation import (  # type: ignore[no-redef]
+        AGENT_PROVIDER_FILES,
         ONBOARD_PLAN_VERSION,
         WORKSTATION_PLAN_VERSION,
         WorkstationError,
@@ -59,6 +62,7 @@ except ModuleNotFoundError:  # pragma: no cover - direct script execution path
         context_primer,
         diagnostic_brief,
         inspect_repository_capabilities,
+        initial_agent_file_content,
         plan_digest,
         recommended_tool_specs,
         repo_brief,
@@ -68,6 +72,11 @@ except ModuleNotFoundError:  # pragma: no cover - direct script execution path
         tooling_plan_markdown,
         write_tooling_plan_artifacts,
     )
+
+try:
+    from scripts.moradin_tooling_suite import latest_suite_receipt_status
+except ModuleNotFoundError:  # pragma: no cover - direct script execution path
+    from moradin_tooling_suite import latest_suite_receipt_status  # type: ignore[no-redef]
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -79,7 +88,14 @@ OWNERSHIP_RECORD_RELATIVE = Path(
 )
 AGENTS_MARKER_BEGIN = "<!-- moradin-forge:start -->"
 AGENTS_MARKER_END = "<!-- moradin-forge:end -->"
-SUPPORTED_AGENT_FILES = ("AGENTS.md", "CLAUDE.md")
+SUPPORTED_AGENT_FILES = tuple(AGENT_PROVIDER_FILES.values())
+ADAPTER_SNIPPETS = {
+    "AGENTS.md": "AGENTS.snippet.md",
+    "CLAUDE.md": "CLAUDE.snippet.md",
+    "GEMINI.md": "GEMINI.snippet.md",
+    ".github/copilot-instructions.md": "copilot-instructions.snippet.md",
+    ".cursor/rules/moradin-forge.mdc": "moradin-forge.cursor-rule.snippet.mdc",
+}
 INTERNAL_USER_TOKEN = "ru" + "ne"
 HOME_PREFIX_TOKEN = "/" + "home" + "/"
 MAC_HOME_PREFIX_TOKEN = "/" + "Users" + "/"
@@ -315,7 +331,7 @@ PORTABLE_TEXT_REPLACEMENTS: list[tuple[re.Pattern[str], str]] = [
 ]
 
 PORTABLE_SIDECAR_MAKEFILE_TEXT = """\
-.PHONY: test payload-validate payload-smoke forge-explain forge-readiness forge-onboard forge-tooling-suite forge-tooling-suite-plan forge-tooling-suite-apply forge-tooling-suite-bundle forge-tooling-suite-verify forge-tooling-suite-rollback forge-tooling-plan forge-tooling-update-plan forge-tooling-apply forge-tooling-bundle forge-tooling-rollback forge-plan forge-adopt forge-verify forge-upgrade-plan forge-upgrade forge-upgrade-rollback forge-rollback forge-smoke
+.PHONY: test payload-validate payload-smoke forge-explain forge-readiness forge-onboard forge-tooling-suite forge-tooling-suite-plan forge-tooling-suite-apply forge-tooling-suite-bundle forge-tooling-suite-verify forge-tooling-suite-rollback forge-airgap-request forge-airgap-build forge-airgap-verify forge-airgap-apply forge-tooling-plan forge-tooling-update-plan forge-tooling-apply forge-tooling-bundle forge-tooling-rollback forge-plan forge-adopt forge-verify forge-upgrade-plan forge-upgrade forge-upgrade-rollback forge-rollback forge-smoke
 
 TARGET ?=
 APPROVE ?=
@@ -334,6 +350,11 @@ PROFILE ?=
 SELECT ?=
 EXCLUDE ?=
 CONTAINER_ENGINE ?=
+REQUEST ?=
+LOCK ?=
+BUNDLE ?=
+BUNDLE_SHA256 ?=
+STALE_BUNDLE_SHA256 ?=
 
 test:
 \tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run pytest
@@ -376,6 +397,22 @@ forge-tooling-suite-verify:
 forge-tooling-suite-rollback:
 \t@if [ -z "$(RECEIPT)" ] || [ -z "$(APPROVE_RECEIPT_SHA256)" ]; then echo "Usage: make forge-tooling-suite-rollback RECEIPT=<receipt.json> APPROVE_RECEIPT_SHA256=<digest>"; exit 1; fi
 \tinstall/tooling-suite.sh rollback --receipt "$(RECEIPT)" --approve-receipt-sha256 "$(APPROVE_RECEIPT_SHA256)"
+
+forge-airgap-request:
+\t@if [ -z "$(PROFILE)" ] || [ -z "$(OUTPUT)" ]; then echo "Usage: make forge-airgap-request PROFILE=practical|extended OUTPUT=<request.json>"; exit 1; fi
+\tinstall/tooling-suite.sh airgap-request --profile "$(PROFILE)" --output "$(OUTPUT)" $(foreach tool,$(EXCLUDE),--exclude "$(tool)")
+
+forge-airgap-build:
+\t@if [ -z "$(OUTPUT)" ] || { [ -z "$(REQUEST)" ] && [ -z "$(LOCK)" ]; } || { [ -n "$(REQUEST)" ] && [ -n "$(LOCK)" ]; }; then echo "Usage: make forge-airgap-build REQUEST=<request.json>|LOCK=<lock.json> OUTPUT=<kit.tar.gz>"; exit 1; fi
+\tinstall/tooling-suite.sh airgap-build $(if $(REQUEST),--request "$(REQUEST)",--lock "$(LOCK)") --output "$(OUTPUT)"
+
+forge-airgap-verify:
+\t@if [ -z "$(BUNDLE)" ] || [ -z "$(BUNDLE_SHA256)" ]; then echo "Usage: make forge-airgap-verify BUNDLE=<kit.tar.gz> BUNDLE_SHA256=<digest>"; exit 1; fi
+\tinstall/tooling-suite.sh airgap-verify --bundle "$(BUNDLE)" --expected-sha256 "$(BUNDLE_SHA256)"
+
+forge-airgap-apply:
+\t@if [ -z "$(BUNDLE)" ] || [ -z "$(BUNDLE_SHA256)" ] || [ -z "$(PLAN_SHA256)" ]; then echo "Usage: make forge-airgap-apply BUNDLE=<kit.tar.gz> BUNDLE_SHA256=<digest> PLAN_SHA256=<digest>"; exit 1; fi
+\tinstall/tooling-suite.sh airgap-apply --bundle "$(BUNDLE)" --approve-bundle-sha256 "$(BUNDLE_SHA256)" --approve-offline-plan-sha256 "$(PLAN_SHA256)" $(if $(STALE_BUNDLE_SHA256),--approve-stale-bundle-sha256 "$(STALE_BUNDLE_SHA256)",)
 
 forge-tooling-plan:
 \t@if [ -z "$(WORKSPACE)" ]; then echo "Usage: make forge-tooling-plan WORKSPACE=<workspace-path>"; exit 1; fi
@@ -451,9 +488,10 @@ owner: moradin-forge
 | FORGE-007 | keep beta release visuals portable and local | README.md | scan SVG assets before public release | active |
 | FORGE-008 | inspect only explicitly approved workspace roots | docs/references/tooling_readiness_install_execution_contract_v2.md | show discovered repositories before capability inspection | active |
 | FORGE-009 | require independent approval for each agent file and user configuration change | docs/references/moradin_forge_agent_integration_contract_v1.md | show the owned block and request each consent separately | active |
-| FORGE-010 | never invoke elevation automatically | docs/references/tooling_readiness_install_execution_contract_v2.md | generate a reviewable script for the user to run | active |
+| FORGE-010 | agents never invoke elevation or approve a human confirmation | docs/references/moradin_forge_tooling_suite_contract_v1.md | the user launches the suite and approves its sealed sudo phase | active |
 | FORGE-011 | bind upgrades to an exact plan and retain one predecessor | docs/references/moradin_forge_upgrade_contract_v1.md | stage, validate, switch, or restore byte-for-byte | active |
 | FORGE-012 | store sanitized efficiency counters only | docs/references/moradin_agent_efficiency_contract_v1.md | omit prompts, source, commands, paths, and logs | active |
+| FORGE-013 | call an offline installation complete only when its target-specific package, trust, runtime, tool, and rollback closure is sealed | docs/11_ops/air_gapped_tooling_suite.md | use `airgap-build`; label compatibility `bundle` output partial | active |
 """,
     "Harness/artifacts/control/current_features.md": """\
 ---
@@ -474,10 +512,12 @@ owner: moradin-forge
 | FORGE-FEAT-006 | low-token clone-and-prime bootstrap entrypoints | implemented | docs/references/moradin_forge_installer_bootstrap_contract_v1.md |
 | FORGE-FEAT-007 | README visual overview for adoption and safety boundaries | implemented | docs/assets/readme/ |
 | FORGE-FEAT-008 | bounded multi-workspace repository discovery | implemented | scripts/moradin_workstation.py |
-| FORGE-FEAT-009 | independent AGENTS.md and CLAUDE.md owned blocks | implemented | scripts/moradin_forge.py |
-| FORGE-FEAT-010 | checksummed offline tooling bundles and privileged user-run scripts | implemented | scripts/moradin_workstation.py |
+| FORGE-FEAT-009 | independent Codex, Claude, Gemini, Copilot, and Cursor owned blocks | implemented | scripts/moradin_forge.py |
+| FORGE-FEAT-010 | checksummed asset-only compatibility bundles and privileged user-run scripts | implemented | scripts/moradin_workstation.py |
 | FORGE-FEAT-011 | transactional V1/V2 sidecar upgrades and immediate rollback | implemented | docs/references/moradin_forge_upgrade_contract_v1.md |
 | FORGE-FEAT-012 | portable context primer, briefs, rerun advice, and sanitized counters | implemented | docs/references/moradin_agent_efficiency_contract_v1.md |
+| FORGE-FEAT-013 | target-specific complete air-gap kits with signed package trust and rollback closure | implemented | docs/11_ops/air_gapped_tooling_suite.md |
+| FORGE-FEAT-014 | deterministic measured README figures from public release-dogfood fixtures | implemented | scripts/generate_readme_figures.py |
 """,
     "Harness/artifacts/control/compatibility_window_status.md": """\
 ---
@@ -510,7 +550,7 @@ owner: moradin-forge
 | PUBLIC-001 | 2026-05-11 | public-alpha | Published Moradin's Forge as an agent-first local integration kit with consent-gated sidecar adoption. | ready |
 | PUBLIC-002 | 2026-06-09 | tooling-inheritance | Adopted current shared-tooling adapter improvements, hardened portability scans, and added request-only bootstrap entrypoints. | ready |
 | PUBLIC-003 | 2026-06-10 | beta-release | Prepared v0.2.0-beta.1 with version normalization, CI fixes, and README visual overview assets. | ready |
-| PUBLIC-004 | 2026-07-28 | universal-agent-baseline | Prepared v0.2.0-beta.3 with bounded onboarding, approved user-level tooling, offline bundles, independent agent blocks, compact context helpers, and transactional upgrades. | candidate |
+| PUBLIC-004 | 2026-07-31 | universal-agent-baseline | Prepared v0.2.0-beta.3 with three-step onboarding, a human-run Linux suite, complete target-specific air-gap kits, five independently approved provider blocks, compact context helpers, and transactional upgrades. | candidate |
 """,
 }
 
@@ -634,6 +674,38 @@ def atomic_write_bytes(path: Path, payload: bytes) -> None:
     finally:
         if temporary.exists():
             temporary.unlink()
+
+
+def agent_parent_directories(target_root: Path, agent_file: str) -> list[Path]:
+    """Return allowlisted nested guidance parents from shallow to deep."""
+
+    if agent_file not in SUPPORTED_AGENT_FILES:
+        raise ForgeError(f"unsupported agent guidance file: {agent_file}")
+    relative = Path(agent_file).parent
+    if str(relative) == ".":
+        return []
+    parents: list[Path] = []
+    current = Path()
+    for part in relative.parts:
+        current /= part
+        parents.append(target_root / current)
+    return parents
+
+
+def remove_owned_empty_agent_parents(
+    target_root: Path,
+    agent_file: str,
+    *,
+    parents_present_before: set[str],
+) -> None:
+    for parent in reversed(agent_parent_directories(target_root, agent_file)):
+        relative = parent.relative_to(target_root).as_posix()
+        if relative in parents_present_before:
+            break
+        try:
+            parent.rmdir()
+        except OSError:
+            break
 
 
 def install_directory_no_replace(source: Path, destination: Path) -> None:
@@ -1087,9 +1159,29 @@ def detect_target_tooling(target_root: Path) -> dict[str, Any]:
 def target_repo_snapshot(target_root: Path, sidecar_dir: str = DEFAULT_SIDECAR_DIR) -> dict[str, Any]:
     lowercase_agent_files = sorted(
         name
-        for name in ("agents.md", "agent.md", "claude.md", "claud.md")
+        for name in (
+            "agents.md",
+            "agent.md",
+            "claude.md",
+            "claud.md",
+            "gemini.md",
+            ".github/copilot_instructions.md",
+            ".cursor/rules/moradin-forge.md",
+        )
         if (target_root / name).is_file()
     )
+    agent_files = {
+        name: {
+            "present": (target_root / name).is_file(),
+            "symlink": (target_root / name).is_symlink(),
+            "provider": next(
+                provider
+                for provider, relative in AGENT_PROVIDER_FILES.items()
+                if relative == name
+            ),
+        }
+        for name in SUPPORTED_AGENT_FILES
+    }
     return {
         "path": target_root.as_posix(),
         "exists": target_root.exists(),
@@ -1097,6 +1189,7 @@ def target_repo_snapshot(target_root: Path, sidecar_dir: str = DEFAULT_SIDECAR_D
         "git_present": (target_root / ".git").exists(),
         "agents_present": (target_root / "AGENTS.md").is_file(),
         "claude_present": (target_root / "CLAUDE.md").is_file(),
+        "agent_files": agent_files,
         "lowercase_agent_file_warnings": lowercase_agent_files,
         "makefile_present": (target_root / "Makefile").is_file(),
         "tooling": detect_target_tooling(target_root),
@@ -1109,7 +1202,10 @@ def proposed_writes_for_target(target_root: Path, sidecar_dir: str) -> list[str]
     tooling = detect_target_tooling(target_root)
     writes = [
         f"{sidecar_dir}/**",
-        f"{sidecar_dir}/adapters/AGENTS.snippet.md",
+        *[
+            f"{sidecar_dir}/adapters/{snippet}"
+            for snippet in ADAPTER_SNIPPETS.values()
+        ],
         f"{sidecar_dir}/adapters/Makefile.snippet",
         f"{sidecar_dir}/adapters/README.md",
         f"{sidecar_dir}/Harness/artifacts/control/forge_integration/integration.json",
@@ -1338,15 +1434,13 @@ def write_adapter_snippets(sidecar_root: Path, sidecar_dir: str, target_root: Pa
         encoding="utf-8",
     )
     written.append(readme.as_posix())
-    agents_snippet = adapters_root / "AGENTS.snippet.md"
-    agents_snippet.write_text(agents_adapter_section(sidecar_dir), encoding="utf-8")
-    written.append(agents_snippet.as_posix())
-    claude_snippet = adapters_root / "CLAUDE.snippet.md"
-    claude_snippet.write_text(
-        build_agent_adapter_section(sidecar_dir, "CLAUDE.md"),
-        encoding="utf-8",
-    )
-    written.append(claude_snippet.as_posix())
+    for agent_file, snippet_name in ADAPTER_SNIPPETS.items():
+        snippet = adapters_root / snippet_name
+        snippet.write_text(
+            build_agent_adapter_section(sidecar_dir, agent_file),
+            encoding="utf-8",
+        )
+        written.append(snippet.as_posix())
     makefile_snippet = adapters_root / "Makefile.snippet"
     makefile_snippet.write_text(
         "\n".join(
@@ -1456,6 +1550,10 @@ def patch_agent_file_adapter(
         )
     except WorkstationError as error:
         raise ForgeError(str(error)) from error
+    if proposal.get("action") == "conflict":
+        raise ForgeError(
+            f"refusing to replace unowned agent guidance: {agent_file}"
+        )
     existing = path.read_text(encoding="utf-8") if path.is_file() else ""
     section = str(proposal["owned_block"])
     if AGENTS_MARKER_BEGIN in existing:
@@ -1466,7 +1564,7 @@ def patch_agent_file_adapter(
         rendered = existing[:start] + section + existing[end:]
         status = "already_present" if rendered == existing else "updated"
     elif not existing:
-        rendered = f"# {agent_file}\n\n{section}"
+        rendered = initial_agent_file_content(agent_file, section)
         status = "created"
     else:
         separator = "" if existing.endswith("\n\n") else "\n" if existing.endswith("\n") else "\n\n"
@@ -1512,6 +1610,7 @@ def agent_file_ownership_snapshot(
     agent_file: str,
     adapter_status: str,
     before_payload: bytes | None,
+    parent_directories_before: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     after_payload = path.read_bytes() if path.is_file() else None
     before_text = (before_payload or b"").decode("utf-8", errors="strict")
@@ -1534,6 +1633,7 @@ def agent_file_ownership_snapshot(
             sha256_bytes(after_block.encode("utf-8")) if after_block else ""
         ),
         "owned": owned,
+        "parent_directories_before": sorted(set(parent_directories_before)),
     }
 
 
@@ -1800,8 +1900,7 @@ def verify_integration(
         "Harness/entrypoints/forge.md",
         "scripts/moradin_forge.py",
         "adapters/README.md",
-        "adapters/AGENTS.snippet.md",
-        "adapters/CLAUDE.snippet.md",
+        *[f"adapters/{snippet}" for snippet in ADAPTER_SNIPPETS.values()],
         "adapters/Makefile.snippet",
         "Harness/artifacts/control/forge_integration/integration.json",
         "Harness/artifacts/control/forge_integration/integration.md",
@@ -1987,6 +2086,19 @@ def rollback_integration(
             restored = agent_bytes_restored[agent_file]
             if restored is None:
                 path.unlink()
+                metadata = agent_files[agent_file]
+                parents_before = metadata.get("parent_directories_before", [])
+                if not isinstance(parents_before, list) or not all(
+                    isinstance(item, str) for item in parents_before
+                ):
+                    raise ForgeError(
+                        f"rollback refused because {agent_file} parent metadata is invalid"
+                    )
+                remove_owned_empty_agent_parents(
+                    target_root,
+                    agent_file,
+                    parents_present_before=set(parents_before),
+                )
             else:
                 atomic_write_bytes(path, restored)
         shutil.rmtree(quarantine)
@@ -2066,9 +2178,8 @@ def restore_agent_file_from_ownership(
             None,
         )
         restored_text = exact if exact is not None else candidates[0]
-    if (
-        str(metadata.get("adapter_status", "")) == "created"
-        and restored_text.strip() in {f"# {agent_file}", ""}
+    if str(metadata.get("adapter_status", "")) == "created" and not metadata.get(
+        "existed_before", False
     ):
         return None
     return restored_text.encode("utf-8")
@@ -2123,11 +2234,43 @@ def apply_integration(
         name: target_root / name
         for name in sorted(approved_agent_files)
     }
+    agent_parent_dirs_before = {
+        name: tuple(
+            parent.relative_to(target_root).as_posix()
+            for parent in agent_parent_directories(target_root, name)
+            if parent.is_dir() and not parent.is_symlink()
+        )
+        for name in sorted(approved_agent_files)
+    }
     for name, path in agent_paths.items():
+        unsafe_parent = next(
+            (
+                parent
+                for parent in agent_parent_directories(target_root, name)
+                if parent.is_symlink()
+                or (parent.exists() and not parent.is_dir())
+            ),
+            None,
+        )
+        if unsafe_parent is not None:
+            raise ForgeError(
+                f"approved agent guidance has an unsafe parent: {name}"
+            )
         if path.is_symlink() or (path.exists() and not path.is_file()):
             raise ForgeError(
-                f"approved agent guidance must be a regular root file: {name}"
+                f"approved agent guidance must be a regular root file or "
+                f"allowlisted provider file: {name}"
             )
+        try:
+            proposal = agent_file_proposal(
+                target_root,
+                name,
+                sidecar_dir=sidecar_dir,
+            )
+        except WorkstationError as error:
+            raise ForgeError(str(error)) from error
+        if proposal.get("action") == "conflict":
+            raise ForgeError(f"refusing to replace unowned agent guidance: {name}")
     agent_files_before = {
         name: path.read_bytes() if path.is_file() else None
         for name, path in agent_paths.items()
@@ -2185,6 +2328,7 @@ def apply_integration(
                 agent_file=name,
                 adapter_status=agent_file_statuses.get(name, "snippet_only"),
                 before_payload=agent_files_before[name],
+                parent_directories_before=agent_parent_dirs_before[name],
             )
             for name in sorted(approved_agent_files)
         }
@@ -2205,6 +2349,11 @@ def apply_integration(
             if before is None:
                 if path.exists():
                     path.unlink()
+                remove_owned_empty_agent_parents(
+                    target_root,
+                    name,
+                    parents_present_before=set(agent_parent_dirs_before[name]),
+                )
             elif not path.is_file() or path.read_bytes() != before:
                 atomic_write_bytes(path, before)
         raise
@@ -2502,6 +2651,7 @@ def _carry_agent_origin(
         "before_sha256",
         "before_owned_block",
         "before_owned_block_sha256",
+        "parent_directories_before",
     ):
         if key in previous:
             carried[key] = previous[key]
@@ -2953,6 +3103,13 @@ def build_parser() -> argparse.ArgumentParser:
     onboard.add_argument("--refresh-versions", action="store_true")
     onboard.add_argument("--include-tool", action="append", default=[])
     onboard.add_argument("--exclude-tool", action="append", default=[])
+    onboard.add_argument(
+        "--agent-provider",
+        action="append",
+        choices=tuple(AGENT_PROVIDER_FILES),
+        default=[],
+    )
+    onboard.add_argument("--offline", action="store_true")
 
     tooling_plan = subparsers.add_parser(
         "tooling-plan",
@@ -3141,6 +3298,9 @@ def main(argv: list[str] | None = None) -> int:
                 refresh_versions=args.refresh_versions,
                 include_tools=args.include_tool,
                 exclude_tools=args.exclude_tool,
+                agent_providers=args.agent_provider,
+                offline=args.offline,
+                tooling_receipt=latest_suite_receipt_status(),
                 discovery_callback=show_discovered_repositories,
             )
             tooling_artifacts = write_tooling_plan_artifacts(

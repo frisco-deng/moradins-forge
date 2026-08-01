@@ -170,6 +170,9 @@ def test_export_public_tree_excludes_history_and_sanitizes_text(tmp_path: Path) 
     assert PR_HARDENING_TOKEN not in guidance
     assert "moradin_tmp_runs" not in guidance
     assert "FORGE-001" in guidance
+    public_makefile = (export / "Makefile").read_text(encoding="utf-8")
+    assert "forge-airgap-build:" in public_makefile
+    assert "verify-readme-figures:" in public_makefile
     assert (export / "public_audit/export_manifest.json").is_file()
     assert scan_public_root(export)["status"] == "pass"
 

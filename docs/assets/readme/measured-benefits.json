@@ -1,0 +1,51 @@
+{
+  "classification": "Measured",
+  "disclaimer": "Release-dogfood fixture evidence only; results are not a universal token-reduction or performance guarantee.",
+  "inputs": [
+    {
+      "bytes": 8965,
+      "path": "AGENTS.md",
+      "sha256": "7caa0c7ee02cb28a78c18dcb7bc971de4de87cfedfd7e3c540df32eb3da52997"
+    },
+    {
+      "bytes": 5339,
+      "path": "FORGE.md",
+      "sha256": "08179d9abf1ab2fcd3563d5f81cb3e86c2d126a98a012655c4c300ca894b8816"
+    },
+    {
+      "bytes": 3938,
+      "path": "Harness/entrypoints/forge.md",
+      "sha256": "20f5c0c65e6e51ca4adc3955f14a767aa6ea1ad70f5f0f5c2f20b0cfc99e6307"
+    },
+    {
+      "bytes": 484,
+      "path": "tests/fixtures/readme_metrics/context-primer.md",
+      "sha256": "315747deeb9beb3080160d462008d10fba5e5ef5faa05e88efc1dd2357816244"
+    },
+    {
+      "bytes": 1606,
+      "path": "tests/fixtures/readme_metrics/repeated-command-output.txt",
+      "sha256": "a0d3308dcdc8d5afc5938f4d0ef60557230ce0024ac5424a4e863974041aec8a"
+    },
+    {
+      "bytes": 136,
+      "path": "tests/fixtures/readme_metrics/rerun-advice.json",
+      "sha256": "44c31609947f712c07a1c1b6bd30513316208fa6af3adb92083c25ef20fda5ee"
+    }
+  ],
+  "method": "UTF-8 byte counts over checked-in public first-hop guidance and deterministic summary fixtures",
+  "metrics": {
+    "repeated_output": {
+      "avoided_bytes": 1470,
+      "with_rerun_advice_bytes": 136,
+      "without_reuse_bytes": 1606
+    },
+    "startup_context": {
+      "avoided_bytes": 17758,
+      "with_summary_bytes": 484,
+      "without_summary_bytes": 18242
+    }
+  },
+  "scope": "release-dogfood-fixtures",
+  "version": "MoradinForgeReadmeEvidenceV1"
+}

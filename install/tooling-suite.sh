@@ -9,6 +9,9 @@ USER_BIN=${HOME:?}/.local/bin
 PATH=$SAFE_SYSTEM_PATH
 export PATH
 unset CDPATH ENV BASH_ENV PYTHONHOME PYTHONPATH MORADIN_FORGE_BOOTSTRAP_UV
+unset MORADIN_FORGE_ROOT_PYTHON_SOURCE MORADIN_FORGE_ROOT_PYTHON_MANIFEST
+unset MORADIN_FORGE_ROOT_PYTHON_MANIFEST_SHA256 MORADIN_FORGE_ROOT_PYTHON_EXECUTABLE
+unset MORADIN_FORGE_SEALED_PYTHON_DIGEST MORADIN_FORGE_SEALED_PYTHON_EXECUTABLE
 unset CURL_CA_BUNDLE GIT_SSL_CAINFO LD_LIBRARY_PATH LD_PRELOAD REQUESTS_CA_BUNDLE
 unset SSL_CERT_DIR SSL_CERT_FILE
 unset UV_ARCHIVE_TEMP UV_SCRATCH_DIR
@@ -44,7 +47,7 @@ cleanup_uv_stage() {
 }
 
 find_python() {
-	local candidate resolved owner permissions
+	local candidate resolved owner permissions managed_root generation
 	for candidate in /usr/bin/python3.12 /usr/bin/python3.11 /usr/bin/python3; do
 		[[ -x $candidate ]] || continue
 		resolved=$(readlink -f -- "$candidate")
@@ -53,6 +56,45 @@ find_python() {
 		permissions=${permissions: -3}
 		if [[ $owner == 0 ]] && (((8#$permissions & 8#022) == 0)) &&
 			"$resolved" -c 'import sys; raise SystemExit(sys.version_info < (3, 11))'; then
+			printf '%s\n' "$resolved"
+			return 0
+		fi
+	done
+	managed_root=${XDG_DATA_HOME:-$HOME/.local/share}/moradins-forge/bootstrap/python
+	if [[ -d $managed_root && ! -L $managed_root ]]; then
+		while IFS= read -r -d '' candidate; do
+			resolved=$(readlink -f -- "$candidate")
+			[[ $resolved == "$managed_root"/* ]] || continue
+			generation=${resolved#"$managed_root"/}
+			generation=${generation%%/*}
+			[[ $generation =~ ^[0-9a-f]{64}$ ]] || continue
+			owner=$(stat -c '%u' -- "$resolved")
+			permissions=$(stat -c '%a' -- "$resolved")
+			permissions=${permissions: -3}
+			if [[ $owner == "$EUID" ]] && (((8#$permissions & 8#022) == 0)) &&
+				"$resolved" -c 'import sys; raise SystemExit(sys.version_info < (3, 11))'; then
+				printf '%s\n' "$resolved"
+				return 0
+			fi
+		done < <(
+			find "$managed_root" -mindepth 4 -maxdepth 4 -type f \
+				-path '*/bin/python3.12' -print0 | sort -z
+		)
+	fi
+	return 1
+}
+
+find_request_python() {
+	local candidate resolved owner permissions
+	for candidate in /usr/bin/python3.12 /usr/bin/python3.11 /usr/bin/python3.10 \
+		/usr/bin/python3.9 /usr/bin/python3; do
+		[[ -x $candidate ]] || continue
+		resolved=$(readlink -f -- "$candidate")
+		owner=$(stat -c '%u' -- "$resolved")
+		permissions=$(stat -c '%a' -- "$resolved")
+		permissions=$(printf '%s' "$permissions" | rev | cut -c 1-3 | rev)
+		if [[ $owner == 0 ]] && (((8#$permissions & 8#022) == 0)) &&
+			"$resolved" -c 'import sys; raise SystemExit(sys.version_info < (3, 9))'; then
 			printf '%s\n' "$resolved"
 			return 0
 		fi
@@ -242,6 +284,20 @@ run_suite() {
 	done
 	python_path=$(find_python || true)
 	if [[ -z $python_path ]]; then
+		if [[ $command_name == airgap-request ]]; then
+			python_path=$(find_request_python || true)
+			if [[ -n $python_path ]]; then
+				exec "$python_path" "$FORGE_ROOT/scripts/moradin_airgap_request.py" \
+					--forge-root "$FORGE_ROOT" "$@"
+			fi
+		fi
+		if [[ $command_name == airgap-verify || $command_name == airgap-apply ]]; then
+			python_path=$(find_request_python || true)
+			if [[ -n $python_path ]]; then
+				exec "$python_path" "$FORGE_ROOT/scripts/moradin_airgap_bootstrap.py" \
+					--forge-root "$FORGE_ROOT" "$@"
+			fi
+		fi
 		if [[ ! -t 0 ]]; then
 			printf '%s\n' 'Python 3.11+ is required; non-interactive mode will not install prerequisites.' >&2
 			exit 2

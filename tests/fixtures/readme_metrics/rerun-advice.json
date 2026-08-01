@@ -1,0 +1,6 @@
+{
+  "action": "reuse",
+  "reason": "the same command passed for the current repository state",
+  "source": "release-dogfood fixture"
+}
+

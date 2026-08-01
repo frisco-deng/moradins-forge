@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
+import shlex
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -31,6 +32,7 @@ from scripts.moradin_workstation import (
     resolve_latest_version,
     rollback_tooling_receipt,
     session_checkpoint,
+    tooling_plan_markdown,
 )
 
 
@@ -203,6 +205,98 @@ def test_agent_proposal_shows_exact_owned_block_update_only(tmp_path: Path) -> N
     assert "-legacy owned instruction" in proposal["patch_preview"]
     assert "+## Moradin Forge" in proposal["patch_preview"]
     assert "unrelated private guidance" not in proposal["patch_preview"]
+
+
+@pytest.mark.parametrize(
+    ("provider_file", "provider"),
+    [
+        ("AGENTS.md", "codex"),
+        ("CLAUDE.md", "claude"),
+        ("GEMINI.md", "gemini"),
+        (".github/copilot-instructions.md", "copilot"),
+        (".cursor/rules/moradin-forge.mdc", "cursor"),
+    ],
+)
+def test_provider_proposals_are_fixed_allowlisted_and_exact(
+    tmp_path: Path,
+    provider_file: str,
+    provider: str,
+) -> None:
+    repo = make_repo(tmp_path)
+
+    proposal = agent_file_proposal(repo, provider_file)
+
+    assert proposal["provider"] == provider
+    assert proposal["action"] == "create"
+    assert proposal["requires_explicit_approval"] is True
+    assert "moradin-forge:start" in proposal["owned_block"]
+
+
+def test_existing_unowned_cursor_rule_is_a_conflict(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    write(
+        repo / ".cursor/rules/moradin-forge.mdc",
+        "---\ndescription: Existing project rule\n---\n",
+    )
+
+    proposal = agent_file_proposal(repo, ".cursor/rules/moradin-forge.mdc")
+
+    assert proposal["action"] == "conflict"
+    assert "ownership marker" in proposal["blocked_reason"]
+    assert proposal["patch_preview"] == ""
+
+
+def test_provider_proposal_rejects_a_symlinked_parent(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (repo / ".github").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(WorkstationError, match="parent symlinks"):
+        agent_file_proposal(repo, ".github/copilot-instructions.md")
+
+
+def test_tooling_plan_markdown_shows_provider_diff_and_conflicts() -> None:
+    plan = {
+        "generated_at": "2026-07-31T00:00:00+00:00",
+        "profile": "practical-full",
+        "platform": {"system": "linux", "arch": "amd64"},
+        "discovered_repository_count": 1,
+        "status": "ready",
+        "plan_sha256": "a" * 64,
+        "approved_workspaces": ["<approved-workspace>"],
+        "repositories": [
+            {
+                "path": "<approved-workspace>/repo",
+                "capabilities": ["git"],
+                "agent_file_proposals": [
+                    {
+                        "path": "GEMINI.md",
+                        "provider": "gemini",
+                        "action": "patch",
+                        "patch_preview": "+provider-owned-line",
+                    },
+                    {
+                        "path": ".cursor/rules/moradin-forge.mdc",
+                        "provider": "cursor",
+                        "action": "conflict",
+                        "patch_preview": "",
+                        "blocked_reason": "unowned file",
+                    },
+                ],
+            }
+        ],
+        "tools": [],
+        "python_tool_lock": {"status": "not-required"},
+        "missing_required": [],
+        "missing_recommended": [],
+    }
+
+    markdown = tooling_plan_markdown(plan)
+
+    assert "```diff\n+provider-owned-line\n```" in markdown
+    assert "`GEMINI.md` (`gemini`)" in markdown
+    assert "blocked: unowned file" in markdown
 
 
 def test_tooling_apply_requires_exact_digest_and_uses_argv(
@@ -1028,3 +1122,61 @@ def test_context_primer_and_metrics_are_compact_and_sanitized(tmp_path: Path) ->
     assert repo.as_posix() not in metrics_text
     assert "make verify-fast" not in metrics_text
     assert brief["counters"]["reruns_avoided"] == 1
+
+
+def test_onboard_keeps_provider_approvals_separate_and_shell_quoted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = tmp_path / "repo with ' quote"
+    tooling = {
+        "plan_sha256": "a" * 64,
+        "repositories": [
+            {
+                "id": "repo-1",
+                "path": str(repository),
+                "agent_file_proposals": [
+                    {"path": "AGENTS.md", "action": "patch"},
+                    {
+                        "path": ".cursor/rules/moradin-forge.mdc",
+                        "action": "create",
+                    },
+                ],
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        moradin_workstation,
+        "build_tooling_plan",
+        lambda *_args, **_kwargs: tooling,
+    )
+
+    payload = moradin_workstation.build_onboard_plan(
+        [tmp_path],
+        forge_root=tmp_path,
+        tooling_receipt={"status": "pass", "verified": True},
+    )
+    commands = payload["next_commands"]["integration_by_repository"]["repo-1"]
+
+    assert "--approve-agent-file" not in commands["base_command"]
+    assert shlex.split(commands["base_command"]) == [
+        "scripts/moradin_forge.sh",
+        "apply",
+        "--target",
+        str(repository),
+        "--approve",
+    ]
+    assert shlex.split(commands["provider_approval_flags"]["AGENTS.md"]) == [
+        "--approve-agent-file",
+        "AGENTS.md",
+    ]
+    assert shlex.split(
+        commands["provider_approval_flags"][
+            ".cursor/rules/moradin-forge.mdc"
+        ]
+    ) == [
+        "--approve-agent-file",
+        ".cursor/rules/moradin-forge.mdc",
+        "--create-agent-file",
+        ".cursor/rules/moradin-forge.mdc",
+    ]

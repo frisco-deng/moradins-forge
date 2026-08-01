@@ -1,0 +1,28 @@
+<svg width="920" height="330" viewBox="0 0 920 330" role="img" aria-labelledby="title desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="title">Illustrative three-step Moradin Forge setup</title>
+  <desc id="desc">Clone Forge, let the user run the guided installer, then let an agent onboard approved repositories with separate guidance-file consent.</desc>
+  <rect width="920" height="330" rx="18" fill="#f8fafc"/>
+  <rect x="30" y="28" width="860" height="274" rx="14" fill="#ffffff" stroke="#64748b" stroke-width="2"/>
+  <rect x="54" y="50" width="126" height="34" rx="17" fill="#1e3a8a"/>
+  <text x="117" y="73" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#ffffff">Illustrative</text>
+  <text x="200" y="73" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#0f172a">Three-Step Setup</text>
+  <g font-family="Arial, sans-serif" fill="#0f172a">
+    <rect x="58" y="116" width="224" height="126" rx="12" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2"/>
+    <text x="78" y="150" font-size="20" font-weight="700">1 · Clone</text>
+    <text x="78" y="180" font-size="15">User or agent retrieves</text>
+    <text x="78" y="203" font-size="15">the public Forge repo.</text>
+    <rect x="348" y="116" width="224" height="126" rx="12" fill="#fef3c7" stroke="#b45309" stroke-width="2"/>
+    <text x="368" y="150" font-size="20" font-weight="700">2 · Install</text>
+    <text x="368" y="180" font-size="15">User reviews the plan</text>
+    <text x="368" y="203" font-size="15">and approves sudo.</text>
+    <rect x="638" y="116" width="224" height="126" rx="12" fill="#dcfce7" stroke="#15803d" stroke-width="2"/>
+    <text x="658" y="150" font-size="20" font-weight="700">3 · Link agents</text>
+    <text x="658" y="180" font-size="15">Agent shows each patch;</text>
+    <text x="658" y="203" font-size="15">user approves per file.</text>
+  </g>
+  <g stroke="#475569" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M292 179h44"/><path d="M327 169l12 10-12 10"/>
+    <path d="M582 179h44"/><path d="M617 169l12 10-12 10"/>
+  </g>
+  <text x="54" y="278" font-family="Arial, sans-serif" font-size="14" fill="#334155">Example workflow only; no time, performance, or token-reduction claim.</text>
+</svg>

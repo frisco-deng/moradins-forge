@@ -176,7 +176,7 @@ EXPORT_SKIP_PREFIXES.update(
 )
 
 PUBLIC_MAKEFILE_TEXT = """\
-.PHONY: lint-py lint-md test test-py ui-test ui-build payload-validate payload-smoke template-validate template-smoke forge-explain forge-readiness forge-brief forge-onboard forge-tooling-plan forge-tooling-update-plan forge-tooling-apply forge-tooling-bundle forge-tooling-rollback forge-plan forge-adopt-dry-run forge-adopt forge-verify forge-upgrade-plan forge-upgrade forge-upgrade-rollback forge-rollback forge-smoke public-export public-portability-check
+.PHONY: lint-py lint-md test test-py ui-test ui-build payload-validate payload-smoke template-validate template-smoke forge-explain forge-readiness forge-brief forge-onboard forge-tooling-suite forge-tooling-suite-plan forge-tooling-suite-apply forge-tooling-suite-bundle forge-tooling-suite-verify forge-tooling-suite-rollback forge-airgap-request forge-airgap-build forge-airgap-verify forge-airgap-apply forge-tooling-plan forge-tooling-update-plan forge-tooling-apply forge-tooling-bundle forge-tooling-rollback forge-plan forge-adopt-dry-run forge-adopt forge-verify forge-upgrade-plan forge-upgrade forge-upgrade-rollback forge-rollback forge-smoke generate-readme-figures verify-readme-figures public-export public-portability-check
 
 PUBLIC_EXPORT_DIR ?= /tmp/moradin-forge-public-export-check
 PUBLIC_SIDECAR_SMOKE_DIR ?= /tmp/moradin-forge-sidecar-smoke-check
@@ -185,9 +185,19 @@ PLAN ?=
 PLAN_SHA256 ?=
 OUTPUT ?=
 RECEIPT ?=
+APPROVE_RECEIPT_SHA256 ?=
 AGENT_FILES ?=
 CREATE_AGENT_FILES ?=
 UPGRADE_ID ?=
+PROFILE ?=
+SELECT ?=
+EXCLUDE ?=
+CONTAINER_ENGINE ?=
+REQUEST ?=
+LOCK ?=
+BUNDLE ?=
+BUNDLE_SHA256 ?=
+STALE_BUNDLE_SHA256 ?=
 
 lint-py:
 \tUV_CACHE_DIR=/tmp/uv-cache uv run ruff check .
@@ -225,6 +235,45 @@ forge-readiness:
 forge-onboard:
 \t@if [ -z "$(WORKSPACE)" ]; then echo "Usage: make forge-onboard WORKSPACE=<workspace-path>"; exit 1; fi
 \tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py onboard --workspace "$(WORKSPACE)"
+
+forge-tooling-suite:
+\tinstall/tooling-suite.sh
+
+forge-tooling-suite-plan:
+\t@if [ -z "$(OUTPUT)" ]; then echo "Usage: make forge-tooling-suite-plan OUTPUT=<plan.json> [PROFILE=practical|extended] [SELECT='tool ...']"; exit 1; fi
+\t@if [ -z "$(PROFILE)" ] && [ -z "$(SELECT)" ]; then echo "Set PROFILE=practical|extended or SELECT='tool ...'"; exit 1; fi
+\tinstall/tooling-suite.sh plan $(if $(PROFILE),--profile "$(PROFILE)",--custom) $(foreach tool,$(SELECT),--select "$(tool)") $(foreach tool,$(EXCLUDE),--exclude "$(tool)") $(if $(CONTAINER_ENGINE),--container-engine "$(CONTAINER_ENGINE)",) --output "$(OUTPUT)"
+
+forge-tooling-suite-apply:
+\t@if [ -z "$(PLAN)" ] || [ -z "$(PLAN_SHA256)" ]; then echo "Usage: make forge-tooling-suite-apply PLAN=<plan.json> PLAN_SHA256=<digest>"; exit 1; fi
+\tinstall/tooling-suite.sh apply --plan "$(PLAN)" --approve-plan-sha256 "$(PLAN_SHA256)"
+
+forge-tooling-suite-bundle:
+\t@if [ -z "$(PLAN)" ] || [ -z "$(OUTPUT)" ]; then echo "Usage: make forge-tooling-suite-bundle PLAN=<plan.json> OUTPUT=<bundle-path>"; exit 1; fi
+\tinstall/tooling-suite.sh bundle --plan "$(PLAN)" --output "$(OUTPUT)"
+
+forge-tooling-suite-verify:
+\tinstall/tooling-suite.sh verify --receipt "$(if $(RECEIPT),$(RECEIPT),latest)"
+
+forge-tooling-suite-rollback:
+\t@if [ -z "$(RECEIPT)" ] || [ -z "$(APPROVE_RECEIPT_SHA256)" ]; then echo "Usage: make forge-tooling-suite-rollback RECEIPT=<receipt.json> APPROVE_RECEIPT_SHA256=<digest>"; exit 1; fi
+\tinstall/tooling-suite.sh rollback --receipt "$(RECEIPT)" --approve-receipt-sha256 "$(APPROVE_RECEIPT_SHA256)"
+
+forge-airgap-request:
+\t@if [ -z "$(PROFILE)" ] || [ -z "$(OUTPUT)" ]; then echo "Usage: make forge-airgap-request PROFILE=practical|extended OUTPUT=<request.json>"; exit 1; fi
+\tinstall/tooling-suite.sh airgap-request --profile "$(PROFILE)" --output "$(OUTPUT)" $(foreach tool,$(EXCLUDE),--exclude "$(tool)")
+
+forge-airgap-build:
+\t@if [ -z "$(OUTPUT)" ] || { [ -z "$(REQUEST)" ] && [ -z "$(LOCK)" ]; } || { [ -n "$(REQUEST)" ] && [ -n "$(LOCK)" ]; }; then echo "Usage: make forge-airgap-build REQUEST=<request.json>|LOCK=<lock.json> OUTPUT=<kit.tar.gz>"; exit 1; fi
+\tinstall/tooling-suite.sh airgap-build $(if $(REQUEST),--request "$(REQUEST)",--lock "$(LOCK)") --output "$(OUTPUT)"
+
+forge-airgap-verify:
+\t@if [ -z "$(BUNDLE)" ] || [ -z "$(BUNDLE_SHA256)" ]; then echo "Usage: make forge-airgap-verify BUNDLE=<kit.tar.gz> BUNDLE_SHA256=<digest>"; exit 1; fi
+\tinstall/tooling-suite.sh airgap-verify --bundle "$(BUNDLE)" --expected-sha256 "$(BUNDLE_SHA256)"
+
+forge-airgap-apply:
+\t@if [ -z "$(BUNDLE)" ] || [ -z "$(BUNDLE_SHA256)" ] || [ -z "$(PLAN_SHA256)" ]; then echo "Usage: make forge-airgap-apply BUNDLE=<kit.tar.gz> BUNDLE_SHA256=<digest> PLAN_SHA256=<digest>"; exit 1; fi
+\tinstall/tooling-suite.sh airgap-apply --bundle "$(BUNDLE)" --approve-bundle-sha256 "$(BUNDLE_SHA256)" --approve-offline-plan-sha256 "$(PLAN_SHA256)" $(if $(STALE_BUNDLE_SHA256),--approve-stale-bundle-sha256 "$(STALE_BUNDLE_SHA256)",)
 
 forge-tooling-plan:
 \t@if [ -z "$(WORKSPACE)" ]; then echo "Usage: make forge-tooling-plan WORKSPACE=<workspace-path>"; exit 1; fi
@@ -286,6 +335,12 @@ forge-rollback:
 forge-smoke:
 \tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/public_export.py sidecar-smoke --output "$(PUBLIC_SIDECAR_SMOKE_DIR)" --force
 
+generate-readme-figures:
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/generate_readme_figures.py
+
+verify-readme-figures:
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/generate_readme_figures.py --check
+
 public-export:
 \tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/public_export.py export --output "$(PUBLIC_EXPORT_DIR)" --force --init-git
 
@@ -317,9 +372,10 @@ owner: moradin-forge
 | FORGE-007 | keep beta release visuals portable and local | README.md | scan SVG assets before public release | active |
 | FORGE-008 | inspect only explicitly approved workspace roots | docs/references/tooling_readiness_install_execution_contract_v2.md | show discovered repositories before capability inspection | active |
 | FORGE-009 | require independent approval for each agent file and user configuration change | docs/references/moradin_forge_agent_integration_contract_v1.md | show the owned block and request each consent separately | active |
-| FORGE-010 | never invoke elevation automatically | docs/references/tooling_readiness_install_execution_contract_v2.md | generate a reviewable script for the user to run | active |
+| FORGE-010 | agents never invoke elevation or approve a human confirmation | docs/references/moradin_forge_tooling_suite_contract_v1.md | the user launches the suite and approves its sealed sudo phase | active |
 | FORGE-011 | bind upgrades to an exact plan and retain one predecessor | docs/references/moradin_forge_upgrade_contract_v1.md | stage, validate, switch, or restore byte-for-byte | active |
 | FORGE-012 | store sanitized efficiency counters only | docs/references/moradin_agent_efficiency_contract_v1.md | omit prompts, source, commands, paths, and logs | active |
+| FORGE-013 | call an offline installation complete only when its target-specific package, trust, runtime, tool, and rollback closure is sealed | docs/11_ops/air_gapped_tooling_suite.md | use `airgap-build`; label compatibility `bundle` output partial | active |
 """,
     "Harness/artifacts/control/current_features.md": """\
 ---
@@ -340,10 +396,12 @@ owner: moradin-forge
 | FORGE-FEAT-006 | low-token clone-and-prime bootstrap entrypoints | implemented | docs/references/moradin_forge_installer_bootstrap_contract_v1.md |
 | FORGE-FEAT-007 | README visual overview for adoption and safety boundaries | implemented | docs/assets/readme/ |
 | FORGE-FEAT-008 | bounded multi-workspace repository discovery | implemented | scripts/moradin_workstation.py |
-| FORGE-FEAT-009 | independent AGENTS.md and CLAUDE.md owned blocks | implemented | scripts/moradin_forge.py |
-| FORGE-FEAT-010 | checksummed offline tooling bundles and privileged user-run scripts | implemented | scripts/moradin_workstation.py |
+| FORGE-FEAT-009 | independent Codex, Claude, Gemini, Copilot, and Cursor owned blocks | implemented | scripts/moradin_forge.py |
+| FORGE-FEAT-010 | checksummed asset-only compatibility bundles and privileged user-run scripts | implemented | scripts/moradin_workstation.py |
 | FORGE-FEAT-011 | transactional V1/V2 sidecar upgrades and immediate rollback | implemented | docs/references/moradin_forge_upgrade_contract_v1.md |
 | FORGE-FEAT-012 | portable context primer, briefs, rerun advice, and sanitized counters | implemented | docs/references/moradin_agent_efficiency_contract_v1.md |
+| FORGE-FEAT-013 | target-specific complete air-gap kits with signed package trust and rollback closure | implemented | docs/11_ops/air_gapped_tooling_suite.md |
+| FORGE-FEAT-014 | deterministic measured README figures from public release-dogfood fixtures | implemented | scripts/generate_readme_figures.py |
 """,
     "Harness/artifacts/control/compatibility_window_status.md": """\
 ---
@@ -381,7 +439,7 @@ owner: moradin-forge
 | PUBLIC-001 | 2026-05-11 | public-alpha | Published Moradin's Forge as an agent-first local integration kit with consent-gated sidecar adoption. | ready |
 | PUBLIC-002 | 2026-06-09 | tooling-inheritance | Adopted current shared-tooling adapter improvements, hardened portability scans, and added request-only bootstrap entrypoints. | ready |
 | PUBLIC-003 | 2026-06-10 | beta-release | Prepared v0.2.0-beta.1 with version normalization, CI fixes, and README visual overview assets. | ready |
-| PUBLIC-004 | 2026-07-28 | universal-agent-baseline | Prepared v0.2.0-beta.3 with bounded onboarding, approved user-level tooling, offline bundles, independent agent blocks, compact context helpers, and transactional upgrades. | candidate |
+| PUBLIC-004 | 2026-07-31 | universal-agent-baseline | Prepared v0.2.0-beta.3 with three-step onboarding, a human-run Linux suite, complete target-specific air-gap kits, five independently approved provider blocks, compact context helpers, and transactional upgrades. | candidate |
 """,
 }
 

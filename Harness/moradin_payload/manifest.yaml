@@ -51,6 +51,10 @@ include_paths:
   - scripts/moradin_forge.py
   - scripts/moradin_workstation.py
   - scripts/moradin_tooling_suite.py
+  - scripts/moradin_airgap.py
+  - scripts/moradin_airgap_request.py
+  - scripts/moradin_airgap_bootstrap.py
+  - scripts/generate_readme_figures.py
   - scripts/moradin_forge.sh
   - scripts/moradin_forge.ps1
   - scripts/manage_moradin_payload.py
@@ -76,11 +80,16 @@ include_paths:
   - tests/scripts/test_moradin_forge.py
   - tests/scripts/test_moradin_workstation.py
   - tests/scripts/test_moradin_tooling_suite.py
+  - tests/scripts/test_moradin_airgap.py
+  - tests/scripts/test_moradin_airgap_bootstrap.py
+  - tests/scripts/airgap_kit_lifecycle.sh
   - tests/scripts/tooling_suite_distro_smoke.sh
   - tests/scripts/test_universal_agent_platform.py
   - tests/scripts/test_agent_handoffs.py
+  - tests/scripts/test_readme_figures.py
   - tests/scripts/test_public_export.py
   - tests/scripts/test_validate_capture_contract.py
+  - tests/fixtures/readme_metrics
 exclude_paths:
   - Harness/artifacts/reports/beta
   - public_audit/release_reports_excluded

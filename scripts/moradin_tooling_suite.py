@@ -95,6 +95,10 @@ BOOTSTRAP_UV_BINARY_SHA256 = {
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INSTALLER_FILES = (
     Path("install/tooling-suite.sh"),
+    Path("install/airgap-container-build.sh"),
+    Path("scripts/moradin_airgap_request.py"),
+    Path("scripts/moradin_airgap_bootstrap.py"),
+    Path("scripts/moradin_airgap.py"),
     Path("scripts/moradin_tooling_suite.py"),
     Path("scripts/moradin_workstation.py"),
     Path("catalog/workstation-tools.toml"),
@@ -112,11 +116,25 @@ from pathlib import Path
 
 FILES = (
     "install/tooling-suite.sh",
+    "install/airgap-container-build.sh",
+    "scripts/moradin_airgap_request.py",
+    "scripts/moradin_airgap_bootstrap.py",
+    "scripts/moradin_airgap.py",
     "scripts/moradin_tooling_suite.py",
     "scripts/moradin_workstation.py",
     "catalog/workstation-tools.toml",
 )
-source_arg, expected, *runner_args = sys.argv[1:]
+if len(sys.argv) < 7:
+    raise SystemExit("root runner bootstrap arguments are incomplete")
+(
+    source_arg,
+    expected,
+    runtime_source_arg,
+    runtime_manifest_arg,
+    runtime_expected,
+    runtime_executable_arg,
+    *runner_args,
+) = sys.argv[1:]
 if len(expected) != 64 or any(character not in "0123456789abcdef" for character in expected):
     raise SystemExit("invalid root runner manifest digest")
 base = Path("/var/lib/moradins-forge/runners")
@@ -162,6 +180,234 @@ def read_tree(root, require_root):
         raise SystemExit("root runner manifest digest mismatch")
     return payloads
 
+def safe_relative(value):
+    if not value or "\\" in value or "\x00" in value:
+        raise SystemExit("unsafe managed runtime path")
+    relative = Path(value)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise SystemExit("unsafe managed runtime path")
+    return relative
+
+def read_runtime_manifest(path, expected_digest, require_root):
+    raw_path = Path(path)
+    if raw_path.is_symlink():
+        raise SystemExit("unsafe managed runtime manifest")
+    descriptor = os.open(
+        raw_path.resolve(strict=True),
+        os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+    )
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 16 * 1024 * 1024:
+            raise SystemExit("unsafe managed runtime manifest")
+        if require_root and (metadata.st_uid != 0 or metadata.st_mode & 0o022):
+            raise SystemExit("unsafe managed runtime manifest ownership")
+        with os.fdopen(descriptor, "rb", closefd=False) as handle:
+            payload = handle.read(16 * 1024 * 1024 + 1)
+    finally:
+        os.close(descriptor)
+    if hashlib.sha256(payload).hexdigest() != expected_digest:
+        raise SystemExit("managed runtime manifest digest mismatch")
+    try:
+        manifest = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise SystemExit("managed runtime manifest is invalid")
+    if not isinstance(manifest, dict) or set(manifest) != {
+        "version", "python_version", "executable", "files", "manifest_sha256"
+    }:
+        raise SystemExit("managed runtime manifest fields are malformed")
+    canonical = dict(manifest)
+    recorded = canonical.pop("manifest_sha256", "")
+    internal_digest = hashlib.sha256(
+        json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    if (
+        manifest.get("version") != "MoradinForgePythonRuntimeManifestV1"
+        or manifest.get("python_version") != "3.12.8"
+        or recorded != internal_digest
+    ):
+        raise SystemExit("managed runtime manifest binding is invalid")
+    executable = safe_relative(str(manifest.get("executable", "")))
+    files = manifest.get("files")
+    if not isinstance(files, list) or not files:
+        raise SystemExit("managed runtime manifest is empty")
+    seen = []
+    executable_bound = False
+    for row in files:
+        if not isinstance(row, dict) or set(row) != {"path", "sha256", "size", "mode"}:
+            raise SystemExit("managed runtime file record is malformed")
+        relative = safe_relative(str(row.get("path", ""))).as_posix()
+        digest = str(row.get("sha256", ""))
+        size = row.get("size")
+        mode = row.get("mode")
+        if (
+            len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+            or not isinstance(size, int)
+            or size < 0
+            or size > 512 * 1024 * 1024
+            or mode not in {0o644, 0o755}
+            or relative in seen
+        ):
+            raise SystemExit("managed runtime file metadata is unsafe")
+        seen.append(relative)
+        if relative == executable.as_posix() and mode == 0o755:
+            executable_bound = True
+    if seen != sorted(seen) or not executable_bound:
+        raise SystemExit("managed runtime executable or ordering is invalid")
+    return payload, manifest, executable
+
+def runtime_file_set(root):
+    raw_root = Path(root)
+    if raw_root.is_symlink():
+        raise SystemExit("unsafe managed runtime root")
+    root = raw_root.resolve(strict=True)
+    result = set()
+    for path in sorted(root.rglob("*")):
+        relative = path.relative_to(root).as_posix()
+        if path.is_symlink():
+            raise SystemExit("managed runtime contains a symbolic link")
+        if path.is_file():
+            result.add(relative)
+        elif not path.is_dir():
+            raise SystemExit("managed runtime contains a special file")
+    return root, result
+
+def verify_runtime(root, manifest, require_root):
+    root, observed = runtime_file_set(root)
+    expected_files = {str(row["path"]) for row in manifest["files"]}
+    if observed - {".manifest.json"} != expected_files:
+        raise SystemExit("managed runtime tree differs from its manifest")
+    for row in manifest["files"]:
+        path = root / safe_relative(str(row["path"]))
+        descriptor = os.open(
+            path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        )
+        digest = hashlib.sha256()
+        size = 0
+        try:
+            metadata = os.fstat(descriptor)
+            if not stat.S_ISREG(metadata.st_mode):
+                raise SystemExit("managed runtime file is unsafe")
+            if require_root and (metadata.st_uid != 0 or metadata.st_mode & 0o022):
+                raise SystemExit("managed runtime ownership is unsafe")
+            while True:
+                chunk = os.read(descriptor, 1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+                size += len(chunk)
+        finally:
+            os.close(descriptor)
+        mode = 0o755 if metadata.st_mode & stat.S_IXUSR else 0o644
+        if (
+            size != int(row["size"])
+            or digest.hexdigest() != row["sha256"]
+            or mode != int(row["mode"])
+        ):
+            raise SystemExit("managed runtime file digest or mode mismatch")
+    return root
+
+def seal_runtime(source, manifest_path, expected_digest, executable_arg):
+    if (
+        len(expected_digest) != 64
+        or any(character not in "0123456789abcdef" for character in expected_digest)
+    ):
+        raise SystemExit("managed runtime manifest digest is invalid")
+    runtime_base = Path("/var/lib/moradins-forge/python")
+    runtime_destination = runtime_base / expected_digest
+    current = Path("/")
+    for part in runtime_base.parts[1:]:
+        current = current / part
+        if current.is_symlink():
+            raise SystemExit("unsafe managed runtime store path")
+        if current.exists():
+            metadata = current.stat()
+            if metadata.st_uid != 0 or metadata.st_mode & 0o022:
+                raise SystemExit("unsafe managed runtime store ownership")
+    stored_manifest = runtime_destination / ".manifest.json"
+    if runtime_destination.exists():
+        payload, manifest, executable = read_runtime_manifest(
+            stored_manifest, expected_digest, True
+        )
+        if executable.as_posix() != executable_arg:
+            raise SystemExit("managed runtime executable approval changed")
+        verify_runtime(runtime_destination, manifest, True)
+        return runtime_destination / executable
+    if source == "-" or manifest_path == "-":
+        raise SystemExit("approved managed runtime is unavailable")
+    payload, manifest, executable = read_runtime_manifest(
+        manifest_path, expected_digest, False
+    )
+    if executable.as_posix() != executable_arg:
+        raise SystemExit("managed runtime executable approval changed")
+    source_root, observed = runtime_file_set(source)
+    expected_files = {str(row["path"]) for row in manifest["files"]}
+    if observed != expected_files:
+        raise SystemExit("managed runtime source differs from its manifest")
+    runtime_base.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if runtime_base.is_symlink() or runtime_base.stat().st_uid != 0:
+        raise SystemExit("unsafe managed runtime store")
+    temporary = Path(tempfile.mkdtemp(prefix=".python-", dir=runtime_base))
+    try:
+        for row in manifest["files"]:
+            relative = safe_relative(str(row["path"]))
+            source_path = source_root / relative
+            target = temporary / relative
+            target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            source_descriptor = os.open(
+                source_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            )
+            target_descriptor = os.open(
+                target,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+                int(row["mode"]),
+            )
+            digest = hashlib.sha256()
+            size = 0
+            try:
+                source_metadata = os.fstat(source_descriptor)
+                if not stat.S_ISREG(source_metadata.st_mode):
+                    raise SystemExit("managed runtime source file is unsafe")
+                while True:
+                    chunk = os.read(source_descriptor, 1024 * 1024)
+                    if not chunk:
+                        break
+                    digest.update(chunk)
+                    size += len(chunk)
+                    pending = memoryview(chunk)
+                    while pending:
+                        written = os.write(target_descriptor, pending)
+                        if written <= 0:
+                            raise SystemExit("managed runtime copy was interrupted")
+                        pending = pending[written:]
+                os.fsync(target_descriptor)
+            finally:
+                os.close(source_descriptor)
+                os.close(target_descriptor)
+            if size != int(row["size"]) or digest.hexdigest() != row["sha256"]:
+                raise SystemExit("managed runtime changed while sealing")
+            os.chmod(target, int(row["mode"]))
+        manifest_descriptor = os.open(
+            temporary / ".manifest.json",
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+            0o400,
+        )
+        with os.fdopen(manifest_descriptor, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        verify_runtime(temporary, manifest, True)
+        os.rename(temporary, runtime_destination)
+    finally:
+        if temporary.exists():
+            shutil.rmtree(temporary)
+    payload, manifest, executable = read_runtime_manifest(
+        stored_manifest, expected_digest, True
+    )
+    verify_runtime(runtime_destination, manifest, True)
+    return runtime_destination / executable
+
 current = Path("/")
 for part in base.parts[1:]:
     current = current / part
@@ -200,6 +446,26 @@ elif not destination.is_dir():
 
 read_tree(destination, True)
 script = destination / "scripts/moradin_tooling_suite.py"
+if sys.version_info < (3, 11):
+    sealed_python = seal_runtime(
+        runtime_source_arg,
+        runtime_manifest_arg,
+        runtime_expected,
+        runtime_executable_arg,
+    )
+    environment = {
+        "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "HOME": "/root",
+        "MORADIN_FORGE_SEALED_PYTHON_DIGEST": runtime_expected,
+        "MORADIN_FORGE_SEALED_PYTHON_EXECUTABLE": runtime_executable_arg,
+    }
+    os.execve(
+        sealed_python,
+        [sealed_python.as_posix(), script.as_posix(), *runner_args],
+        environment,
+    )
 sys.path.insert(0, (destination / "scripts").as_posix())
 sys.argv = [script.as_posix(), *runner_args]
 runpy.run_path(script.as_posix(), run_name="__main__")
@@ -394,10 +660,12 @@ def _trusted_bootstrap_uv_path(*, required: bool) -> Path | None:
     return resolved
 
 
-def _trusted_root_python() -> Path:
+def _trusted_system_python(minimum: tuple[int, int]) -> Path:
     for candidate in (
         Path("/usr/bin/python3.12"),
         Path("/usr/bin/python3.11"),
+        Path("/usr/bin/python3.10"),
+        Path("/usr/bin/python3.9"),
         Path("/usr/bin/python3"),
     ):
         if not candidate.exists() or candidate.is_dir():
@@ -413,15 +681,57 @@ def _trusted_root_python() -> Path:
             [
                 resolved.as_posix(),
                 "-c",
-                "import sys; raise SystemExit(sys.version_info < (3, 11))",
+                (
+                    "import sys; raise SystemExit(sys.version_info < "
+                    f"({minimum[0]}, {minimum[1]}))"
+                ),
             ],
             env=_safe_environment(home=Path("/root")),
         )
         if result.returncode == 0:
             return resolved
     raise ToolingSuiteError(
-        "root phase requires a root-owned, non-writable Python 3.11+ under /usr/bin"
+        "root phase requires a root-owned, non-writable Python "
+        f"{minimum[0]}.{minimum[1]}+ under /usr/bin"
     )
+
+
+def _trusted_root_bootstrap_python() -> Path:
+    return _trusted_system_python((3, 9))
+
+
+def _trusted_root_python() -> Path:
+    sealed_digest = os.environ.get("MORADIN_FORGE_SEALED_PYTHON_DIGEST", "")
+    sealed_executable = os.environ.get(
+        "MORADIN_FORGE_SEALED_PYTHON_EXECUTABLE", ""
+    )
+    if sealed_digest or sealed_executable:
+        if (
+            not re.fullmatch(r"[0-9a-f]{64}", sealed_digest)
+            or not sealed_executable
+        ):
+            raise ToolingSuiteError("sealed root Python binding is malformed")
+        relative = Path(sealed_executable)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ToolingSuiteError("sealed root Python path is unsafe")
+        expected = Path("/var/lib/moradins-forge/python") / sealed_digest / relative
+        try:
+            resolved = expected.resolve(strict=True)
+            metadata = resolved.stat()
+        except OSError as error:
+            raise ToolingSuiteError("sealed root Python is unavailable") from error
+        current = Path("/")
+        for part in resolved.parts[1:]:
+            current = current / part
+            if current.is_symlink():
+                raise ToolingSuiteError("sealed root Python path contains a link")
+            current_metadata = current.stat()
+            if current_metadata.st_uid != 0 or current_metadata.st_mode & 0o022:
+                raise ToolingSuiteError("sealed root Python ownership is unsafe")
+        if not resolved.is_file() or metadata.st_mode & 0o111 == 0:
+            raise ToolingSuiteError("sealed root Python is not executable")
+        return resolved
+    return _trusted_system_python((3, 11))
 
 
 def _trusted_sudo() -> Path:
@@ -439,6 +749,57 @@ def _trusted_sudo() -> Path:
         ):
             return resolved
     raise ToolingSuiteError("sudo must be a root-owned, non-writable system executable")
+
+
+def _root_runtime_arguments(
+    bootstrap_python: Path,
+    *,
+    sealed_digest: str = "",
+    sealed_executable: str = "",
+) -> list[str]:
+    modern = _run(
+        [
+            bootstrap_python.as_posix(),
+            "-c",
+            "import sys; raise SystemExit(sys.version_info < (3, 11))",
+        ],
+        env=_safe_environment(home=Path("/root")),
+    )
+    if modern.returncode == 0:
+        return ["-", "-", "-", "-"]
+    if sealed_digest or sealed_executable:
+        if not re.fullmatch(r"[0-9a-f]{64}", sealed_digest):
+            raise ToolingSuiteError("sealed Python runtime digest is malformed")
+        relative = Path(sealed_executable)
+        if (
+            not sealed_executable
+            or relative.is_absolute()
+            or ".." in relative.parts
+        ):
+            raise ToolingSuiteError("sealed Python runtime executable is malformed")
+        return ["-", "-", sealed_digest, relative.as_posix()]
+    source = Path(os.environ.get("MORADIN_FORGE_ROOT_PYTHON_SOURCE", ""))
+    manifest = Path(os.environ.get("MORADIN_FORGE_ROOT_PYTHON_MANIFEST", ""))
+    digest = os.environ.get("MORADIN_FORGE_ROOT_PYTHON_MANIFEST_SHA256", "")
+    executable = os.environ.get("MORADIN_FORGE_ROOT_PYTHON_EXECUTABLE", "")
+    relative = Path(executable)
+    if (
+        not source.is_absolute()
+        or source.is_symlink()
+        or not source.is_dir()
+        or not manifest.is_absolute()
+        or manifest.is_symlink()
+        or not manifest.is_file()
+        or not re.fullmatch(r"[0-9a-f]{64}", digest)
+        or sha256_file(manifest) != digest
+        or not executable
+        or relative.is_absolute()
+        or ".." in relative.parts
+    ):
+        raise ToolingSuiteError(
+            "Python 3.9/3.10 root bootstrap requires the kit-bound managed runtime"
+        )
+    return [source.as_posix(), manifest.as_posix(), digest, relative.as_posix()]
 
 
 def _assert_trusted_root_python() -> None:
@@ -1589,6 +1950,151 @@ def validate_suite_plan_contents(plan: dict[str, Any]) -> None:
             or repository.get("requires_replan") is not True
         ):
             raise ToolingSuiteError("repository bootstrap action is malformed")
+    offline = plan.get("offline")
+    if offline is not None:
+        if (
+            not isinstance(offline, dict)
+            or offline.get("version") != "AirgapOfflinePlanV1"
+            or offline.get("network") != "disabled"
+            or not re.fullmatch(
+                r"[0-9a-f]{64}", str(offline.get("bundle_sha256", ""))
+            )
+            or not re.fullmatch(
+                r"[0-9a-f]{64}", str(offline.get("lock_sha256", ""))
+            )
+        ):
+            raise ToolingSuiteError("offline plan binding is malformed")
+        package_assets = offline.get("package_assets")
+        if not isinstance(package_assets, list):
+            raise ToolingSuiteError("offline package closure is malformed")
+        trust_assets = offline.get("trust_assets")
+        if not isinstance(trust_assets, list) or not trust_assets:
+            raise ToolingSuiteError("offline repository trust closure is malformed")
+        seen_trust: set[str] = set()
+        for asset in trust_assets:
+            if not isinstance(asset, dict):
+                raise ToolingSuiteError("offline trust asset is malformed")
+            filename = str(asset.get("path", ""))
+            if (
+                not filename
+                or Path(filename).name != filename
+                or filename in seen_trust
+                or not str(asset.get("kind", ""))
+                or not re.fullmatch(r"[0-9a-f]{64}", str(asset.get("sha256", "")))
+                or not 0 < int(asset.get("size", -1)) <= MAX_ASSET_BYTES
+            ):
+                raise ToolingSuiteError("offline trust asset integrity is malformed")
+            manager = str(platform_row.get("package_manager", ""))
+            kind = str(asset.get("kind", ""))
+            allowed_kind = (
+                kind
+                in {"apt-inrelease", "apt-keyring", "apt-packages-index"}
+                if manager == "apt"
+                else kind == f"{manager}-repository-trust"
+            )
+            if not allowed_kind:
+                raise ToolingSuiteError(
+                    "offline trust asset does not match the package manager"
+                )
+            seen_trust.add(filename)
+        seen_files: set[str] = set()
+        seen_packages: set[tuple[str, str, str]] = set()
+        for asset in package_assets:
+            if not isinstance(asset, dict):
+                raise ToolingSuiteError("offline package asset is malformed")
+            package = str(asset.get("package", ""))
+            version = str(asset.get("version", ""))
+            architecture = str(asset.get("arch", ""))
+            filename = str(asset.get("filename", ""))
+            digest = str(asset.get("sha256", ""))
+            size = int(asset.get("size", -1))
+            package_key = (package, version, architecture)
+            if (
+                not re.fullmatch(r"[A-Za-z0-9@._+:-]+", package)
+                or not version
+                or not architecture
+                or not filename
+                or Path(filename).name != filename
+                or filename in seen_files
+                or package_key in seen_packages
+                or not re.fullmatch(r"[0-9a-f]{64}", digest)
+                or not 0 < size <= MAX_ASSET_BYTES
+            ):
+                raise ToolingSuiteError("offline package asset integrity is malformed")
+            if platform_row.get("package_manager") == "apt" and (
+                asset.get("signature") != "apt-signed-index"
+                or asset.get("repository_sha256") != digest
+            ):
+                raise ToolingSuiteError(
+                    "offline Debian package signed-index binding is malformed"
+                )
+            seen_files.add(filename)
+            seen_packages.add(package_key)
+            signature_filename = str(asset.get("signature_filename", ""))
+            if signature_filename:
+                if (
+                    Path(signature_filename).name != signature_filename
+                    or signature_filename in seen_files
+                    or not re.fullmatch(
+                        r"[0-9a-f]{64}",
+                        str(asset.get("signature_sha256", "")),
+                    )
+                    or not 0 < int(asset.get("signature_size", -1)) <= MAX_ASSET_BYTES
+                ):
+                    raise ToolingSuiteError(
+                        "offline package signature integrity is malformed"
+                    )
+                seen_files.add(signature_filename)
+            previous = str(asset.get("previous_version", ""))
+            rollback_filename = str(asset.get("rollback_filename", ""))
+            if previous and previous != version:
+                if (
+                    not rollback_filename
+                    or Path(rollback_filename).name != rollback_filename
+                    or rollback_filename in seen_files
+                    or not re.fullmatch(
+                        r"[0-9a-f]{64}",
+                        str(asset.get("rollback_sha256", "")),
+                    )
+                    or not 0
+                    < int(asset.get("rollback_size", -1))
+                    <= MAX_ASSET_BYTES
+                ):
+                    raise ToolingSuiteError(
+                        "offline package rollback closure is malformed"
+                    )
+                seen_files.add(rollback_filename)
+                if platform_row.get("package_manager") == "apt" and (
+                    asset.get("rollback_repository_sha256")
+                    != asset.get("rollback_sha256")
+                    or not str(asset.get("rollback_arch", ""))
+                ):
+                    raise ToolingSuiteError(
+                        "offline Debian rollback signed-index binding is malformed"
+                    )
+                rollback_signature = str(
+                    asset.get("rollback_signature_filename", "")
+                )
+                if rollback_signature:
+                    if (
+                        Path(rollback_signature).name != rollback_signature
+                        or rollback_signature in seen_files
+                        or not re.fullmatch(
+                            r"[0-9a-f]{64}",
+                            str(asset.get("rollback_signature_sha256", "")),
+                        )
+                        or not 0
+                        < int(asset.get("rollback_signature_size", -1))
+                        <= MAX_ASSET_BYTES
+                    ):
+                        raise ToolingSuiteError(
+                            "offline rollback signature integrity is malformed"
+                        )
+                    seen_files.add(rollback_signature)
+            elif rollback_filename:
+                raise ToolingSuiteError(
+                    "offline package has an unnecessary rollback asset"
+                )
 
 
 def load_suite_plan(
@@ -1697,6 +2203,63 @@ def _expected_stage_items(
             f"root-runner/{relative}",
         )
         expected[key] = (str(item["sha256"]), int(item["size"]))
+    offline = plan.get("offline", {})
+    if isinstance(offline, dict):
+        for item in offline.get("trust_assets", []):
+            filename = str(item["path"])
+            trust_key = (
+                f"offline-trust:{filename}",
+                "repository-trust",
+                f"trust/{filename}",
+            )
+            if trust_key in expected:
+                raise ToolingSuiteError("offline trust closure contains a duplicate")
+            expected[trust_key] = (str(item["sha256"]), int(item["size"]))
+        for item in offline.get("package_assets", []):
+            filename = str(item["filename"])
+            key = (
+                f"offline-package:{filename}",
+                "os-package",
+                f"os-packages/{filename}",
+            )
+            if key in expected:
+                raise ToolingSuiteError("offline package closure contains a duplicate")
+            expected[key] = (str(item["sha256"]), int(item["size"]))
+            signature_filename = str(item.get("signature_filename", ""))
+            if signature_filename:
+                signature_key = (
+                    f"offline-signature:{signature_filename}",
+                    "os-package-signature",
+                    f"os-packages/{signature_filename}",
+                )
+                expected[signature_key] = (
+                    str(item["signature_sha256"]),
+                    int(item["signature_size"]),
+                )
+            rollback_filename = str(item.get("rollback_filename", ""))
+            if rollback_filename:
+                rollback_key = (
+                    f"offline-rollback:{rollback_filename}",
+                    "os-package-rollback",
+                    f"os-packages/{rollback_filename}",
+                )
+                expected[rollback_key] = (
+                    str(item["rollback_sha256"]),
+                    int(item["rollback_size"]),
+                )
+                rollback_signature = str(
+                    item.get("rollback_signature_filename", "")
+                )
+                if rollback_signature:
+                    rollback_signature_key = (
+                        f"offline-rollback-signature:{rollback_signature}",
+                        "os-package-rollback-signature",
+                        f"os-packages/{rollback_signature}",
+                    )
+                    expected[rollback_signature_key] = (
+                        str(item["rollback_signature_sha256"]),
+                        int(item["rollback_signature_size"]),
+                    )
     return expected
 
 
@@ -2561,6 +3124,74 @@ def _seal_root_assets(
             raise ToolingSuiteError(f"root asset changed after staging: {tool_id}")
         os.replace(temporary, destination)
         sealed[tool_id] = destination
+    offline = plan.get("offline", {})
+    if isinstance(offline, dict):
+        package_root = destination_root / "os-packages"
+        trust_root = destination_root / "trust"
+        package_assets = offline.get("package_assets", [])
+        trust_assets = offline.get("trust_assets", [])
+        if package_assets:
+            _mkdir_private(package_root, enforce_root_owner=enforce_root_owner)
+        if trust_assets:
+            _mkdir_private(trust_root, enforce_root_owner=enforce_root_owner)
+        for item in trust_assets:
+            filename = str(item.get("path", ""))
+            source = staged.get("offline-trust:" + filename)
+            digest = str(item.get("sha256", ""))
+            if source is None or not re.fullmatch(r"[0-9a-f]{64}", digest):
+                raise ToolingSuiteError(
+                    f"offline trust asset binding is missing: {filename}"
+                )
+            destination = trust_root / filename
+            temporary = destination.with_suffix(destination.suffix + ".new")
+            shutil.copyfile(source, temporary)
+            os.chmod(temporary, 0o600)
+            if sha256_file(temporary) != digest:
+                temporary.unlink(missing_ok=True)
+                raise ToolingSuiteError(
+                    f"offline trust asset changed after staging: {filename}"
+                )
+            os.replace(temporary, destination)
+            sealed["offline-trust:" + filename] = destination
+        for item in package_assets:
+            for prefix, filename_key, digest_key in (
+                ("offline-package:", "filename", "sha256"),
+                (
+                    "offline-signature:",
+                    "signature_filename",
+                    "signature_sha256",
+                ),
+                (
+                    "offline-rollback:",
+                    "rollback_filename",
+                    "rollback_sha256",
+                ),
+                (
+                    "offline-rollback-signature:",
+                    "rollback_signature_filename",
+                    "rollback_signature_sha256",
+                ),
+            ):
+                filename = str(item.get(filename_key, ""))
+                if not filename:
+                    continue
+                source = staged.get(prefix + filename)
+                digest = str(item.get(digest_key, ""))
+                if source is None or not re.fullmatch(r"[0-9a-f]{64}", digest):
+                    raise ToolingSuiteError(
+                        f"offline root asset binding is missing: {filename}"
+                    )
+                destination = package_root / filename
+                temporary = destination.with_suffix(destination.suffix + ".new")
+                shutil.copyfile(source, temporary)
+                os.chmod(temporary, 0o600)
+                if sha256_file(temporary) != digest:
+                    temporary.unlink(missing_ok=True)
+                    raise ToolingSuiteError(
+                        f"offline root asset changed after staging: {filename}"
+                    )
+                os.replace(temporary, destination)
+                sealed[prefix + filename] = destination
     return sealed
 
 
@@ -2624,6 +3255,363 @@ def _package_install_argv(
     raise ToolingSuiteError(f"package-manager action is unsupported: {manager}")
 
 
+def _installed_package_version_only(
+    package: str,
+    manager: str,
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> str:
+    if manager == "apt":
+        result = _run(
+            ["dpkg-query", "-W", "-f=${Status}\t${Version}", "--", package],
+            runner=runner,
+            timeout=30,
+            env=_safe_environment(home=Path("/root")),
+        )
+        status, separator, version = result.stdout.strip().partition("\t")
+        return (
+            version
+            if result.returncode == 0
+            and separator
+            and status == "install ok installed"
+            else ""
+        )
+    if manager == "dnf":
+        result = _run(
+            ["rpm", "-q", "--qf", "%{VERSION}-%{RELEASE}", "--", package],
+            runner=runner,
+            timeout=30,
+            env=_safe_environment(home=Path("/root")),
+        )
+        return result.stdout.strip() if result.returncode == 0 else ""
+    if manager == "pacman":
+        result = _run(
+            ["pacman", "-Q", "--", package],
+            runner=runner,
+            timeout=30,
+            env=_safe_environment(home=Path("/root")),
+        )
+        name, separator, version = result.stdout.strip().partition(" ")
+        return version if result.returncode == 0 and separator and name == package else ""
+    raise ToolingSuiteError(f"offline package manager is unsupported: {manager}")
+
+
+def _offline_install_argv(manager: str, paths: Sequence[Path]) -> list[str]:
+    rendered = [path.as_posix() for path in paths]
+    if manager == "apt":
+        return [
+            "apt-get",
+            "-o",
+            "Dir::Etc::sourcelist=/dev/null",
+            "-o",
+            "Dir::Etc::sourceparts=-",
+            "-o",
+            "Acquire::http::Proxy=false",
+            "-o",
+            "Acquire::https::Proxy=false",
+            "install",
+            "-y",
+            "--no-download",
+            "--no-install-recommends",
+            "--",
+            *rendered,
+        ]
+    if manager == "dnf":
+        return [
+            "dnf",
+            "--disablerepo=*",
+            "install",
+            "-y",
+            "--setopt=install_weak_deps=False",
+            "--setopt=keepcache=False",
+            "--",
+            *rendered,
+        ]
+    if manager == "pacman":
+        return ["pacman", "-U", "--needed", "--noconfirm", "--", *rendered]
+    raise ToolingSuiteError(f"offline package manager is unsupported: {manager}")
+
+
+def _apt_release_sha256s(text: str) -> set[str]:
+    digests: set[str] = set()
+    in_sha256 = False
+    for line in text.splitlines():
+        if line == "SHA256:":
+            in_sha256 = True
+            continue
+        if in_sha256 and line.startswith(" "):
+            fields = line.split()
+            if len(fields) == 3 and re.fullmatch(r"[0-9a-f]{64}", fields[0]):
+                digests.add(fields[0])
+            continue
+        if in_sha256:
+            break
+    return digests
+
+
+def _apt_index_package_hashes(text: str) -> set[tuple[str, str, str, str]]:
+    records: set[tuple[str, str, str, str]] = set()
+    for stanza in text.split("\n\n"):
+        fields: dict[str, str] = {}
+        for line in stanza.splitlines():
+            key, separator, value = line.partition(":")
+            if separator and key in {"Package", "Version", "Architecture", "SHA256"}:
+                fields[key] = value.strip()
+        if set(fields) == {"Package", "Version", "Architecture", "SHA256"}:
+            records.add(
+                (
+                    fields["Package"],
+                    fields["Version"],
+                    fields["Architecture"],
+                    fields["SHA256"],
+                )
+            )
+    return records
+
+
+def _verify_offline_apt_trust(
+    plan: dict[str, Any],
+    sealed: dict[str, Path],
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> None:
+    offline = plan.get("offline", {})
+    records = list(offline.get("trust_assets", []))
+    keyrings = [
+        sealed.get("offline-trust:" + str(item["path"]))
+        for item in records
+        if item.get("kind") == "apt-keyring"
+    ]
+    releases = [
+        sealed.get("offline-trust:" + str(item["path"]))
+        for item in records
+        if item.get("kind") == "apt-inrelease"
+    ]
+    indexes = [
+        sealed.get("offline-trust:" + str(item["path"]))
+        for item in records
+        if item.get("kind") == "apt-packages-index"
+    ]
+    if not keyrings or not releases or not indexes or any(
+        path is None for path in [*keyrings, *releases, *indexes]
+    ):
+        raise ToolingSuiteError("sealed APT trust closure is incomplete")
+    verified_digests: set[str] = set()
+    for release in releases:
+        assert release is not None
+        argv = ["gpgv"]
+        for keyring in keyrings:
+            assert keyring is not None
+            argv.extend(["--keyring", keyring.as_posix()])
+        argv.append(release.as_posix())
+        result = _run(
+            argv,
+            runner=runner,
+            timeout=60,
+            env=_safe_environment(home=Path("/root")),
+        )
+        if result.returncode != 0:
+            raise ToolingSuiteError("sealed APT InRelease signature verification failed")
+        verified_digests.update(
+            _apt_release_sha256s(release.read_text(encoding="utf-8"))
+        )
+    indexed_packages: set[tuple[str, str, str, str]] = set()
+    for index in indexes:
+        assert index is not None
+        if sha256_file(index) not in verified_digests:
+            raise ToolingSuiteError(
+                "sealed APT Packages index is absent from signed release metadata"
+            )
+        indexed_packages.update(
+            _apt_index_package_hashes(index.read_text(encoding="utf-8"))
+        )
+    for asset in offline.get("package_assets", []):
+        digest = str(asset.get("sha256", ""))
+        if asset.get("repository_sha256") != digest or (
+            str(asset["package"]),
+            str(asset["version"]),
+            str(asset["arch"]),
+            digest,
+        ) not in indexed_packages:
+            raise ToolingSuiteError(
+                f"offline Debian package lacks signed-index proof: {asset['package']}"
+            )
+        previous = str(asset.get("previous_version", ""))
+        if previous and previous != asset.get("version"):
+            rollback_digest = str(asset.get("rollback_sha256", ""))
+            if asset.get("rollback_repository_sha256") != rollback_digest or (
+                str(asset["package"]),
+                previous,
+                str(asset.get("rollback_arch", "")),
+                rollback_digest,
+            ) not in indexed_packages:
+                raise ToolingSuiteError(
+                    f"offline Debian rollback lacks signed-index proof: {asset['package']}"
+                )
+
+
+def _apply_offline_package_closure(
+    plan: dict[str, Any],
+    sealed: dict[str, Path],
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> list[dict[str, Any]]:
+    offline = plan.get("offline", {})
+    manager = str(plan["platform"]["package_manager"])
+    assets = list(offline.get("package_assets", []))
+    direct = {
+        str(action["package"]): str(action["tool_id"])
+        for action in plan["root_actions"]
+        if action["kind"] == "system-package"
+    }
+    changed: list[dict[str, Any]] = []
+    install_paths: list[Path] = []
+    if manager == "apt":
+        _verify_offline_apt_trust(plan, sealed, runner=runner)
+    for asset in assets:
+        package = str(asset["package"])
+        version = str(asset["version"])
+        previous = str(asset.get("previous_version", ""))
+        current = _installed_package_version_only(
+            package,
+            manager,
+            runner=runner,
+        )
+        if current != previous:
+            raise ToolingSuiteError(
+                f"offline package state drifted after approval: {package}"
+            )
+        path = sealed.get("offline-package:" + str(asset["filename"]))
+        if path is None:
+            raise ToolingSuiteError(f"sealed offline package is missing: {package}")
+        if manager == "dnf":
+            signature = _run(
+                ["rpmkeys", "--checksig", path.as_posix()],
+                runner=runner,
+                timeout=30,
+                env=_safe_environment(home=Path("/root")),
+            )
+            if signature.returncode != 0 or "pgp" not in signature.stdout.lower():
+                raise ToolingSuiteError(
+                    f"offline RPM signature verification failed: {package}"
+                )
+        elif manager == "pacman":
+            signature_path = sealed.get(
+                "offline-signature:" + str(asset.get("signature_filename", ""))
+            )
+            if signature_path is None:
+                raise ToolingSuiteError(
+                    f"offline Pacman signature is missing: {package}"
+                )
+            signature = _run(
+                [
+                    "pacman-key",
+                    "--verify",
+                    signature_path.as_posix(),
+                    path.as_posix(),
+                ],
+                runner=runner,
+                timeout=30,
+                env=_safe_environment(home=Path("/root")),
+            )
+            if signature.returncode != 0:
+                raise ToolingSuiteError(
+                    f"offline Pacman signature verification failed: {package}"
+                )
+        elif manager == "apt":
+            package_info = _run(
+                [
+                    "dpkg-deb",
+                    "-f",
+                    path.as_posix(),
+                    "Package",
+                    "Version",
+                    "Architecture",
+                ],
+                runner=runner,
+                timeout=30,
+                env=_safe_environment(home=Path("/root")),
+            )
+            if package_info.returncode != 0 or package_info.stdout.splitlines() != [
+                package,
+                version,
+                str(asset["arch"]),
+            ]:
+                raise ToolingSuiteError(
+                    f"offline Debian package verification failed: {package}"
+                )
+        if current == version:
+            continue
+        rollback_path: Path | None = None
+        rollback_signature_path: Path | None = None
+        rollback_filename = str(asset.get("rollback_filename", ""))
+        if previous and previous != version:
+            rollback_path = sealed.get("offline-rollback:" + rollback_filename)
+            if rollback_path is None:
+                raise ToolingSuiteError(
+                    f"offline rollback closure is missing: {package}"
+                )
+            rollback_signature_filename = str(
+                asset.get("rollback_signature_filename", "")
+            )
+            if rollback_signature_filename:
+                rollback_signature_path = sealed.get(
+                    "offline-rollback-signature:" + rollback_signature_filename
+                )
+                if rollback_signature_path is None:
+                    raise ToolingSuiteError(
+                        f"offline rollback signature is missing: {package}"
+                    )
+        install_paths.append(path)
+        changed.append(
+            {
+                "kind": "system-package",
+                "tool_id": direct.get(package, f"offline-dependency:{package}"),
+                "manager": manager,
+                "package": package,
+                "version": version,
+                "previous_version": previous,
+                "rollback_asset": rollback_path.as_posix() if rollback_path else "",
+                "rollback_signature": (
+                    rollback_signature_path.as_posix()
+                    if rollback_signature_path
+                    else ""
+                ),
+                "offline": True,
+            }
+        )
+    if install_paths:
+        result = _run(
+            _offline_install_argv(manager, install_paths),
+            runner=runner,
+            timeout=3600,
+            env=_safe_environment(home=Path("/root")),
+        )
+        if result.returncode != 0:
+            raise ToolingSuiteError("sealed offline package transaction failed")
+    for operation in changed:
+        installed = _installed_package_version_only(
+            str(operation["package"]),
+            manager,
+            runner=runner,
+        )
+        if installed != operation["version"]:
+            raise ToolingSuiteError(
+                f"offline package verification failed: {operation['package']}"
+            )
+    dependencies = [
+        operation
+        for operation in changed
+        if str(operation["tool_id"]).startswith("offline-dependency:")
+    ]
+    direct_operations = [
+        operation
+        for operation in changed
+        if not str(operation["tool_id"]).startswith("offline-dependency:")
+    ]
+    return [*dependencies, *direct_operations]
+
+
 def _prepare_package_rollback(
     manager: str,
     package: str,
@@ -2677,6 +3665,13 @@ def _rollback_package_argv(operation: dict[str, Any]) -> list[str]:
     previous = str(operation.get("previous_version", ""))
     artifact = str(operation.get("rollback_asset", ""))
     if previous and artifact:
+        if operation.get("offline") is True:
+            if manager == "apt":
+                return ["dpkg", "--install", "--", artifact]
+            if manager == "dnf":
+                return ["rpm", "-U", "--oldpackage", "--replacepkgs", artifact]
+            if manager == "pacman":
+                return ["pacman", "-U", "--noconfirm", "--", artifact]
         if manager == "apt":
             return ["apt-get", "install", "-y", "--", artifact]
         if manager == "dnf":
@@ -2734,6 +3729,49 @@ def _rollback_root_operations(
             ):
                 shutil.rmtree(version_root)
         elif operation["kind"] == "system-package":
+            current = _installed_package_version_only(
+                str(operation["package"]),
+                str(operation["manager"]),
+                runner=runner,
+            )
+            if current != str(operation.get("version", "")):
+                results.append(
+                    {"tool_id": operation["tool_id"], "status": "preserved-newer"}
+                )
+                continue
+            rollback_asset = str(operation.get("rollback_asset", ""))
+            rollback_signature = str(operation.get("rollback_signature", ""))
+            if operation.get("offline") is True and rollback_asset:
+                manager = str(operation["manager"])
+                if manager == "dnf":
+                    signature = _run(
+                        ["rpmkeys", "--checksig", rollback_asset],
+                        runner=runner,
+                        timeout=30,
+                        env=_safe_environment(home=Path("/root")),
+                    )
+                    if signature.returncode != 0 or "pgp" not in signature.stdout.lower():
+                        results.append(
+                            {"tool_id": operation["tool_id"], "status": "failed"}
+                        )
+                        continue
+                elif manager == "pacman":
+                    if not rollback_signature:
+                        results.append(
+                            {"tool_id": operation["tool_id"], "status": "failed"}
+                        )
+                        continue
+                    signature = _run(
+                        ["pacman-key", "--verify", rollback_signature, rollback_asset],
+                        runner=runner,
+                        timeout=30,
+                        env=_safe_environment(home=Path("/root")),
+                    )
+                    if signature.returncode != 0:
+                        results.append(
+                            {"tool_id": operation["tool_id"], "status": "failed"}
+                        )
+                        continue
             argv = _rollback_package_argv(operation)
             if not argv:
                 results.append({"tool_id": operation["tool_id"], "status": "manual"})
@@ -2830,6 +3868,18 @@ def apply_root_transaction(
     skipped: list[dict[str, str]] = []
     catalog = {spec.id: spec for spec in TOOL_CATALOG}
     try:
+        offline_enabled = isinstance(plan.get("offline"), dict)
+        if offline_enabled:
+            operations.extend(
+                _apply_offline_package_closure(
+                    plan,
+                    assets,
+                    runner=runner,
+                )
+            )
+            actions = [
+                action for action in actions if action["kind"] != "system-package"
+            ]
         package_actions = [
             action for action in actions if action["kind"] == "system-package"
         ]
@@ -2946,17 +3996,31 @@ def apply_root_transaction(
                         "EPEL package installation did not enable the approved repository"
                     )
                 continue
-            row = rows_by_id[operation["tool_id"]]
+            tool_id = str(operation["tool_id"])
+            row = rows_by_id.get(tool_id)
             if operation["kind"] == "system-package":
-                installed, _candidate = _package_versions(
-                    str(operation["package"]),
-                    manager,
-                    runner=runner,
-                )
+                if operation.get("offline") is True:
+                    installed = _installed_package_version_only(
+                        str(operation["package"]),
+                        manager,
+                        runner=runner,
+                    )
+                else:
+                    installed, _candidate = _package_versions(
+                        str(operation["package"]),
+                        manager,
+                        runner=runner,
+                    )
                 if installed != operation["version"]:
                     raise ToolingSuiteError(
                         f"root package verification failed: {operation['tool_id']}"
                     )
+            if row is None and tool_id.startswith("offline-dependency:"):
+                continue
+            if row is None:
+                raise ToolingSuiteError(
+                    f"root operation does not map to a catalog tool: {tool_id}"
+                )
             argv = row.get(
                 "verification_command",
                 _suite_verification_argv(catalog[operation["tool_id"]]),
@@ -3010,6 +4074,12 @@ def apply_root_transaction(
         "status": "pass",
         "operations": operations,
         "skipped": skipped,
+        "runtime_manifest_sha256": os.environ.get(
+            "MORADIN_FORGE_SEALED_PYTHON_DIGEST", ""
+        ),
+        "runtime_executable": os.environ.get(
+            "MORADIN_FORGE_SEALED_PYTHON_EXECUTABLE", ""
+        ),
         "privacy": "Local root receipt; contains no project content, prompts, credentials, or telemetry.",
     }
     receipt["receipt_sha256"] = _record_digest(receipt, "receipt_sha256")
@@ -3049,6 +4119,18 @@ def _validate_root_receipt(
         raise ToolingSuiteError("root receipt status or plan binding is malformed")
     if receipt.get("installer_manifest_sha256") != installer_manifest_sha256(REPO_ROOT):
         raise ToolingSuiteError("root receipt does not match its sealed runner")
+    runtime_digest = str(receipt.get("runtime_manifest_sha256", ""))
+    runtime_executable = str(receipt.get("runtime_executable", ""))
+    runtime_relative = Path(runtime_executable)
+    if bool(runtime_digest) != bool(runtime_executable) or (
+        runtime_digest
+        and (
+            not re.fullmatch(r"[0-9a-f]{64}", runtime_digest)
+            or runtime_relative.is_absolute()
+            or ".." in runtime_relative.parts
+        )
+    ):
+        raise ToolingSuiteError("root receipt sealed Python binding is malformed")
     catalog = {spec.id: spec for spec in TOOL_CATALOG}
     tools_root = _root_path(root_prefix, "opt/moradins-forge/tools").resolve()
     bin_root = _root_path(root_prefix, "usr/local/bin").resolve()
@@ -3095,6 +4177,12 @@ def _validate_root_receipt(
             if tool_id == "repository:epel":
                 expected_package = "epel-release"
                 expected_manager = "dnf"
+            elif (
+                operation.get("offline") is True
+                and tool_id.startswith("offline-dependency:")
+            ):
+                expected_package = tool_id.removeprefix("offline-dependency:")
+                expected_manager = manager
             else:
                 spec = catalog.get(tool_id)
                 if spec is None:
@@ -3122,6 +4210,20 @@ def _validate_root_receipt(
                     or not asset.is_file()
                 ):
                     raise ToolingSuiteError("root receipt rollback asset is unsafe")
+            rollback_signature = str(operation.get("rollback_signature", ""))
+            if rollback_signature:
+                signature = Path(rollback_signature)
+                if (
+                    operation.get("offline") is not True
+                    or not rollback_asset
+                    or not signature.is_absolute()
+                    or not signature.resolve().is_relative_to(backup_root)
+                    or signature.is_symlink()
+                    or not signature.is_file()
+                ):
+                    raise ToolingSuiteError(
+                        "root receipt rollback signature is unsafe"
+                    )
         else:
             raise ToolingSuiteError("root receipt operation kind is unsupported")
 
@@ -3180,7 +4282,8 @@ def _invoke_root_apply(
 ) -> dict[str, Any]:
     if not re.fullmatch(r"[0-9a-f]{64}", installer_manifest_digest):
         raise ToolingSuiteError("root runner manifest digest is malformed")
-    root_python = _trusted_root_python()
+    root_python = _trusted_root_bootstrap_python()
+    runtime_arguments = _root_runtime_arguments(root_python)
     sudo_path = _trusted_sudo()
     runner_root = Path("/var/lib/moradins-forge/runners") / installer_manifest_digest
     argv = [
@@ -3197,6 +4300,7 @@ def _invoke_root_apply(
         ROOT_RUNNER_BOOTSTRAP,
         (stage_root / "root-runner").resolve().as_posix(),
         installer_manifest_digest,
+        *runtime_arguments,
         "--forge-root",
         runner_root.as_posix(),
         "_root-apply",
@@ -3233,10 +4337,17 @@ def _invoke_root_rollback(
     *,
     approved_sha256: str,
     installer_manifest_digest: str,
+    runtime_manifest_sha256: str = "",
+    runtime_executable: str = "",
 ) -> dict[str, Any]:
     if not re.fullmatch(r"[0-9a-f]{64}", installer_manifest_digest):
         raise ToolingSuiteError("root runner manifest digest is malformed")
-    root_python = _trusted_root_python()
+    root_python = _trusted_root_bootstrap_python()
+    runtime_arguments = _root_runtime_arguments(
+        root_python,
+        sealed_digest=runtime_manifest_sha256,
+        sealed_executable=runtime_executable,
+    )
     sudo_path = _trusted_sudo()
     runner_root = Path("/var/lib/moradins-forge/runners") / installer_manifest_digest
     argv = [
@@ -3253,6 +4364,7 @@ def _invoke_root_rollback(
         ROOT_RUNNER_BOOTSTRAP,
         "-",
         installer_manifest_digest,
+        *runtime_arguments,
         "--forge-root",
         runner_root.as_posix(),
         "_root-rollback",
@@ -3349,6 +4461,12 @@ def apply_suite_plan(
                     installer_manifest_digest=str(
                         root_receipt["installer_manifest_sha256"]
                     ),
+                    runtime_manifest_sha256=str(
+                        root_receipt.get("runtime_manifest_sha256", "")
+                    ),
+                    runtime_executable=str(
+                        root_receipt.get("runtime_executable", "")
+                    ),
                 )
             except Exception as error:  # preserve root recovery evidence
                 root_rollback_error = error
@@ -3395,6 +4513,12 @@ def apply_suite_plan(
                     ),
                     "operations": root_receipt.get("operations", []),
                     "skipped": root_receipt.get("skipped", []),
+                    "runtime_manifest_sha256": root_receipt.get(
+                        "runtime_manifest_sha256", ""
+                    ),
+                    "runtime_executable": root_receipt.get(
+                        "runtime_executable", ""
+                    ),
                 }
                 if root_receipt
                 else None
@@ -3420,6 +4544,12 @@ def apply_suite_plan(
                     approved_sha256=str(root_receipt["receipt_sha256"]),
                     installer_manifest_digest=str(
                         root_receipt["installer_manifest_sha256"]
+                    ),
+                    runtime_manifest_sha256=str(
+                        root_receipt.get("runtime_manifest_sha256", "")
+                    ),
+                    runtime_executable=str(
+                        root_receipt.get("runtime_executable", "")
                     ),
                 )
             except Exception as error:  # preserve root recovery evidence
@@ -3532,6 +4662,31 @@ def verify_suite_receipt(
     }
 
 
+def latest_suite_receipt_status(
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+) -> dict[str, Any]:
+    """Return a sanitized readiness result for onboarding's latest receipt check."""
+
+    try:
+        payload = verify_suite_receipt("latest", runner=runner)
+    except ToolingSuiteError as error:
+        message = str(error)
+        missing = message == "no tooling-suite receipt is available"
+        return {
+            "status": "missing" if missing else "fail",
+            "verified": False,
+            "message": message,
+        }
+    return {
+        "status": str(payload["status"]),
+        "verified": payload["status"] == "pass",
+        "receipt_sha256": str(payload["receipt_sha256"]),
+        "check_count": len(payload["checks"]),
+        "message": "latest tooling-suite receipt verified",
+    }
+
+
 def rollback_suite_receipt(
     path_or_latest: str,
     *,
@@ -3552,6 +4707,10 @@ def rollback_suite_receipt(
                 Path(str(root["path"])),
                 approved_sha256=str(root["sha256"]),
                 installer_manifest_digest=str(root["installer_manifest_sha256"]),
+                runtime_manifest_sha256=str(
+                    root.get("runtime_manifest_sha256", "")
+                ),
+                runtime_executable=str(root.get("runtime_executable", "")),
             )
         )
     data_root, _state_root, bin_root = _user_roots()
@@ -3680,12 +4839,19 @@ def _confirm(prompt: str) -> bool:
     return _prompt(f"{prompt} [y/N] ").lower() in {"y", "yes"}
 
 
-def _print_onboard_handoff() -> None:
+def _print_onboard_handoff(*, offline: bool = False) -> None:
+    offline_flag = " --offline" if offline else ""
+    print("\nCopyable agent prompt:")
+    print("```text")
+    print("I have completed the Moradin Forge tooling installation.")
+    print("Ask which workspace roots I approve, then run:")
     print(
-        "Optional next step: run scripts/moradin_forge.sh onboard --workspace "
-        "<approved-workspace> and approve repository discovery and guidance "
-        "separately."
+        "scripts/moradin_forge.sh onboard --workspace "
+        f"<approved-workspace>{offline_flag}"
     )
+    print("Show discovered repositories and every proposed provider file change.")
+    print("Ask separately before creating or patching each guidance file.")
+    print("```")
 
 
 def _plan_needs_python_312_bootstrap(plan: dict[str, Any]) -> bool:
@@ -3744,14 +4910,144 @@ def _bootstrap_python_312(
         )
 
 
-def _interactive_profile() -> tuple[str, list[str]]:
+def _airgap_module() -> Any:
+    try:
+        from scripts import moradin_airgap
+    except ModuleNotFoundError:  # pragma: no cover - direct execution
+        import moradin_airgap  # type: ignore[no-redef]
+    return moradin_airgap
+
+
+def _interactive_airgap(*, forge_root: Path) -> None:
+    airgap = _airgap_module()
+    while True:
+        print("\nAir-Gapped Setup")
+        print("1. Generate a sanitized request on this disconnected target")
+        print("2. Build a complete kit on this connected Forge machine")
+        print("3. Verify a transferred kit")
+        print("4. Apply a verified kit on this disconnected target")
+        print("5. Back")
+        choice = _prompt("Choose an air-gap action: ")
+        try:
+            if choice == "1":
+                profile_choice = _prompt(
+                    "Profile: 1 Practical All (recommended), 2 Extended All: "
+                )
+                if profile_choice not in {"1", "2"}:
+                    print("Choose 1 or 2.")
+                    continue
+                profile = "practical" if profile_choice == "1" else "extended"
+                output = Path(_prompt("Request output path: ")).expanduser().resolve()
+                facts = host_facts()
+                approved_repositories: list[str] = []
+                if facts["os_id"] in {"rocky", "rhel", "almalinux"} and _confirm(
+                    "Approve EPEL metadata for selected tools when required?"
+                ):
+                    approved_repositories.append("epel")
+                arch_snapshot = ""
+                arch_inventory = False
+                if facts["package_manager"] == "pacman":
+                    arch_snapshot = _prompt("Frozen Arch snapshot (YYYY/MM/DD): ")
+                    arch_inventory = _confirm(
+                        "Export the complete Arch package inventory into the sanitized request?"
+                    )
+                payload = airgap.build_airgap_request(
+                    forge_root=forge_root,
+                    profile=profile,
+                    output=output,
+                    approved_repositories=approved_repositories,
+                    arch_snapshot=arch_snapshot,
+                    approve_arch_package_inventory=arch_inventory,
+                )
+                print(json.dumps(payload, indent=2, sort_keys=True))
+                continue
+            if choice == "2":
+                source_kind = _prompt("Build from 1 request or 2 frozen lock: ")
+                if source_kind not in {"1", "2"}:
+                    print("Choose 1 or 2.")
+                    continue
+                source = Path(_prompt("Request/lock path: ")).expanduser().resolve()
+                output = Path(_prompt("Kit output path: ")).expanduser().resolve()
+                if source_kind == "1":
+                    payload = airgap.build_airgap_bundle_from_request(
+                        source,
+                        output=output,
+                        forge_root=forge_root,
+                    )
+                else:
+                    payload = airgap.build_airgap_bundle_from_lock(
+                        source,
+                        output=output,
+                        forge_root=forge_root,
+                    )
+                print(json.dumps(payload, indent=2, sort_keys=True))
+                print(
+                    "Transport this bundle digest separately: "
+                    + str(payload["bundle_sha256"])
+                )
+                continue
+            if choice == "3":
+                bundle = Path(_prompt("Kit path: ")).expanduser().resolve()
+                digest = _prompt("Separately transported kit SHA-256: ")
+                payload = airgap.verify_airgap_bundle(
+                    bundle,
+                    expected_sha256=digest,
+                )
+                print(json.dumps(payload, indent=2, sort_keys=True))
+                continue
+            if choice == "4":
+                bundle = Path(_prompt("Kit path: ")).expanduser().resolve()
+                digest = _prompt("Separately transported kit SHA-256: ")
+                preview = airgap.preview_airgap_apply(
+                    bundle,
+                    expected_sha256=digest,
+                    forge_root=forge_root,
+                )
+                print(suite_plan_markdown(preview["plan"]).rstrip())
+                print(f"offline_package_additions: {preview['package_additions']}")
+                print(f"offline_package_upgrades: {preview['package_upgrades']}")
+                print(f"offline_package_bytes: {preview['disk_bytes']}")
+                print(f"offline_plan_sha256: {preview['plan_sha256']}")
+                stale_approval = ""
+                if preview["bundle"]["stale"]:
+                    stale_approval = _prompt(
+                        "Kit is older than 30 days; type its exact SHA-256 again: "
+                    )
+                    if stale_approval != digest:
+                        raise ToolingSuiteError(
+                            "stale air-gap kit digest approval did not match"
+                        )
+                if not _confirm(
+                    "Apply this exact offline plan through the sealed sudo phase?"
+                ):
+                    print("Air-gap apply cancelled without changes.")
+                    continue
+                payload = airgap.apply_airgap_bundle(
+                    bundle,
+                    approved_bundle_sha256=digest,
+                    approved_plan_sha256=str(preview["plan_sha256"]),
+                    approved_stale_bundle_sha256=stale_approval,
+                    forge_root=forge_root,
+                )
+                print(json.dumps(payload, indent=2, sort_keys=True))
+                _print_onboard_handoff(offline=True)
+                continue
+            if choice == "5":
+                return
+            print("Enter a number from 1 through 5.")
+        except airgap.AirgapError as error:
+            print(f"Air-gap action failed closed: {error}")
+
+
+def _interactive_profile(*, forge_root: Path = REPO_ROOT) -> tuple[str, list[str]]:
     while True:
         print("\nMoradin Forge Linux Tooling Suite")
         print("1. Install All")
         print("2. Customize")
         print("3. Verify an installation")
         print("4. Roll back an installation")
-        print("5. Exit")
+        print("5. Air-Gapped Setup")
+        print("6. Exit")
         choice = _prompt("Choose an action: ")
         if choice == "1":
             while True:
@@ -3845,8 +5141,11 @@ def _interactive_profile() -> tuple[str, list[str]]:
             print(json.dumps(result, indent=2, sort_keys=True))
             continue
         if choice == "5":
+            _interactive_airgap(forge_root=forge_root)
+            continue
+        if choice == "6":
             raise SystemExit(0)
-        print("Enter a number from 1 through 5.")
+        print("Enter a number from 1 through 6.")
 
 
 def interactive(*, forge_root: Path) -> int:
@@ -3858,7 +5157,7 @@ def interactive(*, forge_root: Path) -> int:
         raise ToolingSuiteError(
             "interactive mode must run as the target user, not root"
         )
-    profile, selected = _interactive_profile()
+    profile, selected = _interactive_profile(forge_root=forge_root)
     workspaces: list[Path] = []
     if _confirm("Add approved workspace roots for evidence-based recommendations?"):
         while True:
@@ -3979,7 +5278,11 @@ def build_parser() -> argparse.ArgumentParser:
     apply_parser.add_argument("--approve-plan-sha256", required=True)
 
     bundle = subparsers.add_parser(
-        "bundle", help="Build a checksummed portable asset bundle."
+        "bundle",
+        help=(
+            "Build a compatibility asset bundle; it may be partial when OS "
+            "packages are selected."
+        ),
     )
     bundle.add_argument("--plan", type=Path, required=True)
     bundle.add_argument("--output", type=Path, required=True)
@@ -3994,6 +5297,51 @@ def build_parser() -> argparse.ArgumentParser:
     )
     rollback.add_argument("--receipt", default="latest")
     rollback.add_argument("--approve-receipt-sha256", required=True)
+
+    airgap_request = subparsers.add_parser(
+        "airgap-request",
+        help="Write a sanitized target request on a disconnected Linux host.",
+    )
+    airgap_request.add_argument(
+        "--profile", choices=("practical", "extended"), required=True
+    )
+    airgap_request.add_argument("--output", type=Path, required=True)
+    airgap_request.add_argument("--exclude", action="append", default=[])
+    airgap_request.add_argument(
+        "--container-engine", choices=("podman", "docker"), default=""
+    )
+    airgap_request.add_argument(
+        "--approve-repository", choices=("epel",), action="append", default=[]
+    )
+    airgap_request.add_argument("--arch-snapshot", default="")
+    airgap_request.add_argument(
+        "--approve-arch-package-inventory", action="store_true"
+    )
+
+    airgap_build = subparsers.add_parser(
+        "airgap-build",
+        help="Build a complete target-specific kit with a rootless builder.",
+    )
+    build_source = airgap_build.add_mutually_exclusive_group(required=True)
+    build_source.add_argument("--request", type=Path)
+    build_source.add_argument("--lock", type=Path)
+    airgap_build.add_argument("--output", type=Path, required=True)
+
+    airgap_verify = subparsers.add_parser(
+        "airgap-verify",
+        help="Verify a sealed kit against its separately transported digest.",
+    )
+    airgap_verify.add_argument("--bundle", type=Path, required=True)
+    airgap_verify.add_argument("--expected-sha256", required=True)
+
+    airgap_apply = subparsers.add_parser(
+        "airgap-apply",
+        help="Rebind and apply a complete kit with all network sources disabled.",
+    )
+    airgap_apply.add_argument("--bundle", type=Path, required=True)
+    airgap_apply.add_argument("--approve-bundle-sha256", required=True)
+    airgap_apply.add_argument("--approve-offline-plan-sha256", default="")
+    airgap_apply.add_argument("--approve-stale-bundle-sha256", default="")
 
     root_apply = subparsers.add_parser("_root-apply", help=argparse.SUPPRESS)
     root_apply.add_argument("--plan", type=Path, required=True)
@@ -4012,6 +5360,12 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     forge_root = args.forge_root.resolve()
     try:
+        airgap = None
+        if str(args.command).startswith("airgap-"):
+            try:
+                from scripts import moradin_airgap as airgap
+            except ModuleNotFoundError:  # pragma: no cover - direct execution
+                import moradin_airgap as airgap  # type: ignore[no-redef]
         if args.command == "interactive":
             return interactive(forge_root=forge_root)
         if args.command == "plan":
@@ -4068,6 +5422,111 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(json.dumps(payload, indent=2, sort_keys=True))
             return 0 if payload["status"] == "pass" else 1
+        if args.command == "airgap-request":
+            assert airgap is not None
+            try:
+                payload = airgap.build_airgap_request(
+                    forge_root=forge_root,
+                    profile=args.profile,
+                    output=args.output.resolve(),
+                    exclude_tools=args.exclude,
+                    container_engine=args.container_engine,
+                    approved_repositories=args.approve_repository,
+                    arch_snapshot=args.arch_snapshot,
+                    approve_arch_package_inventory=(
+                        args.approve_arch_package_inventory
+                    ),
+                )
+            except airgap.AirgapError as error:
+                raise ToolingSuiteError(str(error)) from error
+            print(json.dumps(payload, indent=2, sort_keys=True))
+            return 0
+        if args.command == "airgap-build":
+            assert airgap is not None
+            try:
+                if args.request:
+                    payload = airgap.build_airgap_bundle_from_request(
+                        args.request.resolve(),
+                        output=args.output.resolve(),
+                        forge_root=forge_root,
+                    )
+                else:
+                    payload = airgap.build_airgap_bundle_from_lock(
+                        args.lock.resolve(),
+                        output=args.output.resolve(),
+                        forge_root=forge_root,
+                    )
+            except airgap.AirgapError as error:
+                raise ToolingSuiteError(str(error)) from error
+            print(json.dumps(payload, indent=2, sort_keys=True))
+            return 0
+        if args.command == "airgap-verify":
+            assert airgap is not None
+            try:
+                payload = airgap.verify_airgap_bundle(
+                    args.bundle.resolve(),
+                    expected_sha256=args.expected_sha256,
+                )
+            except airgap.AirgapError as error:
+                raise ToolingSuiteError(str(error)) from error
+            print(json.dumps(payload, indent=2, sort_keys=True))
+            return 0
+        if args.command == "airgap-apply":
+            assert airgap is not None
+            try:
+                preview = airgap.preview_airgap_apply(
+                    args.bundle.resolve(),
+                    expected_sha256=args.approve_bundle_sha256,
+                    forge_root=forge_root,
+                )
+                if args.json:
+                    print(json.dumps(preview, indent=2, sort_keys=True))
+                else:
+                    print(suite_plan_markdown(preview["plan"]).rstrip())
+                    print(f"offline_package_additions: {len(preview['package_additions'])}")
+                    print(f"offline_package_upgrades: {len(preview['package_upgrades'])}")
+                    print(f"offline_package_bytes: {preview['disk_bytes']}")
+                    print(f"repository_actions: {preview['repository_actions']}")
+                    print(f"rollback: {preview['rollback']}")
+                    print(f"offline_plan_sha256: {preview['plan_sha256']}")
+                stale_approval = args.approve_stale_bundle_sha256
+                if preview["bundle"]["stale"] and not stale_approval:
+                    if not sys.stdin.isatty():
+                        raise ToolingSuiteError(
+                            "stale air-gap kit requires an exact non-interactive approval"
+                        )
+                    typed = _prompt(
+                        "Kit is older than 30 days. Type its exact SHA-256 to continue: "
+                    )
+                    if typed != args.approve_bundle_sha256:
+                        raise ToolingSuiteError("stale kit digest approval did not match")
+                    stale_approval = typed
+                plan_approval = args.approve_offline_plan_sha256
+                if not plan_approval:
+                    if not sys.stdin.isatty() or not sys.stdout.isatty():
+                        raise ToolingSuiteError(
+                            "non-interactive air-gap apply requires "
+                            "--approve-offline-plan-sha256"
+                        )
+                    if not _confirm(
+                        "Apply this exact offline plan through the sealed sudo phase?"
+                    ):
+                        print("Air-gap apply cancelled without changes.")
+                        return 0
+                    plan_approval = str(preview["plan_sha256"])
+                payload = airgap.apply_airgap_bundle(
+                    args.bundle.resolve(),
+                    approved_bundle_sha256=args.approve_bundle_sha256,
+                    approved_plan_sha256=plan_approval,
+                    approved_stale_bundle_sha256=stale_approval,
+                    forge_root=forge_root,
+                )
+            except airgap.AirgapError as error:
+                raise ToolingSuiteError(str(error)) from error
+            print(json.dumps(payload, indent=2, sort_keys=True))
+            if payload["status"] == "pass":
+                _print_onboard_handoff(offline=True)
+            return 0
         if args.command == "_root-apply":
             if os.geteuid() != 0:
                 raise ToolingSuiteError("internal root apply requires effective UID 0")
