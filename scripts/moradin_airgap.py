@@ -110,6 +110,24 @@ AIRGAP_MAX_RECORD_BYTES = 16 * 1024 * 1024
 AIRGAP_MAX_PACKAGE_RECORDS = 100_000
 AIRGAP_SOURCE_DATE_EPOCH = 946684800
 REPO_ROOT = Path(__file__).resolve().parents[1]
+APT_PACKAGE_STATE_FIELDS = (
+    "package",
+    "version",
+    "architecture",
+    "essential",
+    "multi_arch",
+    "provides",
+    "depends",
+    "pre_depends",
+    "conflicts",
+    "breaks",
+    "replaces",
+)
+APT_DPKG_QUERY_FORMAT = (
+    "${Package}\t${Version}\t${Architecture}\t${Essential}\t${Multi-Arch}\t"
+    "${Provides}\t${Depends}\t${Pre-Depends}\t${Conflicts}\t${Breaks}\t"
+    "${Replaces}\n"
+)
 
 SUPPORTED_TARGETS: dict[tuple[str, str], str] = {
     ("ubuntu", "24.04"): "apt",
@@ -204,6 +222,52 @@ def _validated_package_rows(value: object, *, label: str) -> list[dict[str, str]
         normalized.append({"package": package, "version": version})
     if normalized != sorted(normalized, key=lambda row: row["package"]):
         raise AirgapError(f"{label} must be sorted by package")
+    return normalized
+
+
+def _validated_apt_package_state(value: object) -> list[dict[str, str]]:
+    if not isinstance(value, list) or len(value) > AIRGAP_MAX_PACKAGE_RECORDS:
+        raise AirgapError("apt_package_state is not a bounded package list")
+    normalized: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for row in value:
+        if not isinstance(row, dict) or set(row) != set(APT_PACKAGE_STATE_FIELDS):
+            raise AirgapError("apt_package_state contains a malformed package row")
+        parsed = {field: str(row.get(field, "")) for field in APT_PACKAGE_STATE_FIELDS}
+        identity = (parsed["package"], parsed["architecture"])
+        if (
+            not re.fullmatch(r"[A-Za-z0-9@._+:-]+", parsed["package"])
+            or not re.fullmatch(r"[A-Za-z0-9._-]+", parsed["architecture"])
+            or not parsed["version"]
+            or len(parsed["version"]) > 512
+            or parsed["essential"] not in {"", "no", "yes"}
+            or parsed["multi_arch"] not in {"", "allowed", "foreign", "no", "same"}
+            or identity in seen
+        ):
+            raise AirgapError("apt_package_state contains unsafe package metadata")
+        for field, rendered in parsed.items():
+            limit = 65_536 if field in {
+                "breaks",
+                "conflicts",
+                "depends",
+                "pre_depends",
+                "provides",
+                "replaces",
+            } else 512
+            if len(rendered) > limit or any(
+                ord(character) < 32 or ord(character) > 126
+                for character in rendered
+            ) or "/" in rendered or "\\" in rendered:
+                raise AirgapError(
+                    "apt_package_state contains unsafe package metadata"
+                )
+        seen.add(identity)
+        normalized.append(parsed)
+    if normalized != sorted(
+        normalized,
+        key=lambda row: (row["package"], row["architecture"]),
+    ):
+        raise AirgapError("apt_package_state must be sorted by package and architecture")
     return normalized
 
 
@@ -338,6 +402,27 @@ def _installed_package_inventory(
     ]
 
 
+def _installed_apt_package_state(
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+) -> list[dict[str, str]]:
+    result = _run(
+        ["dpkg-query", "-W", f"-f={APT_DPKG_QUERY_FORMAT}"],
+        runner=runner,
+    )
+    if result.returncode != 0:
+        raise AirgapError("APT package solver state could not be read")
+    rows: list[dict[str, str]] = []
+    for line in result.stdout.splitlines():
+        fields = line.split("\t")
+        if len(fields) != len(APT_PACKAGE_STATE_FIELDS):
+            raise AirgapError("APT package solver state is malformed")
+        rows.append(dict(zip(APT_PACKAGE_STATE_FIELDS, fields, strict=True)))
+    return _validated_apt_package_state(
+        sorted(rows, key=lambda row: (row["package"], row["architecture"]))
+    )
+
+
 def _airgap_selected_specs(
     profile: str,
     *,
@@ -436,6 +521,7 @@ def build_airgap_request(
     ]
     package_inventory: list[dict[str, str]] = []
     arch_inventory: list[dict[str, str]] = []
+    apt_package_state: list[dict[str, str]] = []
     if manager == "pacman":
         if not re.fullmatch(r"\d{4}/\d{2}/\d{2}", arch_snapshot):
             raise AirgapError("Arch requests require --arch-snapshot YYYY/MM/DD")
@@ -447,6 +533,8 @@ def build_airgap_request(
         package_inventory = arch_inventory
     else:
         package_inventory = _installed_package_inventory(manager, runner=runner)
+        if manager == "apt":
+            apt_package_state = _installed_apt_package_state(runner=runner)
     if set(approved_repositories) - {"epel"}:
         raise AirgapError("only the separately approved EPEL repository is supported")
     if target["os_id"] != "rocky" and approved_repositories:
@@ -462,6 +550,7 @@ def build_airgap_request(
         "target": target,
         "installed_packages": installed,
         "installed_package_inventory": package_inventory,
+        "apt_package_state": apt_package_state,
         "approved_repositories": sorted(set(approved_repositories)),
         "arch_snapshot": arch_snapshot,
         "arch_package_inventory": arch_inventory,
@@ -500,6 +589,7 @@ def load_airgap_request(
         "target",
         "installed_packages",
         "installed_package_inventory",
+        "apt_package_state",
         "approved_repositories",
         "arch_snapshot",
         "arch_package_inventory",
@@ -566,6 +656,24 @@ def load_airgap_request(
         payload.get("installed_package_inventory"),
         label="installed_package_inventory",
     )
+    apt_package_state = _validated_apt_package_state(
+        payload.get("apt_package_state")
+    )
+    if target["package_manager"] == "apt":
+        if not apt_package_state:
+            raise AirgapError("APT requests require sanitized package solver state")
+        apt_versions = {
+            (row["package"], row["version"])
+            for row in apt_package_state
+        }
+        if any(
+            (row["package"].split(":", maxsplit=1)[0], row["version"])
+            not in apt_versions
+            for row in inventory
+        ):
+            raise AirgapError("APT package inventory and solver state do not match")
+    elif apt_package_state:
+        raise AirgapError("non-APT requests must not contain APT solver state")
     installed_map = {row["package"]: row["version"] for row in installed}
     inventory_map = {row["package"]: row["version"] for row in inventory}
     expected_direct_packages = {
@@ -714,38 +822,6 @@ def _retarget_suite_plan(
     return plan
 
 
-def _apt_dependency_closure(
-    packages: Sequence[str],
-    *,
-    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
-) -> list[str]:
-    if not packages:
-        return []
-    result = _run(
-        [
-            "apt-rdepends",
-            "--follow=Depends,PreDepends",
-            "--show=Depends,PreDepends",
-            "--",
-            *packages,
-        ],
-        runner=runner,
-        timeout=600,
-    )
-    if result.returncode != 0:
-        raise AirgapError("APT dependency closure resolution failed")
-    closure = set(packages)
-    for line in result.stdout.splitlines():
-        if line and not line[0].isspace() and re.fullmatch(r"[A-Za-z0-9.+:-]+", line):
-            closure.add(line)
-    resolved: list[str] = []
-    for package in sorted(closure):
-        _installed, candidate = _package_versions(package, "apt", runner=runner)
-        if candidate:
-            resolved.append(f"{package}={candidate}")
-    return resolved
-
-
 def _debian_package_fields(
     package_path: Path,
     fields: Sequence[str],
@@ -770,14 +846,109 @@ def _debian_package_fields(
     return values
 
 
+def _write_apt_solver_status(
+    rows: Sequence[dict[str, str]],
+    destination: Path,
+) -> None:
+    field_names = {
+        "essential": "Essential",
+        "multi_arch": "Multi-Arch",
+        "provides": "Provides",
+        "depends": "Depends",
+        "pre_depends": "Pre-Depends",
+        "conflicts": "Conflicts",
+        "breaks": "Breaks",
+        "replaces": "Replaces",
+    }
+    stanzas: list[str] = []
+    for row in _validated_apt_package_state(list(rows)):
+        lines = [
+            f"Package: {row['package']}",
+            "Status: install ok installed",
+            f"Architecture: {row['architecture']}",
+            f"Version: {row['version']}",
+        ]
+        lines.extend(
+            f"{field_names[field]}: {row[field]}"
+            for field in field_names
+            if row[field]
+        )
+        stanzas.append("\n".join(lines))
+    destination.write_text("\n\n".join(stanzas) + "\n", encoding="utf-8")
+
+
+def _apt_transaction_closure(
+    packages: Sequence[str],
+    target_state: Sequence[dict[str, str]],
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+) -> list[str]:
+    requested: list[str] = []
+    for package in packages:
+        _installed, candidate = _package_versions(package, "apt", runner=runner)
+        if not candidate:
+            raise AirgapError(f"APT package candidate is unavailable: {package}")
+        requested.append(f"{package}={candidate}")
+    with tempfile.TemporaryDirectory(prefix="moradin-apt-solver-") as temporary:
+        status = Path(temporary) / "status"
+        _write_apt_solver_status(target_state, status)
+        result = _run(
+            [
+                "apt-get",
+                "-o",
+                f"Dir::State::status={status.as_posix()}",
+                "-o",
+                "Dir::State::extended_states=/dev/null",
+                "--simulate",
+                "--no-install-recommends",
+                "install",
+                "--",
+                *requested,
+            ],
+            runner=runner,
+            timeout=600,
+        )
+    if result.returncode != 0:
+        raise AirgapError("APT target-bound dependency resolution failed")
+    resolved: dict[str, str] = {}
+    for line in result.stdout.splitlines():
+        if line.startswith(("Remv ", "Purg ")):
+            raise AirgapError("APT target-bound transaction would remove packages")
+        if not line.startswith("Inst "):
+            continue
+        match = re.fullmatch(
+            r"Inst ([A-Za-z0-9@._+:-]+)(?: \[[^\]]+\])? "
+            r"\(([^ )]+)(?: [^)]*)?\)",
+            line,
+        )
+        if match is None:
+            raise AirgapError("APT target-bound transaction output is malformed")
+        package, version = match.groups()
+        if package in resolved and resolved[package] != version:
+            raise AirgapError("APT target-bound transaction is ambiguous")
+        resolved[package] = version
+    if any(
+        package.split(":", maxsplit=1)[0]
+        not in {name.split(":", maxsplit=1)[0] for name in resolved}
+        for package in packages
+    ):
+        raise AirgapError("APT target-bound transaction omitted a selected package")
+    return [f"{package}={resolved[package]}" for package in sorted(resolved)]
+
+
 def _download_apt_packages(
     packages: Sequence[str],
     output: Path,
     *,
+    target_state: Sequence[dict[str, str]],
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> list[dict[str, Any]]:
     output.mkdir(parents=True, exist_ok=False)
-    closure = _apt_dependency_closure(packages, runner=runner)
+    closure = _apt_transaction_closure(
+        packages,
+        target_state,
+        runner=runner,
+    )
     for package in closure:
         result = _run(
             ["apt-get", "download", "--", package],
@@ -1074,12 +1245,24 @@ def _attach_rollback_closure(
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> None:
     manager = str(request["target"]["package_manager"])
-    installed = {
-        str(row["package"]): str(row["version"])
-        for row in request.get("installed_package_inventory", [])
-    }
+    if manager == "apt":
+        installed = {
+            (str(row["package"]), str(row["architecture"])): str(row["version"])
+            for row in request.get("apt_package_state", [])
+        }
+    else:
+        installed = {
+            str(row["package"]): str(row["version"])
+            for row in request.get("installed_package_inventory", [])
+        }
     for record in records:
-        previous = installed.get(str(record["package"]), "")
+        if manager == "apt":
+            previous = installed.get(
+                (str(record["package"]), str(record["arch"])),
+                "",
+            )
+        else:
+            previous = installed.get(str(record["package"]), "")
         record["previous_version"] = previous
         if not previous or previous == record["version"]:
             record["rollback_filename"] = ""
@@ -1383,16 +1566,23 @@ def build_target_payload(
         manager = str(request["target"]["package_manager"])
         package_root = output / "os-packages"
         if package_names:
-            downloaders = {
-                "apt": _download_apt_packages,
-                "dnf": _download_dnf_packages,
-                "pacman": _download_pacman_packages,
-            }
-            package_records = downloaders[manager](
-                package_names,
-                package_root,
-                runner=runner,
-            )
+            if manager == "apt":
+                package_records = _download_apt_packages(
+                    package_names,
+                    package_root,
+                    target_state=request["apt_package_state"],
+                    runner=runner,
+                )
+            else:
+                downloaders = {
+                    "dnf": _download_dnf_packages,
+                    "pacman": _download_pacman_packages,
+                }
+                package_records = downloaders[manager](
+                    package_names,
+                    package_root,
+                    runner=runner,
+                )
             _attach_rollback_closure(
                 package_records,
                 request,

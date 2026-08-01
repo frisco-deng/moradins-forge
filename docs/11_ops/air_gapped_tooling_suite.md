@@ -58,6 +58,14 @@ package state, approved repositories, and catalog/installer digests. It omits
 workspace content, raw paths, credentials, prompts, hostnames, and machine
 identifiers. Review it before transport.
 
+For APT targets, relevant state includes only sanitized package solver fields:
+package, version, architecture, dependency relationships, conflicts,
+replacement relationships, essential status, and multi-architecture status.
+It excludes descriptions, configuration, file lists, conffile hashes, and
+paths. The connected builder feeds this bounded state to APT's simulator so
+the sealed closure represents the target's actual additions and upgrades,
+instead of upgrading dependencies that the target already satisfies.
+
 The disconnected request generator requires only a root-owned Python 3.9+.
 It emits the same strict schema as the main Python 3.11+ engine and does not
 install or download anything.
@@ -131,7 +139,8 @@ Onboarding shows exact diffs and never implies consent to create or patch them.
 - The builder uses a digest-pinned target image through an existing rootless
   engine.
 - APT packages are tied to Packages indexes covered by verified InRelease
-  signatures; RPM and Pacman package signatures are verified natively.
+  signatures. A target-bound APT simulation determines the exact transaction
+  before download; RPM and Pacman package signatures are verified natively.
 - The lock binds every payload path, byte size, digest, target, profile,
   catalog, installer, package state, and rollback asset.
 - The kit materializes uv-managed Python links into regular files and binds

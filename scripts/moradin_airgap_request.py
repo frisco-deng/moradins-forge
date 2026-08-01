@@ -36,6 +36,24 @@ INSTALLER_FILES = (
 )
 SAFE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 PACKAGE_RE = re.compile(r"[A-Za-z0-9@._+:-]+")
+APT_PACKAGE_STATE_FIELDS = (
+    "package",
+    "version",
+    "architecture",
+    "essential",
+    "multi_arch",
+    "provides",
+    "depends",
+    "pre_depends",
+    "conflicts",
+    "breaks",
+    "replaces",
+)
+APT_DPKG_QUERY_FORMAT = (
+    "${Package}\t${Version}\t${Architecture}\t${Essential}\t${Multi-Arch}\t"
+    "${Provides}\t${Depends}\t${Pre-Depends}\t${Conflicts}\t${Breaks}\t"
+    "${Replaces}\n"
+)
 
 
 class RequestError(RuntimeError):
@@ -250,6 +268,40 @@ def installed_inventory(manager):
     ]
 
 
+def installed_apt_package_state():
+    result = run(
+        ["dpkg-query", "-W", "-f=" + APT_DPKG_QUERY_FORMAT]
+    )
+    if result.returncode != 0:
+        raise RequestError("APT package solver state could not be read")
+    rows = []
+    seen = set()
+    for line in result.stdout.splitlines():
+        fields = line.split("\t")
+        if len(fields) != len(APT_PACKAGE_STATE_FIELDS):
+            raise RequestError("APT package solver state is malformed")
+        row = dict(zip(APT_PACKAGE_STATE_FIELDS, fields))
+        identity = (row["package"], row["architecture"])
+        if (
+            not PACKAGE_RE.fullmatch(row["package"])
+            or not re.fullmatch(r"[A-Za-z0-9._-]+", row["architecture"])
+            or not row["version"]
+            or row["essential"] not in {"", "no", "yes"}
+            or row["multi_arch"] not in {"", "allowed", "foreign", "no", "same"}
+            or identity in seen
+            or any(
+                ord(character) < 32 or ord(character) > 126
+                for value in row.values()
+                for character in value
+            )
+            or any("/" in value or "\\" in value for value in row.values())
+        ):
+            raise RequestError("APT package solver state contains unsafe metadata")
+        seen.add(identity)
+        rows.append(row)
+    return sorted(rows, key=lambda row: (row["package"], row["architecture"]))
+
+
 def installer_digest(forge_root):
     manifest = {}
     for relative in INSTALLER_FILES:
@@ -292,6 +344,7 @@ def build_request(args):
         if version:
             installed.append({"package": package, "version": version})
     inventory = installed_inventory(manager)
+    apt_package_state = installed_apt_package_state() if manager == "apt" else []
     payload = {
         "version": "AirgapRequestV1",
         "generated_at": datetime.datetime.now(
@@ -305,6 +358,7 @@ def build_request(args):
         "target": target,
         "installed_packages": installed,
         "installed_package_inventory": inventory,
+        "apt_package_state": apt_package_state,
         "approved_repositories": sorted(set(args.approve_repository)),
         "arch_snapshot": args.arch_snapshot,
         "arch_package_inventory": inventory if manager == "pacman" else [],

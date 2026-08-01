@@ -97,6 +97,12 @@ Docker or Podman is absent. Missing TTY input never selects a default.
   package signatures and repository evidence, or Pacman package signatures and
   synchronized metadata. Offline apply disables online repositories and
   rejects every network URL.
+- An APT request carries only bounded solver metadata: package identity,
+  version, architecture, dependency/conflict/replacement relationships, and
+  essential/multi-architecture flags. It excludes descriptions,
+  configuration, file lists, hashes of target configuration, and paths. The
+  builder resolves the exact target transaction from this state before it
+  freezes package and rollback assets.
 - EPEL is a separate digest-bound repository-bootstrap transaction followed by
   replanning. Arch package work requires separately approved full
   synchronization; partial upgrades are prohibited.

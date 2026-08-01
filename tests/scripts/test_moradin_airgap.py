@@ -24,6 +24,41 @@ UBUNTU_FACTS = {
     "package_manager": "apt",
     "host_fingerprint_sha256": "f" * 64,
 }
+APT_PACKAGE_STATE = [
+    {
+        "package": "ca-certificates",
+        "version": "20240203",
+        "architecture": "all",
+        "essential": "no",
+        "multi_arch": "foreign",
+        "provides": "",
+        "depends": "openssl (>= 1.1.1)",
+        "pre_depends": "",
+        "conflicts": "",
+        "breaks": "",
+        "replaces": "",
+    },
+    {
+        "package": "git",
+        "version": "1:2.43.0",
+        "architecture": "amd64",
+        "essential": "no",
+        "multi_arch": "foreign",
+        "provides": "",
+        "depends": "libc6 (>= 2.38)",
+        "pre_depends": "",
+        "conflicts": "",
+        "breaks": "",
+        "replaces": "",
+    },
+]
+
+
+def apt_package_state_output() -> str:
+    return "".join(
+        "\t".join(row[field] for field in airgap.APT_PACKAGE_STATE_FIELDS) + "\n"
+        for row in APT_PACKAGE_STATE
+    )
 
 
 def completed(
@@ -62,6 +97,10 @@ def test_request_is_digest_bound_and_excludes_machine_identity(
     tmp_path: Path,
 ) -> None:
     def runner(argv: list[str], **_kwargs: object) -> SimpleNamespace:
+        if argv[:2] == ["dpkg-query", "-W"] and any(
+            "${Package}" in item for item in argv
+        ):
+            return completed(stdout=apt_package_state_output())
         if argv[:2] == ["dpkg-query", "-W"] and any(
             "binary:Package" in item for item in argv
         ):
@@ -115,6 +154,11 @@ def test_python39_request_generator_matches_practical_engine_contract(
     })
     monkeypatch.setattr(request_compat, "installed_version", lambda *_args: "")
     monkeypatch.setattr(request_compat, "installed_inventory", lambda _manager: [])
+    monkeypatch.setattr(
+        request_compat,
+        "installed_apt_package_state",
+        lambda: APT_PACKAGE_STATE,
+    )
     output = tmp_path / "REQUEST.json"
     args = SimpleNamespace(
         forge_root=airgap.REPO_ROOT,
@@ -136,6 +180,10 @@ def test_request_rejects_recomputed_schema_and_package_tampering(
 ) -> None:
     def runner(argv: list[str], **_kwargs: object) -> SimpleNamespace:
         if argv[:2] == ["dpkg-query", "-W"] and any(
+            "${Package}" in item for item in argv
+        ):
+            return completed(stdout=apt_package_state_output())
+        if argv[:2] == ["dpkg-query", "-W"] and any(
             "binary:Package" in item for item in argv
         ):
             return completed(stdout="ca-certificates\t20240203\ngit\t1:2.43.0\n")
@@ -153,6 +201,19 @@ def test_request_rejects_recomputed_schema_and_package_tampering(
     mutations = [
         ({**original, "unexpected": True}, "fields"),
         ({**original, "selected_tools": original["selected_tools"][:-1]}, "profile"),
+        (
+            {
+                **original,
+                "apt_package_state": [
+                    {
+                        **original["apt_package_state"][0],
+                        "depends": "libc6\nConffiles: /unsafe/path",
+                    },
+                    *original["apt_package_state"][1:],
+                ],
+            },
+            "unsafe package metadata",
+        ),
         (
             {
                 **original,
@@ -190,32 +251,6 @@ def test_apt_index_decompression_is_bounded(
     assert not destination.exists()
 
 
-def test_apt_dependency_closure_uses_case_sensitive_dependency_classes() -> None:
-    commands: list[list[str]] = []
-
-    def runner(argv: list[str], **_kwargs: object) -> SimpleNamespace:
-        commands.append(argv)
-        if argv[0] == "apt-rdepends":
-            return completed(stdout="make\n  Depends: libc6\nlibc6\n")
-        if argv[0] == "dpkg-query":
-            return completed(returncode=1)
-        if argv[0] == "apt-cache":
-            return completed(stdout="  Candidate: 1.0-1\n")
-        return completed(returncode=1)
-
-    assert airgap._apt_dependency_closure(["make"], runner=runner) == [
-        "libc6=1.0-1",
-        "make=1.0-1",
-    ]
-    assert commands[0] == [
-        "apt-rdepends",
-        "--follow=Depends,PreDepends",
-        "--show=Depends,PreDepends",
-        "--",
-        "make",
-    ]
-
-
 def test_debian_package_fields_query_values_without_labeled_output(
     tmp_path: Path,
 ) -> None:
@@ -240,6 +275,64 @@ def test_debian_package_fields_query_values_without_labeled_output(
         ["dpkg-deb", "-f", package.as_posix(), field]
         for field in ("Package", "Version", "Architecture")
     ]
+
+
+def test_apt_transaction_closure_uses_sanitized_target_solver_state() -> None:
+    commands: list[list[str]] = []
+
+    def runner(argv: list[str], **_kwargs: object) -> SimpleNamespace:
+        commands.append(argv)
+        if argv[0] == "dpkg-query":
+            return completed(returncode=1)
+        if argv[:2] == ["apt-cache", "policy"]:
+            return completed(stdout="  Candidate: 4.3-4.1build2\n")
+        if argv[:2] == ["apt-get", "-o"]:
+            status_argument = next(
+                item for item in argv if item.startswith("Dir::State::status=")
+            )
+            status = Path(status_argument.partition("=")[2]).read_text(
+                encoding="utf-8"
+            )
+            assert "Package: git\n" in status
+            assert "Description:" not in status
+            assert "/home/" not in status
+            return completed(
+                stdout=(
+                    "Inst make (4.3-4.1build2 Ubuntu:24.04/noble [amd64])\n"
+                    "Conf make (4.3-4.1build2 Ubuntu:24.04/noble [amd64])\n"
+                )
+            )
+        return completed(returncode=1)
+
+    assert airgap._apt_transaction_closure(
+        ["make"],
+        APT_PACKAGE_STATE,
+        runner=runner,
+    ) == ["make=4.3-4.1build2"]
+    assert not any("apt-rdepends" in command for command in commands)
+
+
+def test_apt_transaction_closure_rejects_package_removal() -> None:
+    def runner(argv: list[str], **_kwargs: object) -> SimpleNamespace:
+        if argv[0] == "dpkg-query":
+            return completed(returncode=1)
+        if argv[:2] == ["apt-cache", "policy"]:
+            return completed(stdout="  Candidate: 4.3-4.1build2\n")
+        if argv[:2] == ["apt-get", "-o"]:
+            return completed(
+                stdout=(
+                    "Remv protected-package [1.0]\n"
+                    "Inst make (4.3-4.1build2 Ubuntu:24.04/noble [amd64])\n"
+                )
+            )
+        return completed(returncode=1)
+
+    with pytest.raises(airgap.AirgapError, match="remove"):
+        airgap._apt_transaction_closure(
+            ["make"],
+            APT_PACKAGE_STATE,
+            runner=runner,
+        )
 
 
 def test_managed_python_links_are_materialized_only_within_runtime(

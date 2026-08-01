@@ -3369,6 +3369,32 @@ def _apt_index_package_hashes(text: str) -> set[tuple[str, str, str, str]]:
     return records
 
 
+def _offline_debian_package_fields(
+    package_path: Path,
+    fields: Sequence[str],
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> list[str]:
+    allowed = {"Architecture", "Package", "Version"}
+    if not fields or set(fields) - allowed:
+        raise ToolingSuiteError("unsupported offline Debian metadata field")
+    values: list[str] = []
+    for field in fields:
+        result = _run(
+            ["dpkg-deb", "-f", package_path.as_posix(), field],
+            runner=runner,
+            timeout=30,
+            env=_safe_environment(home=Path("/root")),
+        )
+        value = result.stdout.strip()
+        if result.returncode != 0 or not value or "\n" in value:
+            raise ToolingSuiteError(
+                "offline Debian package metadata is malformed"
+            )
+        values.append(value)
+    return values
+
+
 def _verify_offline_apt_trust(
     plan: dict[str, Any],
     sealed: dict[str, Path],
@@ -3519,20 +3545,12 @@ def _apply_offline_package_closure(
                     f"offline Pacman signature verification failed: {package}"
                 )
         elif manager == "apt":
-            package_info = _run(
-                [
-                    "dpkg-deb",
-                    "-f",
-                    path.as_posix(),
-                    "Package",
-                    "Version",
-                    "Architecture",
-                ],
+            package_fields = _offline_debian_package_fields(
+                path,
+                ["Package", "Version", "Architecture"],
                 runner=runner,
-                timeout=30,
-                env=_safe_environment(home=Path("/root")),
             )
-            if package_info.returncode != 0 or package_info.stdout.splitlines() != [
+            if package_fields != [
                 package,
                 version,
                 str(asset["arch"]),

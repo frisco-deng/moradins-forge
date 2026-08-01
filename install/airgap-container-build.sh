@@ -26,7 +26,7 @@ ubuntu | debian)
 	export DEBIAN_FRONTEND=noninteractive
 	apt-get update
 	apt-get install -y --no-install-recommends \
-		apt-rdepends ca-certificates coreutils curl dpkg-dev findutils git \
+		ca-certificates coreutils curl dpkg-dev findutils git \
 		gnupg lz4 python3 tar xz-utils
 	;;
 fedora)
