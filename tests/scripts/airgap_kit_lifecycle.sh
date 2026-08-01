@@ -58,10 +58,10 @@ esac
 
 podman exec "$container_name" useradd --create-home --home-dir "$consumer_home" \
 	--shell /bin/bash forge
-# Some RPM/Arch PAM stacks reject a locked synthetic account before sudoers can
-# honor NOPASSWD. Give only this disposable consumer an unlogged random secret.
+# Some rootless CI runners cannot expose shadow metadata to setuid sudo. This
+# disposable PAM service represents the test operator's explicit acceptance.
 podman exec "$container_name" /bin/sh -eu -c \
-	'password=$(od -An -N32 -tx1 /dev/urandom | tr -d " \n"); printf "forge:%s\n" "$password" | chpasswd; unset password; printf "forge ALL=(ALL) NOPASSWD: ALL\n" >/etc/sudoers.d/forge; chmod 0440 /etc/sudoers.d/forge'
+	'printf "%s\n" "#%PAM-1.0" "auth required pam_permit.so" "account required pam_permit.so" "password required pam_permit.so" "session required pam_permit.so" >/etc/pam.d/moradin-forge-ci; chmod 0644 /etc/pam.d/moradin-forge-ci; printf "%s\n" "Defaults:forge pam_service=moradin-forge-ci" "forge ALL=(ALL) NOPASSWD: ALL" >/etc/sudoers.d/forge; chmod 0440 /etc/sudoers.d/forge'
 podman exec "$container_name" /bin/sh -eu -c \
 	'visudo -cf /etc/sudoers >/dev/null'
 podman exec --user forge --env HOME="$consumer_home" "$container_name" \
