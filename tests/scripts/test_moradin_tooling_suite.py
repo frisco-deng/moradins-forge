@@ -33,6 +33,20 @@ def completed(
     return SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
 
 
+def test_root_rpm_signature_verification_requires_verbose_signature_proof() -> None:
+    verified = completed(
+        stdout="Header V4 RSA/SHA256 Signature, key ID 350d275d: OK\n"
+    )
+
+    assert suite._rpm_signature_verified(verified)
+    assert not suite._rpm_signature_verified(
+        completed(stdout="package.rpm: digests OK\n")
+    )
+    assert not suite._rpm_signature_verified(
+        completed(returncode=1, stdout="Header RSA Signature: NOKEY\n")
+    )
+
+
 def test_offline_apt_trust_verifies_compressed_signed_index(
     tmp_path: Path,
 ) -> None:

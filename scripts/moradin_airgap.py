@@ -328,6 +328,18 @@ def _run(
     )
 
 
+def _rpm_signature_verified(result: subprocess.CompletedProcess[str]) -> bool:
+    signature_lines = [
+        line.strip()
+        for line in f"{result.stdout}\n{result.stderr}".splitlines()
+        if re.search(r"\bsignatures?\b", line, flags=re.IGNORECASE)
+    ]
+    return result.returncode == 0 and bool(signature_lines) and all(
+        re.search(r":\s*ok\s*$", line, flags=re.IGNORECASE) is not None
+        for line in signature_lines
+    )
+
+
 def _installed_package_version(
     package: str,
     manager: str,
@@ -1027,8 +1039,10 @@ def _download_dnf_packages(
         raise AirgapError("DNF dependency closure download failed")
     records: list[dict[str, Any]] = []
     for path in sorted(output.glob("*.rpm")):
-        signature = _run(["rpmkeys", "--checksig", path.as_posix()], runner=runner)
-        if signature.returncode != 0 or "pgp" not in signature.stdout.lower():
+        signature = _run(
+            ["rpmkeys", "--checksig", "--verbose", path.as_posix()], runner=runner
+        )
+        if not _rpm_signature_verified(signature):
             raise AirgapError(f"RPM signature verification failed: {path.name}")
         query = _run(
             [
@@ -1225,8 +1239,11 @@ def _download_previous_package(
             f"rollback package does not match {package} at {version}"
         )
     if manager == "dnf":
-        check = _run(["rpmkeys", "--checksig", candidate.as_posix()], runner=runner)
-        if check.returncode != 0 or "pgp" not in check.stdout.lower():
+        check = _run(
+            ["rpmkeys", "--checksig", "--verbose", candidate.as_posix()],
+            runner=runner,
+        )
+        if not _rpm_signature_verified(check):
             raise AirgapError(f"rollback RPM signature failed: {package}")
     if manager == "pacman":
         check = _run(

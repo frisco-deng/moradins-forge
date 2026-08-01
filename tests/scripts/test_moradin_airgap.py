@@ -69,6 +69,25 @@ def completed(
     return SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
 
 
+def test_rpm_signature_verification_accepts_verbose_rsa_proof() -> None:
+    verified = completed(
+        stdout=(
+            "package.rpm:\n"
+            "    Header V4 RSA/SHA256 Signature, key ID 350d275d: OK\n"
+            "    Payload SHA256 digest: OK\n"
+        )
+    )
+    unsigned = completed(stdout="package.rpm: digests OK\n")
+    missing_key = completed(
+        returncode=1,
+        stdout="Header V4 RSA/SHA256 Signature, key ID 350d275d: NOKEY\n",
+    )
+
+    assert airgap._rpm_signature_verified(verified)
+    assert not airgap._rpm_signature_verified(unsigned)
+    assert not airgap._rpm_signature_verified(missing_key)
+
+
 def test_target_normalization_uses_suite_os_version_and_fails_closed() -> None:
     assert airgap._normalized_target_facts(UBUNTU_FACTS) == {
         "system": "linux",

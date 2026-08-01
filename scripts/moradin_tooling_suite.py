@@ -510,6 +510,18 @@ def _run(
         ) from error
 
 
+def _rpm_signature_verified(result: subprocess.CompletedProcess[str]) -> bool:
+    signature_lines = [
+        line.strip()
+        for line in f"{result.stdout}\n{result.stderr}".splitlines()
+        if re.search(r"\bsignatures?\b", line, flags=re.IGNORECASE)
+    ]
+    return result.returncode == 0 and bool(signature_lines) and all(
+        re.search(r":\s*ok\s*$", line, flags=re.IGNORECASE) is not None
+        for line in signature_lines
+    )
+
+
 def _read_os_release(path: Path = Path("/etc/os-release")) -> dict[str, str]:
     values: dict[str, str] = {}
     try:
@@ -3545,12 +3557,12 @@ def _apply_offline_package_closure(
             raise ToolingSuiteError(f"sealed offline package is missing: {package}")
         if manager == "dnf":
             signature = _run(
-                ["rpmkeys", "--checksig", path.as_posix()],
+                ["rpmkeys", "--checksig", "--verbose", path.as_posix()],
                 runner=runner,
                 timeout=30,
                 env=_safe_environment(home=Path("/root")),
             )
-            if signature.returncode != 0 or "pgp" not in signature.stdout.lower():
+            if not _rpm_signature_verified(signature):
                 raise ToolingSuiteError(
                     f"offline RPM signature verification failed: {package}"
                 )
@@ -3796,12 +3808,12 @@ def _rollback_root_operations(
                 manager = str(operation["manager"])
                 if manager == "dnf":
                     signature = _run(
-                        ["rpmkeys", "--checksig", rollback_asset],
+                        ["rpmkeys", "--checksig", "--verbose", rollback_asset],
                         runner=runner,
                         timeout=30,
                         env=_safe_environment(home=Path("/root")),
                     )
-                    if signature.returncode != 0 or "pgp" not in signature.stdout.lower():
+                    if not _rpm_signature_verified(signature):
                         results.append(
                             {"tool_id": operation["tool_id"], "status": "failed"}
                         )
