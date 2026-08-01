@@ -84,7 +84,7 @@ for tool_id in "${exclusions[@]}"; do
 done
 if [[ $target_kind == arch ]]; then
 	request_arguments+=(
-		--arch-snapshot 2026/07/01
+		--arch-snapshot 2026/07/31
 		--approve-arch-package-inventory
 	)
 fi
