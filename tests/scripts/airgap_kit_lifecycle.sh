@@ -12,6 +12,7 @@ target_platform=${TARGET_PLATFORM:?TARGET_PLATFORM is required}
 target_kind=${TARGET_KIND:?TARGET_KIND is required}
 scratch_root=$(mktemp -d "${RUNNER_TEMP:-/tmp}/moradin-airgap-qualification.XXXXXXXX")
 container_name=moradin-airgap-${target_kind}-${target_platform##*/}-$$
+consumer_home=/var/lib/moradin-consumer
 
 cleanup() {
 	podman rm --force "$container_name" >/dev/null 2>&1 || true
@@ -45,8 +46,10 @@ arch)
 	;;
 esac
 
+podman exec "$container_name" useradd --create-home --home-dir "$consumer_home" \
+	--shell /bin/bash forge
 podman exec "$container_name" /bin/sh -eu -c \
-	'useradd --create-home --shell /bin/bash forge; printf "forge ALL=(ALL) NOPASSWD: ALL\n" >/etc/sudoers.d/forge; chmod 0440 /etc/sudoers.d/forge'
+	'printf "forge ALL=(ALL) NOPASSWD: ALL\n" >/etc/sudoers.d/forge; chmod 0440 /etc/sudoers.d/forge'
 
 mapfile -t exclusions < <(
 	cd "$forge_root"
@@ -58,7 +61,7 @@ for spec in TOOL_CATALOG:
 PY
 )
 request_arguments=(
-	airgap-request --profile practical --output /home/forge/REQUEST.json
+	airgap-request --profile practical --output "$consumer_home/REQUEST.json"
 )
 for tool_id in "${exclusions[@]}"; do
 	request_arguments+=(--exclude "$tool_id")
@@ -69,9 +72,9 @@ if [[ $target_kind == arch ]]; then
 		--approve-arch-package-inventory
 	)
 fi
-podman exec --user forge --env HOME=/home/forge "$container_name" \
+podman exec --user forge --env HOME="$consumer_home" "$container_name" \
 	/forge/install/tooling-suite.sh "${request_arguments[@]}" >/dev/null
-podman cp "$container_name:/home/forge/REQUEST.json" "$scratch_root/REQUEST.json"
+podman cp "$container_name:$consumer_home/REQUEST.json" "$scratch_root/REQUEST.json"
 
 (
 	cd "$forge_root"
@@ -81,8 +84,8 @@ podman cp "$container_name:/home/forge/REQUEST.json" "$scratch_root/REQUEST.json
 )
 bundle_digest=$(sha256sum "$scratch_root/KIT.tar.gz" | cut -d ' ' -f 1)
 test "$bundle_digest" = "$(jq -r .bundle_sha256 "$scratch_root/build.json")"
-podman cp "$scratch_root/KIT.tar.gz" "$container_name:/home/forge/KIT.tar.gz"
-podman exec "$container_name" chown forge:forge /home/forge/KIT.tar.gz
+podman cp "$scratch_root/KIT.tar.gz" "$container_name:$consumer_home/KIT.tar.gz"
+podman exec "$container_name" chown forge:forge "$consumer_home/KIT.tar.gz"
 
 mapfile -t networks < <(
 	podman inspect --format '{{range $name, $network := .NetworkSettings.Networks}}{{$name}}{{"\n"}}{{end}}' "$container_name"
@@ -93,14 +96,14 @@ for network in "${networks[@]}"; do
 done
 test "$(podman inspect --format '{{len .NetworkSettings.Networks}}' "$container_name")" = 0
 
-podman exec --user forge --env HOME=/home/forge "$container_name" \
+podman exec --user forge --env HOME="$consumer_home" "$container_name" \
 	/forge/install/tooling-suite.sh airgap-verify \
-	--bundle /home/forge/KIT.tar.gz --expected-sha256 "$bundle_digest" >/dev/null
+	--bundle "$consumer_home/KIT.tar.gz" --expected-sha256 "$bundle_digest" >/dev/null
 
 set +e
-podman exec --user forge --env HOME=/home/forge "$container_name" \
+podman exec --user forge --env HOME="$consumer_home" "$container_name" \
 	/forge/install/tooling-suite.sh --json airgap-apply \
-	--bundle /home/forge/KIT.tar.gz \
+	--bundle "$consumer_home/KIT.tar.gz" \
 	--approve-bundle-sha256 "$bundle_digest" >"$scratch_root/preview.json"
 preview_status=$?
 set -e
@@ -108,27 +111,27 @@ test "$preview_status" -eq 2
 plan_digest=$(jq -r .plan_sha256 "$scratch_root/preview.json")
 [[ $plan_digest =~ ^[0-9a-f]{64}$ ]]
 
-podman exec --user forge --env HOME=/home/forge "$container_name" \
+podman exec --user forge --env HOME="$consumer_home" "$container_name" \
 	/forge/install/tooling-suite.sh airgap-apply \
-	--bundle /home/forge/KIT.tar.gz \
+	--bundle "$consumer_home/KIT.tar.gz" \
 	--approve-bundle-sha256 "$bundle_digest" \
 	--approve-offline-plan-sha256 "$plan_digest" >/dev/null
-podman exec --user forge --env HOME=/home/forge "$container_name" \
+podman exec --user forge --env HOME="$consumer_home" "$container_name" \
 	/forge/install/tooling-suite.sh verify --latest >/dev/null
 
-podman exec --user forge --env HOME=/home/forge "$container_name" /bin/bash -eu -c '
-mkdir -p /home/forge/extracted /home/forge/workspace/repository
-tar -xzf /home/forge/KIT.tar.gz -C /home/forge/extracted
-git clone --quiet /home/forge/extracted/forge/moradins-forge-public.bundle /home/forge/offline-forge
-test "$(git -C /home/forge/offline-forge rev-list --count HEAD)" = 1
-git -C /home/forge/workspace/repository init --quiet --initial-branch=main
-runtime=$(find /home/forge/.local/share/moradins-forge/bootstrap/python \
+podman exec --user forge --env HOME="$consumer_home" "$container_name" /bin/bash -eu -c '
+mkdir -p "$HOME/extracted" "$HOME/workspace/repository"
+tar -xzf "$HOME/KIT.tar.gz" -C "$HOME/extracted"
+git clone --quiet "$HOME/extracted/forge/moradins-forge-public.bundle" "$HOME/offline-forge"
+test "$(git -C "$HOME/offline-forge" rev-list --count HEAD)" = 1
+git -C "$HOME/workspace/repository" init --quiet --initial-branch=main
+runtime=$(find "$HOME/.local/share/moradins-forge/bootstrap/python" \
   -mindepth 4 -maxdepth 4 -type f -path "*/bin/python3.12" -print -quit)
 test -x "$runtime"
-"$runtime" /home/forge/offline-forge/scripts/moradin_forge.py explain >/dev/null
-"$runtime" /home/forge/offline-forge/scripts/moradin_forge.py onboard \
-  --workspace /home/forge/workspace --offline >/dev/null
-receipt=$(find /home/forge/.local/state/moradins-forge/receipts \
+"$runtime" "$HOME/offline-forge/scripts/moradin_forge.py" explain >/dev/null
+"$runtime" "$HOME/offline-forge/scripts/moradin_forge.py" onboard \
+  --workspace "$HOME/workspace" --offline >/dev/null
+receipt=$(find "$HOME/.local/state/moradins-forge/receipts" \
   -mindepth 2 -maxdepth 2 -type f -name receipt.json -print | sort | tail -n 1)
 test -n "$receipt"
 receipt_id=$(basename "$(dirname "$receipt")")

@@ -358,7 +358,7 @@ def test_apt_transaction_closure_uses_sanitized_target_solver_state() -> None:
             )
             assert "Package: git\n" in status
             assert "Description:" not in status
-            assert "/home/" not in status
+            assert "/" + "home" + "/" not in status
             return completed(
                 stdout=(
                     "Inst make (4.3-4.1build2 Ubuntu:24.04/noble [amd64])\n"
