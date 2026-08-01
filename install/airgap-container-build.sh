@@ -104,9 +104,14 @@ if [[ ${#uv_candidates[@]} -ne 1 ]]; then
 	printf '%s\n' 'The pinned uv archive has an unexpected layout.' >&2
 	exit 2
 fi
-uv_path=${uv_candidates[0]}
-printf '%s  %s\n' "$uv_binary_sha" "$uv_path" | sha256sum -c - >/dev/null
-chmod 0755 "$uv_path"
+extracted_uv=${uv_candidates[0]}
+printf '%s  %s\n' "$uv_binary_sha" "$extracted_uv" | sha256sum -c - >/dev/null
+XDG_DATA_HOME=$scratch/data
+export XDG_DATA_HOME
+uv_root=$XDG_DATA_HOME/moradins-forge/bootstrap/uv/0.10.12
+mkdir -p -- "$uv_root"
+uv_path=$uv_root/uv
+install -m 0755 -- "$extracted_uv" "$uv_path"
 
 python_install=$scratch/python
 UV_PYTHON_INSTALL_DIR=$python_install
