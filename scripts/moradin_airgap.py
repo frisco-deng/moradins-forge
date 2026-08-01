@@ -3343,6 +3343,36 @@ def _parse_sha256sums(path: Path) -> dict[str, str]:
     return records
 
 
+def _verify_sanitized_git_bundle(bundle: Path, expected_commit: str) -> None:
+    if not re.fullmatch(r"[0-9a-f]{40}", expected_commit):
+        raise AirgapError("sanitized Forge commit binding is malformed")
+    listed = _run(["git", "bundle", "list-heads", bundle.as_posix()])
+    refs: dict[str, str] = {}
+    if listed.returncode == 0:
+        for line in listed.stdout.splitlines():
+            commit, separator, name = line.partition(" ")
+            if separator and re.fullmatch(r"[0-9a-f]{40}", commit):
+                refs[name] = commit
+    if refs != {
+        "HEAD": expected_commit,
+        "refs/heads/main": expected_commit,
+    }:
+        raise AirgapError("sanitized Forge Git bundle refs are not exact")
+    with tempfile.TemporaryDirectory(
+        prefix="moradin-git-bundle-verify-"
+    ) as temporary:
+        repository = Path(temporary) / "verify.git"
+        initialized = _run(["git", "init", "--bare", repository.as_posix()])
+        if initialized.returncode != 0:
+            raise AirgapError("sanitized Forge Git verifier could not initialize")
+        verified = _run(
+            ["git", "bundle", "verify", bundle.as_posix()],
+            cwd=repository,
+        )
+        if verified.returncode != 0:
+            raise AirgapError("sanitized Forge Git bundle verification failed")
+
+
 def verify_extracted_bundle(root: Path) -> dict[str, Any]:
     sums = _parse_sha256sums(root / "SHA256SUMS")
     observed = {
@@ -3375,9 +3405,10 @@ def verify_extracted_bundle(root: Path) -> dict[str, Any]:
         ):
             raise AirgapError(f"air-gap {key} does not match the frozen lock")
     if shutil.which("git"):
-        result = _run(["git", "bundle", "verify", (root / "forge" / source["git_bundle"]["path"]).as_posix()])
-        if result.returncode != 0:
-            raise AirgapError("sanitized Forge Git bundle verification failed")
+        _verify_sanitized_git_bundle(
+            root / "forge" / source["git_bundle"]["path"],
+            str(source.get("sanitized_commit", "")),
+        )
     return {"manifest": manifest, "lock": lock, "file_count": len(observed)}
 
 
