@@ -88,6 +88,30 @@ def test_rpm_signature_verification_accepts_verbose_rsa_proof() -> None:
     assert not airgap._rpm_signature_verified(missing_key)
 
 
+def test_dnf_closure_preserves_installed_target_dependencies(tmp_path: Path) -> None:
+    def runner(argv: list[str], **_kwargs: object) -> SimpleNamespace:
+        if argv[:3] == ["dnf", "download", "--resolve"]:
+            for filename in ("make.rpm", "glibc.rpm"):
+                (tmp_path / "packages" / filename).write_bytes(filename.encode())
+            return completed()
+        if argv[:3] == ["rpmkeys", "--checksig", "--verbose"]:
+            return completed(stdout="Header V4 RSA/SHA256 Signature: OK\n")
+        if argv[:2] == ["rpm", "-qp"]:
+            package = Path(argv[-1]).stem
+            return completed(stdout=f"{package}\n1.0-1\nx86_64\n")
+        raise AssertionError(argv)
+
+    records = airgap._download_dnf_packages(
+        ["make"],
+        tmp_path / "packages",
+        target_state=[{"package": "glibc", "version": "1.0-1"}],
+        runner=runner,
+    )
+
+    assert [record["package"] for record in records] == ["make"]
+    assert not (tmp_path / "packages" / "glibc.rpm").exists()
+
+
 def test_target_normalization_uses_suite_os_version_and_fails_closed() -> None:
     assert airgap._normalized_target_facts(UBUNTU_FACTS) == {
         "system": "linux",

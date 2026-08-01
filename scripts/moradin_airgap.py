@@ -1018,6 +1018,7 @@ def _download_dnf_packages(
     packages: Sequence[str],
     output: Path,
     *,
+    target_state: Sequence[dict[str, str]],
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> list[dict[str, Any]]:
     output.mkdir(parents=True, exist_ok=False)
@@ -1037,6 +1038,8 @@ def _download_dnf_packages(
     )
     if result.returncode != 0:
         raise AirgapError("DNF dependency closure download failed")
+    direct_packages = set(packages)
+    target_packages = {str(row["package"]) for row in target_state}
     records: list[dict[str, Any]] = []
     for path in sorted(output.glob("*.rpm")):
         signature = _run(
@@ -1057,6 +1060,9 @@ def _download_dnf_packages(
         fields = query.stdout.splitlines()
         if query.returncode != 0 or len(fields) != 3:
             raise AirgapError(f"downloaded RPM is malformed: {path.name}")
+        if fields[0] in target_packages and fields[0] not in direct_packages:
+            path.unlink()
+            continue
         records.append(
             {
                 "package": fields[0],
@@ -1613,10 +1619,13 @@ def build_target_payload(
                     "dnf": _download_dnf_packages,
                     "pacman": _download_pacman_packages,
                 }
+                download_arguments: dict[str, Any] = {"runner": runner}
+                if manager == "dnf":
+                    download_arguments["target_state"] = request[
+                        "installed_package_inventory"
+                    ]
                 package_records = downloaders[manager](
-                    package_names,
-                    package_root,
-                    runner=runner,
+                    package_names, package_root, **download_arguments
                 )
             _attach_rollback_closure(
                 package_records,
