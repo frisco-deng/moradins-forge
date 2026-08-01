@@ -190,6 +190,32 @@ def test_apt_index_decompression_is_bounded(
     assert not destination.exists()
 
 
+def test_apt_dependency_closure_uses_case_sensitive_dependency_classes() -> None:
+    commands: list[list[str]] = []
+
+    def runner(argv: list[str], **_kwargs: object) -> SimpleNamespace:
+        commands.append(argv)
+        if argv[0] == "apt-rdepends":
+            return completed(stdout="make\n  Depends: libc6\nlibc6\n")
+        if argv[0] == "dpkg-query":
+            return completed(returncode=1)
+        if argv[0] == "apt-cache":
+            return completed(stdout="  Candidate: 1.0-1\n")
+        return completed(returncode=1)
+
+    assert airgap._apt_dependency_closure(["make"], runner=runner) == [
+        "libc6=1.0-1",
+        "make=1.0-1",
+    ]
+    assert commands[0] == [
+        "apt-rdepends",
+        "--follow=Depends,PreDepends",
+        "--show=Depends,PreDepends",
+        "--",
+        "make",
+    ]
+
+
 def test_managed_python_links_are_materialized_only_within_runtime(
     tmp_path: Path,
 ) -> None:

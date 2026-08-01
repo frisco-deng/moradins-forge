@@ -724,8 +724,8 @@ def _apt_dependency_closure(
     result = _run(
         [
             "apt-rdepends",
-            "--follow=DEPENDS,PREDEPENDS",
-            "--show=DEPENDS,PREDEPENDS",
+            "--follow=Depends,PreDepends",
+            "--show=Depends,PreDepends",
             "--",
             *packages,
         ],
