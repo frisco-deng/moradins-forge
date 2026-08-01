@@ -156,7 +156,7 @@ TARGET_IMAGES: dict[tuple[str, str], str] = {
     (
         "fedora",
         "44",
-    ): "fedora@sha256:6c75d5bf57cb0fa5aa4b92c6a83c86c791644496d9ac230de7711f5b8ec3b898",
+    ): "registry.fedoraproject.org/fedora@sha256:fdee7e40c851a11048f2e908d3ccea1d2f4f8923c2ced45623e9c67970f5ef27",
     (
         "rocky",
         "9",

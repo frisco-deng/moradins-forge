@@ -98,7 +98,7 @@ jobs:
           - name: Debian 12
             image: debian@sha256:9344f8b8992482f80cba753f323adeaf17690076c095ccff6cc9536be98185dc
           - name: Fedora 44
-            image: fedora@sha256:6c75d5bf57cb0fa5aa4b92c6a83c86c791644496d9ac230de7711f5b8ec3b898
+            image: registry.fedoraproject.org/fedora@sha256:fdee7e40c851a11048f2e908d3ccea1d2f4f8923c2ced45623e9c67970f5ef27
           - name: Rocky Linux 9
             image: rockylinux/rockylinux@sha256:8101994123cf3d0a8fee517bee7f39e555c7d92bd2d9eb3303cc988a0eeed00f
           - name: Arch Linux
@@ -158,13 +158,13 @@ jobs:
             arch: amd64
             platform: linux/amd64
             runner: ubuntu-latest
-            image: fedora@sha256:6c75d5bf57cb0fa5aa4b92c6a83c86c791644496d9ac230de7711f5b8ec3b898
+            image: registry.fedoraproject.org/fedora@sha256:fdee7e40c851a11048f2e908d3ccea1d2f4f8923c2ced45623e9c67970f5ef27
           - name: Fedora 44
             kind: fedora
             arch: arm64
             platform: linux/arm64
             runner: ubuntu-24.04-arm
-            image: fedora@sha256:6c75d5bf57cb0fa5aa4b92c6a83c86c791644496d9ac230de7711f5b8ec3b898
+            image: registry.fedoraproject.org/fedora@sha256:fdee7e40c851a11048f2e908d3ccea1d2f4f8923c2ced45623e9c67970f5ef27
           - name: Rocky Linux 9
             kind: rocky
             arch: amd64
