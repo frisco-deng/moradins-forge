@@ -1113,7 +1113,6 @@ def _download_dnf_packages(
             "--alldeps",
             "--destdir",
             output.as_posix(),
-            "--",
             *packages,
         ],
         runner=runner,

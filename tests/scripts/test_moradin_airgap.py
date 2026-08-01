@@ -91,6 +91,8 @@ def test_rpm_signature_verification_accepts_verbose_rsa_proof() -> None:
 def test_dnf_closure_preserves_installed_target_dependencies(tmp_path: Path) -> None:
     def runner(argv: list[str], **_kwargs: object) -> SimpleNamespace:
         if argv[:3] == ["dnf", "download", "--resolve"]:
+            assert "--" not in argv
+            assert argv[-1] == "make"
             for filename in ("make.rpm", "glibc.rpm"):
                 (tmp_path / "packages" / filename).write_bytes(filename.encode())
             return completed()
