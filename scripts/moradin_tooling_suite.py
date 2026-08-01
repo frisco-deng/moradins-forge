@@ -3324,7 +3324,6 @@ def _offline_install_argv(manager: str, paths: Sequence[Path]) -> list[str]:
             "Acquire::https::Proxy=false",
             "install",
             "-y",
-            "--no-download",
             "--no-install-recommends",
             "--",
             *rendered,

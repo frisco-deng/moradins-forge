@@ -110,6 +110,20 @@ def test_offline_apt_trust_verifies_compressed_signed_index(
         )
 
 
+def test_offline_apt_install_keeps_local_debs_usable(tmp_path: Path) -> None:
+    package = tmp_path / "make_4.3-4.1build2_amd64.deb"
+    argv = suite._offline_install_argv("apt", [package])
+
+    assert "--no-download" not in argv
+    assert argv[-1] == package.as_posix()
+    assert argv[argv.index("install") + 1 :] == [
+        "-y",
+        "--no-install-recommends",
+        "--",
+        package.as_posix(),
+    ]
+
+
 def ready_python_lock(tool_rows: object, **_kwargs: object) -> dict[str, object]:
     rows = list(tool_rows)  # type: ignore[arg-type]
     direct = sorted(
