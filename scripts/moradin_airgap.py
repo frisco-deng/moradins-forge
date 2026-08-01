@@ -18,9 +18,10 @@ import tarfile
 import tempfile
 import urllib.parse
 import urllib.request
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Callable, Iterable, Iterator, Sequence
 
 try:
     from scripts import public_export
@@ -942,6 +943,49 @@ def _debian_package_fields(
     return values
 
 
+def _pacman_package_fields(
+    package_path: Path,
+    fields: Sequence[str],
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+) -> list[str]:
+    allowed = {"arch", "pkgname", "pkgver"}
+    if not fields or set(fields) - allowed:
+        raise AirgapError("unsupported Pacman package metadata field")
+    result = _run(
+        ["bsdtar", "-xOf", package_path.as_posix(), ".PKGINFO"],
+        runner=runner,
+    )
+    parsed: dict[str, str] = {}
+    for line in result.stdout.splitlines():
+        key, separator, value = line.partition(" = ")
+        if not separator or key not in fields:
+            continue
+        if key in parsed:
+            raise AirgapError(
+                f"downloaded Pacman package metadata is malformed: {package_path.name}"
+            )
+        parsed[key] = value
+    values = [parsed.get(field, "") for field in fields]
+    if (
+        result.returncode != 0
+        or any(not value or len(value) > 512 for value in values)
+        or not re.fullmatch(r"[A-Za-z0-9@._+:-]+", parsed.get("pkgname", "x"))
+        or not re.fullmatch(r"[A-Za-z0-9._-]+", parsed.get("arch", "x"))
+        or any(
+            ord(character) < 32
+            or ord(character) > 126
+            or character in {"/", "\\"}
+            for value in values
+            for character in value
+        )
+    ):
+        raise AirgapError(
+            f"downloaded Pacman package metadata is malformed: {package_path.name}"
+        )
+    return values
+
+
 def _write_apt_solver_status(
     rows: Sequence[dict[str, str]],
     destination: Path,
@@ -1171,6 +1215,41 @@ def _download_dnf_packages(
     )
 
 
+@contextmanager
+def _pacman_download_cache(
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+) -> Iterator[Path]:
+    """Provide Pacman's unprivileged downloader a private disposable cache."""
+
+    uid_result = _run(["id", "-u", "alpm"], runner=runner)
+    gid_result = _run(["id", "-g", "alpm"], runner=runner)
+    if (
+        uid_result.returncode != 0
+        or gid_result.returncode != 0
+        or not uid_result.stdout.strip().isdigit()
+        or not gid_result.stdout.strip().isdigit()
+    ):
+        raise AirgapError("Pacman download sandbox account is unavailable")
+    with tempfile.TemporaryDirectory(
+        prefix="moradin-pacman-cache-",
+        dir="/tmp",
+    ) as cache_value:
+        cache = Path(cache_value)
+        try:
+            os.chown(
+                cache,
+                int(uid_result.stdout.strip()),
+                int(gid_result.stdout.strip()),
+            )
+            os.chmod(cache, 0o700)  # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
+        except OSError as exc:
+            raise AirgapError(
+                "Pacman download sandbox cache could not be prepared"
+            ) from exc
+        yield cache
+
+
 def _download_pacman_packages(
     packages: Sequence[str],
     output: Path,
@@ -1188,61 +1267,150 @@ def _download_pacman_packages(
             for line in tree.stdout.splitlines()
             if re.fullmatch(r"[A-Za-z0-9@._+:-]+", line.strip())
         )
-    result = _run(
-        [
-            "pacman",
-            "-Sw",
-            "--cachedir",
-            output.as_posix(),
-            "--noconfirm",
-            "--",
-            *sorted(closure),
-        ],
-        runner=runner,
-        timeout=1800,
-    )
-    if result.returncode != 0:
-        raise AirgapError("Pacman synchronized closure download failed")
     records: list[dict[str, Any]] = []
-    package_paths = sorted(
-        path
-        for path in output.iterdir()
-        if path.is_file() and not path.name.endswith(".sig")
-    )
-    for path in package_paths:
-        signature_path = path.with_name(path.name + ".sig")
-        if not signature_path.is_file():
-            raise AirgapError(f"Pacman package signature is missing: {path.name}")
-        signature = _run(
-            ["pacman-key", "--verify", signature_path.as_posix(), path.as_posix()],
+    # Pacman 7 drops network downloads to its `alpm` account. Keep the sealed
+    # output private under the builder's umask while giving that account a
+    # dedicated cache beneath /tmp. Only signature-verified regular files are
+    # copied back into the root-owned output.
+    with _pacman_download_cache(runner=runner) as cache:
+        result = _run(
+            [
+                "pacman",
+                "-Sw",
+                "--cachedir",
+                cache.as_posix(),
+                "--noconfirm",
+                "--",
+                *sorted(closure),
+            ],
             runner=runner,
+            timeout=1800,
         )
-        if signature.returncode != 0:
-            raise AirgapError(f"Pacman package signature failed: {path.name}")
-        query = _run(
-            ["pacman", "-Qp", "--print-format", "%n\n%v\n%a", path.as_posix()],
-            runner=runner,
+        if result.returncode != 0:
+            raise AirgapError("Pacman synchronized closure download failed")
+        if any(path.is_symlink() for path in cache.iterdir()):
+            raise AirgapError("Pacman closure contains an unsafe symbolic link")
+        package_paths = sorted(
+            path
+            for path in cache.iterdir()
+            if path.is_file() and not path.name.endswith(".sig")
         )
-        fields = query.stdout.splitlines()
-        if query.returncode != 0 or len(fields) != 3:
-            raise AirgapError(f"downloaded Pacman package is malformed: {path.name}")
-        records.append(
-            {
-                "package": fields[0],
-                "version": fields[1],
-                "arch": fields[2],
-                "filename": path.name,
-                "sha256": sha256_file(path),
-                "size": path.stat().st_size,
-                "signature_filename": signature_path.name,
-                "signature_sha256": sha256_file(signature_path),
-                "signature_size": signature_path.stat().st_size,
-                "signature": "pacman-package-signature",
-            }
-        )
+        for source_path in package_paths:
+            source_signature = source_path.with_name(source_path.name + ".sig")
+            if not source_signature.is_file() or source_signature.is_symlink():
+                raise AirgapError(
+                    f"Pacman package signature is missing: {source_path.name}"
+                )
+            signature = _run(
+                [
+                    "pacman-key",
+                    "--verify",
+                    source_signature.as_posix(),
+                    source_path.as_posix(),
+                ],
+                runner=runner,
+            )
+            if signature.returncode != 0:
+                raise AirgapError(
+                    f"Pacman package signature failed: {source_path.name}"
+                )
+            fields = _pacman_package_fields(
+                source_path,
+                ["pkgname", "pkgver", "arch"],
+                runner=runner,
+            )
+            path = output / source_path.name
+            signature_path = output / source_signature.name
+            shutil.copyfile(source_path, path)
+            shutil.copyfile(source_signature, signature_path)
+            os.chmod(path, 0o600)
+            os.chmod(signature_path, 0o600)
+            records.append(
+                {
+                    "package": fields[0],
+                    "version": fields[1],
+                    "arch": fields[2],
+                    "filename": path.name,
+                    "sha256": sha256_file(path),
+                    "size": path.stat().st_size,
+                    "signature_filename": signature_path.name,
+                    "signature_sha256": sha256_file(signature_path),
+                    "signature_size": signature_path.stat().st_size,
+                    "signature": "pacman-package-signature",
+                }
+            )
     if not records:
         raise AirgapError("Pacman closure did not produce package assets")
     return records
+
+
+def _download_previous_pacman_package(
+    *,
+    package: str,
+    version: str,
+    output: Path,
+    runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> tuple[Path, Path]:
+    with _pacman_download_cache(runner=runner) as cache:
+        result = _run(
+            [
+                "pacman",
+                "-Sw",
+                "--nodeps",
+                "--nodeps",
+                "--cachedir",
+                cache.as_posix(),
+                "--noconfirm",
+                "--",
+                package,
+            ],
+            runner=runner,
+            timeout=900,
+        )
+        candidates = sorted(
+            path
+            for path in cache.iterdir()
+            if path.is_file()
+            and not path.is_symlink()
+            and not path.name.endswith(".sig")
+        )
+        if result.returncode != 0 or len(candidates) != 1:
+            raise AirgapError(
+                f"rollback closure is unavailable for {package} at {version}"
+            )
+        source = candidates[0]
+        source_signature = source.with_name(source.name + ".sig")
+        if not source_signature.is_file() or source_signature.is_symlink():
+            raise AirgapError(
+                f"rollback package does not match {package} at {version}"
+            )
+        fields = _pacman_package_fields(
+            source,
+            ["pkgname", "pkgver"],
+            runner=runner,
+        )
+        if fields != [package, version]:
+            raise AirgapError(
+                f"rollback package does not match {package} at {version}"
+            )
+        check = _run(
+            [
+                "pacman-key",
+                "--verify",
+                source_signature.as_posix(),
+                source.as_posix(),
+            ],
+            runner=runner,
+        )
+        if check.returncode != 0:
+            raise AirgapError(f"rollback Pacman signature failed: {package}")
+        candidate = output / source.name
+        signature = output / source_signature.name
+        shutil.copyfile(source, candidate)
+        shutil.copyfile(source_signature, signature)
+        os.chmod(candidate, 0o600)
+        os.chmod(signature, 0o600)
+        return candidate, signature
 
 
 def _download_previous_package(
@@ -1276,23 +1444,11 @@ def _download_previous_package(
         )
         candidates = sorted(output.glob("*.rpm"))
     else:
-        result = _run(
-            [
-                "pacman",
-                "-Sw",
-                "--cachedir",
-                output.as_posix(),
-                "--noconfirm",
-                "--",
-                package,
-            ],
+        return _download_previous_pacman_package(
+            package=package,
+            version=version,
+            output=output,
             runner=runner,
-            timeout=900,
-        )
-        candidates = sorted(
-            path
-            for path in output.iterdir()
-            if path.is_file() and not path.name.endswith(".sig")
         )
     if result.returncode != 0 or len(candidates) != 1:
         raise AirgapError(
@@ -1306,13 +1462,6 @@ def _download_previous_package(
             "-qp",
             "--qf",
             "%{NAME}\n%{VERSION}-%{RELEASE}\n",
-            candidate.as_posix(),
-        ],
-        "pacman": [
-            "pacman",
-            "-Qp",
-            "--print-format",
-            "%n\n%v",
             candidate.as_posix(),
         ],
     }
@@ -1330,7 +1479,6 @@ def _download_previous_package(
     if (
         metadata_returncode != 0
         or fields != [package, version]
-        or (manager == "pacman" and not signature.is_file())
     ):
         raise AirgapError(
             f"rollback package does not match {package} at {version}"
@@ -1342,13 +1490,6 @@ def _download_previous_package(
         )
         if not _rpm_signature_verified(check):
             raise AirgapError(f"rollback RPM signature failed: {package}")
-    if manager == "pacman":
-        check = _run(
-            ["pacman-key", "--verify", signature.as_posix(), candidate.as_posix()],
-            runner=runner,
-        )
-        if check.returncode != 0:
-            raise AirgapError(f"rollback Pacman signature failed: {package}")
     return candidate, signature if signature.is_file() else None
 
 

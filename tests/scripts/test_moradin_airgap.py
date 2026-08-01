@@ -152,6 +152,122 @@ def test_dnf5_rollback_download_omits_the_unsupported_separator(
     assert calls[0][-1] == "make-4.4.1-11.fc44"
 
 
+def test_pacman_closure_uses_its_sandbox_account_and_private_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str]] = []
+    chowns: list[tuple[Path, int, int]] = []
+    cache_path: Path | None = None
+
+    def runner(argv: list[str], **_kwargs: object) -> SimpleNamespace:
+        nonlocal cache_path
+        calls.append(argv)
+        if argv == ["pactree", "-s", "-u", "make"]:
+            return completed(stdout="make\nglibc\n")
+        if argv == ["id", "-u", "alpm"]:
+            return completed(stdout="979\n")
+        if argv == ["id", "-g", "alpm"]:
+            return completed(stdout="979\n")
+        if argv[:2] == ["pacman", "-Sw"]:
+            cache_path = Path(argv[argv.index("--cachedir") + 1])
+            assert cache_path != tmp_path / "packages"
+            assert cache_path.parent == Path("/tmp")
+            assert "--disable-sandbox" not in argv
+            (cache_path / "make.pkg.tar.zst").write_bytes(b"package")
+            (cache_path / "make.pkg.tar.zst.sig").write_bytes(b"signature")
+            return completed()
+        if argv[:2] == ["pacman-key", "--verify"]:
+            return completed()
+        if argv[:2] == ["bsdtar", "-xOf"]:
+            return completed(
+                stdout="pkgname = make\npkgver = 4.4.1-3\narch = x86_64\n"
+            )
+        raise AssertionError(argv)
+
+    monkeypatch.setattr(
+        airgap.os,
+        "chown",
+        lambda path, uid, gid: chowns.append((Path(path), uid, gid)),
+    )
+
+    records = airgap._download_pacman_packages(
+        ["make"],
+        tmp_path / "packages",
+        runner=runner,
+    )
+
+    assert cache_path is not None
+    assert chowns == [(cache_path, 979, 979)]
+    assert records[0]["package"] == "make"
+    assert records[0]["filename"] == "make.pkg.tar.zst"
+    assert (tmp_path / "packages/make.pkg.tar.zst").read_bytes() == b"package"
+    assert (tmp_path / "packages/make.pkg.tar.zst.sig").read_bytes() == b"signature"
+    assert (tmp_path / "packages/make.pkg.tar.zst").stat().st_mode & 0o777 == 0o600
+    assert not cache_path.exists()
+    assert ["id", "-u", "alpm"] in calls
+
+
+def test_pacman_rollback_closure_uses_the_sandbox_cache(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache_path: Path | None = None
+
+    def runner(argv: list[str], **_kwargs: object) -> SimpleNamespace:
+        nonlocal cache_path
+        if argv == ["id", "-u", "alpm"] or argv == ["id", "-g", "alpm"]:
+            return completed(stdout="979\n")
+        if argv[:2] == ["pacman", "-Sw"]:
+            cache_path = Path(argv[argv.index("--cachedir") + 1])
+            assert argv.count("--nodeps") == 2
+            (cache_path / "make.pkg.tar.zst").write_bytes(b"previous")
+            (cache_path / "make.pkg.tar.zst.sig").write_bytes(b"signature")
+            return completed()
+        if argv[:2] == ["bsdtar", "-xOf"]:
+            return completed(stdout="pkgname = make\npkgver = 4.4.1-3\n")
+        if argv[:2] == ["pacman-key", "--verify"]:
+            return completed()
+        raise AssertionError(argv)
+
+    monkeypatch.setattr(airgap.os, "chown", lambda *_args: None)
+
+    package, signature = airgap._download_previous_package(
+        manager="pacman",
+        package="make",
+        version="4.4.1-3",
+        output=tmp_path / "rollback",
+        runner=runner,
+    )
+
+    assert cache_path is not None
+    assert cache_path != tmp_path / "rollback"
+    assert not cache_path.exists()
+    assert package == tmp_path / "rollback/make.pkg.tar.zst"
+    assert signature == tmp_path / "rollback/make.pkg.tar.zst.sig"
+    assert package.read_bytes() == b"previous"
+
+
+def test_pacman_closure_fails_closed_without_sandbox_account(
+    tmp_path: Path,
+) -> None:
+    def runner(argv: list[str], **_kwargs: object) -> SimpleNamespace:
+        if argv == ["pactree", "-s", "-u", "make"]:
+            return completed(stdout="make\n")
+        if argv == ["id", "-u", "alpm"]:
+            return completed(returncode=1)
+        if argv == ["id", "-g", "alpm"]:
+            return completed(stdout="979\n")
+        raise AssertionError(argv)
+
+    with pytest.raises(airgap.AirgapError, match="sandbox account"):
+        airgap._download_pacman_packages(
+            ["make"],
+            tmp_path / "packages",
+            runner=runner,
+        )
+
+
 def test_locked_asset_download_rejects_non_official_hosts(tmp_path: Path) -> None:
     with pytest.raises(airgap.AirgapError, match="official host"):
         airgap.download_locked_asset(
