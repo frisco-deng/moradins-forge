@@ -2,6 +2,16 @@
 set -euo pipefail
 
 umask 077
+uv_command=$(command -v uv || true)
+if [[ -z $uv_command ]]; then
+	printf '%s\n' 'Air-gap qualification requires the workflow-provided uv binary.' >&2
+	exit 2
+fi
+uv_command=$(readlink -f -- "$uv_command")
+if [[ ! -f $uv_command || ! -x $uv_command ]]; then
+	printf '%s\n' 'Air-gap qualification resolved an unsafe uv binary.' >&2
+	exit 2
+fi
 SAFE_PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 PATH=$SAFE_PATH:${HOME:?}/.local/bin
 export PATH
@@ -53,7 +63,7 @@ podman exec "$container_name" /bin/sh -eu -c \
 
 mapfile -t exclusions < <(
 	cd "$forge_root"
-	uv run python - <<'PY'
+	"$uv_command" run python - <<'PY'
 from scripts.moradin_workstation import TOOL_CATALOG
 for spec in TOOL_CATALOG:
     if "practical" in spec.profiles and spec.id != "make":
@@ -78,7 +88,7 @@ podman cp "$container_name:$consumer_home/REQUEST.json" "$scratch_root/REQUEST.j
 
 (
 	cd "$forge_root"
-	uv run python scripts/moradin_tooling_suite.py --forge-root "$forge_root" \
+	"$uv_command" run python scripts/moradin_tooling_suite.py --forge-root "$forge_root" \
 		airgap-build --request "$scratch_root/REQUEST.json" \
 		--output "$scratch_root/KIT.tar.gz" >"$scratch_root/build.json"
 )
