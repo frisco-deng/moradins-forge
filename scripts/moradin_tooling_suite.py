@@ -463,7 +463,7 @@ if sys.version_info < (3, 11):
     }
     os.execve(
         sealed_python,
-        [sealed_python.as_posix(), script.as_posix(), *runner_args],
+        [sealed_python.as_posix(), "-B", script.as_posix(), *runner_args],
         environment,
     )
 sys.path.insert(0, (destination / "scripts").as_posix())

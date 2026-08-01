@@ -1324,6 +1324,13 @@ def test_sudo_phase_launches_only_a_sealed_root_runner(
     assert f"/var/lib/moradins-forge/runners/{digest}" in observed
 
 
+def test_sealed_root_runtime_disables_bytecode_writes() -> None:
+    assert (
+        '[sealed_python.as_posix(), "-B", script.as_posix(), *runner_args]'
+        in suite.ROOT_RUNNER_BOOTSTRAP
+    )
+
+
 def test_python39_root_bootstrap_requires_exact_managed_runtime(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
