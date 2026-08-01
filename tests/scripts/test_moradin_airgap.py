@@ -353,6 +353,9 @@ def test_managed_python_links_are_materialized_only_within_runtime(
     assert not (materialized / "cpython/bin/python3").is_symlink()
     assert not (materialized / "cpython-family").exists()
     assert manifest["executable"] == "cpython/bin/python3.12"
+    assert [row["path"] for row in manifest["files"]] == sorted(
+        row["path"] for row in manifest["files"]
+    )
     airgap._validate_python_runtime_tree(materialized, manifest)
 
     unsafe = tmp_path / "unsafe"

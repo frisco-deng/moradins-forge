@@ -2488,7 +2488,7 @@ def _python_runtime_manifest(root: Path) -> dict[str, Any]:
     if root.is_symlink() or not root.is_dir():
         raise AirgapError("managed Python runtime root is unsafe")
     files: list[dict[str, Any]] = []
-    for row in file_records(root):
+    for row in sorted(file_records(root), key=lambda item: str(item["path"])):
         path = root / str(row["path"])
         files.append(
             {
