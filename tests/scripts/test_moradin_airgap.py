@@ -98,6 +98,14 @@ def test_dnf_closure_preserves_installed_target_dependencies(tmp_path: Path) -> 
             return completed(stdout="Header V4 RSA/SHA256 Signature: OK\n")
         if argv[:2] == ["rpm", "-qp"]:
             package = Path(argv[-1]).stem
+            if "--provides" in argv:
+                capability = (
+                    "libc.so.6()(64bit)" if package == "glibc" else package
+                )
+                return completed(stdout=f"{capability} = 1.0-1\n")
+            if "--requires" in argv:
+                requirement = "libc.so.6()(64bit)" if package == "make" else ""
+                return completed(stdout=requirement)
             return completed(stdout=f"{package}\n1.0-1\nx86_64\n")
         raise AssertionError(argv)
 

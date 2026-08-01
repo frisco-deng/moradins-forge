@@ -340,6 +340,83 @@ def _rpm_signature_verified(result: subprocess.CompletedProcess[str]) -> bool:
     )
 
 
+def _rpm_capability_names(text: str) -> set[str]:
+    if len(text.encode("utf-8")) > AIRGAP_MAX_RECORD_BYTES:
+        raise AirgapError("RPM capability metadata exceeds the safety limit")
+    capabilities: set[str] = set()
+    for raw_line in text.splitlines():
+        capability = raw_line.strip()
+        for operator in (" >= ", " <= ", " = ", " > ", " < "):
+            capability = capability.partition(operator)[0]
+        if (
+            not capability
+            or len(capability) > 512
+            or any(character in capability for character in "\t\r\n")
+        ):
+            raise AirgapError("RPM capability metadata is malformed")
+        capabilities.add(capability)
+    return capabilities
+
+
+def _prune_dnf_target_closure(
+    records: list[dict[str, Any]],
+    *,
+    direct_packages: set[str],
+    target_packages: set[str],
+) -> list[dict[str, Any]]:
+    providers: dict[str, list[int]] = {}
+    for index, record in enumerate(records):
+        capabilities = {str(record["package"]), *record.pop("_provides")}
+        for capability in capabilities:
+            providers.setdefault(capability, []).append(index)
+    needed = {
+        index
+        for index, record in enumerate(records)
+        if str(record["package"]) in direct_packages
+    }
+    if {str(records[index]["package"]) for index in needed} != direct_packages:
+        raise AirgapError("DNF closure is missing a selected package")
+    queue = sorted(needed)
+    while queue:
+        record_index = queue.pop(0)
+        record = records[record_index]
+        for requirement in sorted(record.pop("_requires")):
+            if requirement.startswith("rpmlib("):
+                continue
+            candidates = providers.get(requirement, [])
+            if not candidates:
+                raise AirgapError(
+                    "DNF closure cannot bind required capability: " + requirement
+                )
+            if any(
+                str(records[index]["package"]) in target_packages
+                and str(records[index]["package"]) not in direct_packages
+                for index in candidates
+            ):
+                continue
+            selected = min(
+                candidates,
+                key=lambda index: (
+                    str(records[index]["package"]),
+                    str(records[index]["version"]),
+                    str(records[index]["arch"]),
+                ),
+            )
+            if selected not in needed:
+                needed.add(selected)
+                queue.append(selected)
+                queue.sort()
+    retained: list[dict[str, Any]] = []
+    for index, record in enumerate(records):
+        path = record.pop("_path")
+        record.pop("_requires", None)
+        if index in needed:
+            retained.append(record)
+        else:
+            path.unlink()
+    return retained
+
+
 def _installed_package_version(
     package: str,
     manager: str,
@@ -1038,8 +1115,6 @@ def _download_dnf_packages(
     )
     if result.returncode != 0:
         raise AirgapError("DNF dependency closure download failed")
-    direct_packages = set(packages)
-    target_packages = {str(row["package"]) for row in target_state}
     records: list[dict[str, Any]] = []
     for path in sorted(output.glob("*.rpm")):
         signature = _run(
@@ -1060,9 +1135,14 @@ def _download_dnf_packages(
         fields = query.stdout.splitlines()
         if query.returncode != 0 or len(fields) != 3:
             raise AirgapError(f"downloaded RPM is malformed: {path.name}")
-        if fields[0] in target_packages and fields[0] not in direct_packages:
-            path.unlink()
-            continue
+        provides = _run(
+            ["rpm", "-qp", "--provides", path.as_posix()], runner=runner
+        )
+        requires = _run(
+            ["rpm", "-qp", "--requires", path.as_posix()], runner=runner
+        )
+        if provides.returncode != 0 or requires.returncode != 0:
+            raise AirgapError(f"downloaded RPM dependency metadata failed: {path.name}")
         records.append(
             {
                 "package": fields[0],
@@ -1072,11 +1152,18 @@ def _download_dnf_packages(
                 "sha256": sha256_file(path),
                 "size": path.stat().st_size,
                 "signature": "rpm-package-signature",
+                "_path": path,
+                "_provides": _rpm_capability_names(provides.stdout),
+                "_requires": _rpm_capability_names(requires.stdout),
             }
         )
     if not records:
         raise AirgapError("DNF closure did not produce package assets")
-    return records
+    return _prune_dnf_target_closure(
+        records,
+        direct_packages=set(packages),
+        target_packages={str(row["package"]) for row in target_state},
+    )
 
 
 def _download_pacman_packages(
