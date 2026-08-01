@@ -25,19 +25,19 @@ podman run --detach --name "$container_name" --platform "$target_platform" \
 case $target_kind in
 ubuntu | debian)
 	podman exec "$container_name" /bin/sh -eu -c \
-		'export DEBIAN_FRONTEND=noninteractive; apt-get update; apt-get install -y --no-install-recommends ca-certificates coreutils curl findutils git gzip python3 sudo tar'
+		'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq; apt-get install -qq -y --no-install-recommends ca-certificates coreutils curl findutils git gzip python3 sudo tar'
 	;;
 fedora)
 	podman exec "$container_name" /bin/sh -eu -c \
-		'dnf install -y --setopt=install_weak_deps=False ca-certificates coreutils curl findutils git gzip python3 shadow-utils sudo tar'
+		'dnf -q install -y --setopt=install_weak_deps=False ca-certificates coreutils curl findutils git gzip python3 shadow-utils sudo tar'
 	;;
 rocky)
 	podman exec "$container_name" /bin/sh -eu -c \
-		'dnf install -y --setopt=install_weak_deps=False ca-certificates coreutils-single findutils git gzip python3 shadow-utils sudo tar'
+		'dnf -q install -y --setopt=install_weak_deps=False ca-certificates coreutils-single findutils git gzip python3 shadow-utils sudo tar'
 	;;
 arch)
 	podman exec "$container_name" /bin/sh -eu -c \
-		'pacman -Syu --needed --noconfirm ca-certificates coreutils curl findutils git gzip python sudo tar'
+		'pacman -Syu --needed --noconfirm --quiet ca-certificates coreutils curl findutils git gzip python sudo tar'
 	;;
 *)
 	printf 'Unsupported qualification target: %s\n' "$target_kind" >&2
