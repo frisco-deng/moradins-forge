@@ -5079,6 +5079,7 @@ def _interactive_airgap(*, forge_root: Path) -> None:
                     approved_bundle_sha256=digest,
                     approved_plan_sha256=str(preview["plan_sha256"]),
                     approved_stale_bundle_sha256=stale_approval,
+                    approved_plan=preview["plan"],
                     forge_root=forge_root,
                 )
                 print(json.dumps(payload, indent=2, sort_keys=True))
@@ -5571,6 +5572,7 @@ def main(argv: list[str] | None = None) -> int:
                     approved_bundle_sha256=args.approve_bundle_sha256,
                     approved_plan_sha256=plan_approval,
                     approved_stale_bundle_sha256=stale_approval,
+                    approved_plan=preview["plan"],
                     forge_root=forge_root,
                 )
             except airgap.AirgapError as error:

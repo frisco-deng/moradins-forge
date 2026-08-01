@@ -2335,6 +2335,7 @@ def rebind_airgap_plan(
     *,
     bundle_sha256: str,
     forge_root: Path,
+    generated_at: datetime | None = None,
 ) -> dict[str, Any]:
     _validate_lock_contents(lock)
     current_facts = host_facts()
@@ -2349,7 +2350,24 @@ def rebind_airgap_plan(
     plan = json.loads(json.dumps(lock["suite_plan"]))
     plan.pop("portable", None)
     plan.pop("source_plan_sha256", None)
-    now = datetime.now(tz=UTC).replace(microsecond=0)
+    if generated_at is None:
+        try:
+            anchor = datetime.fromisoformat(str(lock["created_at"]))
+        except (KeyError, TypeError, ValueError) as error:
+            raise AirgapError("air-gap lock creation time is malformed") from error
+        if anchor.tzinfo is None:
+            raise AirgapError("air-gap lock creation time must include a timezone")
+        anchor = anchor.astimezone(UTC).replace(microsecond=0)
+        current_time = datetime.now(tz=UTC)
+        if anchor > current_time:
+            raise AirgapError("air-gap lock creation time is in the future")
+        elapsed_windows = (current_time - anchor) // PLAN_TTL
+        now = anchor + elapsed_windows * PLAN_TTL
+    else:
+        now = generated_at
+    if now.tzinfo is None:
+        raise AirgapError("host-bound offline plan time must include a timezone")
+    now = now.astimezone(UTC).replace(microsecond=0)
     plan["generated_at"] = now.isoformat()
     plan["expires_at"] = (now + PLAN_TTL).isoformat()
     plan["platform"] = current_facts
@@ -2867,6 +2885,7 @@ def apply_airgap_bundle(
     forge_root: Path,
     approved_plan_sha256: str = "",
     approved_stale_bundle_sha256: str = "",
+    approved_plan: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     bundle_sha = _assert_digest(
         approved_bundle_sha256,
@@ -2896,11 +2915,38 @@ def apply_airgap_bundle(
         safe_extract_bundle(bundle, extract_root)
         extracted = verify_extracted_bundle(extract_root)
     lock = extracted["lock"]
-    plan = rebind_airgap_plan(
-        lock,
-        bundle_sha256=bundle_sha,
-        forge_root=forge_root,
-    )
+    if approved_plan is not None:
+        try:
+            approved_generated_at = datetime.fromisoformat(
+                str(approved_plan["generated_at"])
+            )
+            approved_expires_at = datetime.fromisoformat(
+                str(approved_plan["expires_at"])
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise AirgapError("approved offline plan time binding is malformed") from error
+        current_time = datetime.now(tz=UTC)
+        if (
+            approved_generated_at.tzinfo is None
+            or approved_expires_at.tzinfo is None
+            or approved_generated_at > current_time
+            or approved_expires_at <= current_time
+        ):
+            raise AirgapError("approved offline plan is not currently valid")
+        plan = rebind_airgap_plan(
+            lock,
+            bundle_sha256=bundle_sha,
+            forge_root=forge_root,
+            generated_at=approved_generated_at,
+        )
+        if plan != approved_plan:
+            raise AirgapError("approved offline plan contents do not match this target")
+    else:
+        plan = rebind_airgap_plan(
+            lock,
+            bundle_sha256=bundle_sha,
+            forge_root=forge_root,
+        )
     if approved_plan_sha256 and approved_plan_sha256 != plan["plan_sha256"]:
         raise AirgapError("approved offline plan digest does not match this target plan")
     if not approved_plan_sha256:
