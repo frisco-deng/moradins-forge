@@ -216,6 +216,32 @@ def test_apt_dependency_closure_uses_case_sensitive_dependency_classes() -> None
     ]
 
 
+def test_debian_package_fields_query_values_without_labeled_output(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "fixture.deb"
+    responses = {
+        "Package": "make\n",
+        "Version": "4.3-4.1build2\n",
+        "Architecture": "amd64\n",
+    }
+    commands: list[list[str]] = []
+
+    def runner(argv: list[str], **_kwargs: object) -> SimpleNamespace:
+        commands.append(argv)
+        return completed(stdout=responses[argv[-1]])
+
+    assert airgap._debian_package_fields(
+        package,
+        ["Package", "Version", "Architecture"],
+        runner=runner,
+    ) == ["make", "4.3-4.1build2", "amd64"]
+    assert commands == [
+        ["dpkg-deb", "-f", package.as_posix(), field]
+        for field in ("Package", "Version", "Architecture")
+    ]
+
+
 def test_managed_python_links_are_materialized_only_within_runtime(
     tmp_path: Path,
 ) -> None:

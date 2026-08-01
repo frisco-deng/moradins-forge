@@ -746,6 +746,30 @@ def _apt_dependency_closure(
     return resolved
 
 
+def _debian_package_fields(
+    package_path: Path,
+    fields: Sequence[str],
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+) -> list[str]:
+    allowed = {"Architecture", "Package", "Version"}
+    if not fields or set(fields) - allowed:
+        raise AirgapError("unsupported Debian package metadata field")
+    values: list[str] = []
+    for field in fields:
+        result = _run(
+            ["dpkg-deb", "-f", package_path.as_posix(), field],
+            runner=runner,
+        )
+        value = result.stdout.strip()
+        if result.returncode != 0 or not value or "\n" in value:
+            raise AirgapError(
+                f"downloaded Debian package metadata is malformed: {package_path.name}"
+            )
+        values.append(value)
+    return values
+
+
 def _download_apt_packages(
     packages: Sequence[str],
     output: Path,
@@ -765,13 +789,11 @@ def _download_apt_packages(
             raise AirgapError(f"APT package download failed: {package}")
     records: list[dict[str, Any]] = []
     for path in sorted(output.glob("*.deb")):
-        query = _run(
-            ["dpkg-deb", "-f", path.as_posix(), "Package", "Version", "Architecture"],
+        fields = _debian_package_fields(
+            path,
+            ["Package", "Version", "Architecture"],
             runner=runner,
         )
-        fields = query.stdout.splitlines()
-        if query.returncode != 0 or len(fields) != 3:
-            raise AirgapError(f"downloaded Debian package is malformed: {path.name}")
         metadata = _run(
             [
                 "apt-cache",
@@ -996,13 +1018,6 @@ def _download_previous_package(
     candidate = candidates[0]
     signature = candidate.with_name(candidate.name + ".sig")
     metadata_commands = {
-        "apt": [
-            "dpkg-deb",
-            "-f",
-            candidate.as_posix(),
-            "Package",
-            "Version",
-        ],
         "dnf": [
             "rpm",
             "-qp",
@@ -1018,10 +1033,19 @@ def _download_previous_package(
             candidate.as_posix(),
         ],
     }
-    metadata = _run(metadata_commands[manager], runner=runner)
-    fields = metadata.stdout.splitlines()
+    if manager == "apt":
+        fields = _debian_package_fields(
+            candidate,
+            ["Package", "Version"],
+            runner=runner,
+        )
+        metadata_returncode = 0
+    else:
+        metadata = _run(metadata_commands[manager], runner=runner)
+        fields = metadata.stdout.splitlines()
+        metadata_returncode = metadata.returncode
     if (
-        metadata.returncode != 0
+        metadata_returncode != 0
         or fields != [package, version]
         or (manager == "pacman" and not signature.is_file())
     ):
