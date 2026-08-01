@@ -2416,6 +2416,9 @@ def _build_rebound_stage(
                 "an existing air-gap stage conflicts with this exact plan"
             ) from error
         return
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.parent.is_symlink() or not destination.parent.is_dir():
+        raise AirgapError("air-gap stage parent is unsafe")
     with tempfile.TemporaryDirectory(
         prefix="moradin-airgap-stage-",
         dir=destination.parent,
