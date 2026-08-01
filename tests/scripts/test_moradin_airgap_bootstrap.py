@@ -73,6 +73,18 @@ def test_python39_bootstrap_extracts_only_digest_bound_runtime(
     assert bootstrap.runtime_for_bundle(kit, digest) == executable
 
 
+def test_python39_bootstrap_keeps_digest_bound_runtime_immutable() -> None:
+    runtime = Path("/cache/python3.12")
+    main_script = Path("/forge/scripts/moradin_tooling_suite.py")
+
+    assert bootstrap.runtime_argv(runtime, main_script, ["airgap-verify"]) == [
+        runtime.as_posix(),
+        "-B",
+        main_script.as_posix(),
+        "airgap-verify",
+    ]
+
+
 def test_python39_bootstrap_rejects_wrong_out_of_band_digest(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

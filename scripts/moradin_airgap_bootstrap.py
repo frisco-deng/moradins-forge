@@ -352,6 +352,11 @@ def sha256_tree(root):
     return hashlib.sha256(canonical_bytes(rows)).hexdigest()
 
 
+def runtime_argv(runtime, main_script, original):
+    # The runtime cache is digest-bound and immutable between invocations.
+    return [runtime.as_posix(), "-B", main_script.as_posix(), *original]
+
+
 def parser():
     result = argparse.ArgumentParser(
         description="Bootstrap sealed Moradin Forge air-gap verification and apply"
@@ -400,7 +405,7 @@ def main(argv=None):
             environment[name] = os.environ[name]
     os.execve(
         runtime,
-        [runtime.as_posix(), main_script.as_posix(), *original],
+        runtime_argv(runtime, main_script, original),
         environment,
     )
     return 2
