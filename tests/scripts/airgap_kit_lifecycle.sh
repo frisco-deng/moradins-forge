@@ -58,8 +58,10 @@ esac
 
 podman exec "$container_name" useradd --create-home --home-dir "$consumer_home" \
 	--shell /bin/bash forge
+# Some RPM/Arch PAM stacks reject a locked synthetic account before sudoers can
+# honor NOPASSWD. Give only this disposable consumer an unlogged random secret.
 podman exec "$container_name" /bin/sh -eu -c \
-	'printf "forge ALL=(ALL) NOPASSWD: ALL\n" >/etc/sudoers.d/forge; chmod 0440 /etc/sudoers.d/forge'
+	'password=$(od -An -N32 -tx1 /dev/urandom | tr -d " \n"); printf "forge:%s\n" "$password" | chpasswd; unset password; printf "forge ALL=(ALL) NOPASSWD: ALL\n" >/etc/sudoers.d/forge; chmod 0440 /etc/sudoers.d/forge'
 podman exec "$container_name" /bin/sh -eu -c \
 	'visudo -cf /etc/sudoers >/dev/null'
 podman exec --user forge --env HOME="$consumer_home" "$container_name" \
