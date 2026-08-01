@@ -120,6 +120,18 @@ def test_dnf_closure_preserves_installed_target_dependencies(tmp_path: Path) -> 
     assert not (tmp_path / "packages" / "glibc.rpm").exists()
 
 
+def test_locked_asset_download_rejects_non_official_hosts(tmp_path: Path) -> None:
+    with pytest.raises(airgap.AirgapError, match="official host"):
+        airgap.download_locked_asset(
+            "https://internal.invalid/asset",
+            tmp_path / "asset",
+            "a" * 64,
+            1,
+        )
+
+    assert not (tmp_path / "asset").exists()
+
+
 def test_target_normalization_uses_suite_os_version_and_fails_closed() -> None:
     assert airgap._normalized_target_facts(UBUNTU_FACTS) == {
         "system": "linux",

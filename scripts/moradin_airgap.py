@@ -50,6 +50,9 @@ try:
     from scripts.moradin_workstation import (
         CATALOG_PATH,
         TOOL_CATALOG,
+        WorkstationError,
+        _assert_official_https_url,
+        _open_official_url,
         canonical_json_bytes,
         command_present,
         sha256_bytes,
@@ -86,6 +89,9 @@ except ModuleNotFoundError:  # pragma: no cover - direct script execution
     from moradin_workstation import (  # type: ignore[no-redef]
         CATALOG_PATH,
         TOOL_CATALOG,
+        WorkstationError,
+        _assert_official_https_url,
+        _open_official_url,
         canonical_json_bytes,
         command_present,
         sha256_bytes,
@@ -1741,7 +1747,8 @@ def build_target_payload(
         bootstrap_root.mkdir()
         uv_copy = bootstrap_root / "uv"
         shutil.copyfile(uv, uv_copy)
-        os.chmod(uv_copy, 0o755)
+        # uv must remain executable; owner-only access is the least privilege mode.
+        os.chmod(uv_copy, 0o700)  # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
         python_install_value = os.environ.get("UV_PYTHON_INSTALL_DIR", "")
         python_install = Path(python_install_value) if python_install_value else Path()
         if (
@@ -2810,7 +2817,8 @@ def _install_airgap_bootstrap(
             uv_root.mkdir(parents=True, exist_ok=True)
             temporary_uv = uv_destination.with_suffix(".new")
             shutil.copyfile(source_uv, temporary_uv)
-            os.chmod(temporary_uv, 0o755)
+            # uv must remain executable; owner-only access is the least privilege mode.
+            os.chmod(temporary_uv, 0o700)  # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
             os.replace(temporary_uv, uv_destination)
             record["uv_created"] = True
 
@@ -3467,7 +3475,8 @@ def safe_extract_bundle(bundle: Path, destination: Path) -> None:
                     raise AirgapError("air-gap extraction escaped its destination")
                 if member.isdir():
                     target.mkdir(parents=True, exist_ok=True)
-                    os.chmod(target, 0o755)
+                    # Extraction directories require owner traversal permission.
+                    os.chmod(target, 0o700)  # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
                     continue
                 if not member.isfile():
                     raise AirgapError("air-gap archive contains an unsupported entry")
@@ -3645,22 +3654,51 @@ def build_spdx(root: Path, *, source_sha: str) -> dict[str, Any]:
 
 
 def download_locked_asset(url: str, destination: Path, digest: str, size: int) -> None:
-    parsed = urllib.parse.urlsplit(url)
-    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
-        raise AirgapError("frozen asset URL must use credential-free HTTPS")
+    digest = _assert_digest(digest, label="frozen asset digest")
+    try:
+        _assert_official_https_url(url, purpose="frozen air-gap asset")
+    except WorkstationError as error:
+        raise AirgapError(str(error)) from error
+    if size < 0 or size > AIRGAP_MAX_FILE_BYTES:
+        raise AirgapError("frozen asset size is unsafe")
     request = urllib.request.Request(
         url,
         headers={"User-Agent": "moradins-forge-airgap/0.2.0-beta.3"},
     )
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with urllib.request.urlopen(request, timeout=120) as response, destination.open("wb") as output:
-        final = urllib.parse.urlsplit(response.geturl())
-        if final.scheme != "https" or not final.hostname:
-            raise AirgapError("frozen asset redirected outside HTTPS")
-        shutil.copyfileobj(response, output, length=1024 * 1024)
-    if destination.stat().st_size != size or sha256_file(destination) != digest:
-        destination.unlink(missing_ok=True)
-        raise AirgapError("downloaded frozen asset failed size or digest verification")
+    if destination.is_symlink() or (destination.exists() and not destination.is_file()):
+        raise AirgapError("frozen asset cache destination is unsafe")
+    temporary: Path | None = None
+    try:
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{destination.name}.", dir=destination.parent
+        )
+        temporary = Path(temporary_name)
+        copied = 0
+        with os.fdopen(descriptor, "wb") as output:
+            try:
+                response = _open_official_url(request, timeout=120)
+            except (OSError, WorkstationError) as error:
+                raise AirgapError("frozen asset download failed") from error
+            with response:
+                while True:
+                    chunk = response.read(min(1024 * 1024, size - copied + 1))
+                    if not chunk:
+                        break
+                    copied += len(chunk)
+                    if copied > size:
+                        raise AirgapError("downloaded frozen asset exceeds its lock")
+                    output.write(chunk)
+                output.flush()
+                os.fsync(output.fileno())
+        if copied != size or sha256_file(temporary) != digest:
+            raise AirgapError("downloaded frozen asset failed size or digest verification")
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, destination)
+        temporary = None
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def airgap_readme(lock: dict[str, Any]) -> str:
