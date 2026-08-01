@@ -3272,7 +3272,6 @@ def _package_install_argv(
             "install",
             "-y",
             "--setopt=install_weak_deps=False",
-            "--",
             f"{package}-{version}",
         ]
     if manager == "pacman" and arch_sync:
@@ -3348,7 +3347,6 @@ def _offline_install_argv(manager: str, paths: Sequence[Path]) -> list[str]:
             "-y",
             "--setopt=install_weak_deps=False",
             "--setopt=keepcache=False",
-            "--",
             *rendered,
         ]
     if manager == "pacman":
@@ -3703,7 +3701,6 @@ def _prepare_package_rollback(
                 "download",
                 "--destdir",
                 backup_root.as_posix(),
-                "--",
                 f"{package}-{previous_version}",
             ],
             runner=runner,
@@ -3738,7 +3735,7 @@ def _rollback_package_argv(operation: dict[str, Any]) -> list[str]:
         if manager == "apt":
             return ["apt-get", "install", "-y", "--", artifact]
         if manager == "dnf":
-            return ["dnf", "downgrade", "-y", "--", artifact]
+            return ["dnf", "downgrade", "-y", artifact]
         if manager == "pacman":
             return ["pacman", "-U", "--noconfirm", "--", artifact]
     if not previous:

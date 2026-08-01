@@ -2278,8 +2278,8 @@ case "$manager" in
     reversal="apt-get remove -- ${{reversal_packages[*]}}"
     ;;
   dnf)
-    dnf install -y --setopt=install_weak_deps=False -- "${{packages[@]}}"
-    reversal="dnf remove -- ${{reversal_packages[*]}}"
+    dnf install -y --setopt=install_weak_deps=False "${{packages[@]}}"
+    reversal="dnf remove ${{reversal_packages[*]}}"
     ;;
   pacman)
     if [[ "${{2:-}}" != "--approve-arch-system-upgrade" ]]; then

@@ -1269,7 +1269,6 @@ def _download_previous_package(
                 "download",
                 "--destdir",
                 output.as_posix(),
-                "--",
                 f"{package}-{version}",
             ],
             runner=runner,

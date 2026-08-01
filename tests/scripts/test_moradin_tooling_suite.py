@@ -138,6 +138,55 @@ def test_offline_apt_install_keeps_local_debs_usable(tmp_path: Path) -> None:
     ]
 
 
+def test_dnf5_package_commands_omit_the_unsupported_separator(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "make-4.4.1-12.fc44.x86_64.rpm"
+
+    offline = suite._offline_install_argv("dnf", [package])
+    connected = suite._package_install_argv(
+        "dnf", "make", "4.4.1-12.fc44", arch_sync=False
+    )
+    rollback = suite._rollback_package_argv(
+        {
+            "manager": "dnf",
+            "package": "make",
+            "previous_version": "4.4.1-11.fc44",
+            "rollback_asset": package.as_posix(),
+        }
+    )
+
+    assert "--" not in offline
+    assert offline[-1] == package.as_posix()
+    assert "--" not in connected
+    assert connected[-1] == "make-4.4.1-12.fc44"
+    assert rollback == ["dnf", "downgrade", "-y", package.as_posix()]
+
+
+def test_dnf5_rollback_snapshot_omits_the_unsupported_separator(
+    tmp_path: Path,
+) -> None:
+    calls: list[list[str]] = []
+
+    def runner(argv: list[str], **_kwargs: object) -> SimpleNamespace:
+        calls.append(argv)
+        (tmp_path / "backup" / "make.rpm").write_bytes(b"rpm")
+        return completed()
+
+    snapshot = suite._prepare_package_rollback(
+        "dnf",
+        "make",
+        "4.4.1-11.fc44",
+        tmp_path / "backup",
+        runner=runner,
+        root_prefix=Path("/"),
+    )
+
+    assert snapshot == tmp_path / "backup" / "make.rpm"
+    assert "--" not in calls[0]
+    assert calls[0][-1] == "make-4.4.1-11.fc44"
+
+
 def ready_python_lock(tool_rows: object, **_kwargs: object) -> dict[str, object]:
     rows = list(tool_rows)  # type: ignore[arg-type]
     direct = sorted(

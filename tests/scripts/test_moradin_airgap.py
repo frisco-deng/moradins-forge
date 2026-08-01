@@ -122,6 +122,36 @@ def test_dnf_closure_preserves_installed_target_dependencies(tmp_path: Path) -> 
     assert not (tmp_path / "packages" / "glibc.rpm").exists()
 
 
+def test_dnf5_rollback_download_omits_the_unsupported_separator(
+    tmp_path: Path,
+) -> None:
+    calls: list[list[str]] = []
+
+    def runner(argv: list[str], **_kwargs: object) -> SimpleNamespace:
+        calls.append(argv)
+        if argv[:2] == ["dnf", "download"]:
+            (tmp_path / "rollback" / "make.rpm").write_bytes(b"rpm")
+            return completed()
+        if argv[:2] == ["rpm", "-qp"]:
+            return completed(stdout="make\n4.4.1-11.fc44\n")
+        if argv[:3] == ["rpmkeys", "--checksig", "--verbose"]:
+            return completed(stdout="Header V4 RSA/SHA256 Signature: OK\n")
+        raise AssertionError(argv)
+
+    package, signature = airgap._download_previous_package(
+        manager="dnf",
+        package="make",
+        version="4.4.1-11.fc44",
+        output=tmp_path / "rollback",
+        runner=runner,
+    )
+
+    assert package == tmp_path / "rollback" / "make.rpm"
+    assert signature is None
+    assert "--" not in calls[0]
+    assert calls[0][-1] == "make-4.4.1-11.fc44"
+
+
 def test_locked_asset_download_rejects_non_official_hosts(tmp_path: Path) -> None:
     with pytest.raises(airgap.AirgapError, match="official host"):
         airgap.download_locked_asset(

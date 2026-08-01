@@ -126,6 +126,38 @@ def test_generated_privileged_scripts_are_dry_run_first_and_reversible() -> None
     assert "should-not-run" not in powershell
 
 
+def test_generated_fedora_script_uses_dnf5_compatible_package_arguments() -> None:
+    plan = {
+        "platform": {"system": "linux", "package_manager": "dnf"},
+        "tools": [
+            {
+                "id": "git",
+                "command": "git",
+                "present": False,
+                "install_action": {
+                    "tool_id": "git",
+                    "kind": "privileged-script",
+                    "package": "git",
+                    "version": "2.55.0-1.fc44",
+                },
+            }
+        ],
+    }
+
+    bash = render_privileged_bash(plan)
+    bootstrap = Path("install/tooling-suite.sh").read_text(encoding="utf-8")
+
+    assert 'dnf install -y --setopt=install_weak_deps=False "${packages[@]}"' in bash
+    assert 'reversal="dnf remove ${reversal_packages[*]}"' in bash
+    assert '-- "${packages[@]}"' not in bash.split("  dnf)", maxsplit=1)[1].split(
+        ";;", maxsplit=1
+    )[0]
+    bootstrap_dnf = bootstrap.split("\tdnf)", maxsplit=1)[1].split(
+        "\t\t;;", maxsplit=1
+    )[0]
+    assert '-- "${bootstrap_packages[@]}"' not in bootstrap_dnf
+
+
 @pytest.mark.parametrize(
     ("relative_path", "reversal"),
     [

@@ -169,7 +169,7 @@ install_bootstrap_prerequisites() {
 		;;
 	dnf)
 		sudo -- /usr/bin/env -i PATH="$SAFE_SYSTEM_PATH" LANG=C.UTF-8 LC_ALL=C.UTF-8 \
-			dnf install -y --setopt=install_weak_deps=False -- "${bootstrap_packages[@]}"
+			dnf install -y --setopt=install_weak_deps=False "${bootstrap_packages[@]}"
 		;;
 	pacman)
 		printf '%s\n' 'Arch requires a complete synchronized transaction; no partial upgrade is used.'
