@@ -344,12 +344,15 @@ def test_managed_python_links_are_materialized_only_within_runtime(
     executable.write_bytes(b"runtime")
     executable.chmod(0o755)
     (source / "cpython/bin/python3").symlink_to("python3.12")
+    (source / "cpython-family").symlink_to("cpython", target_is_directory=True)
     materialized = tmp_path / "materialized"
 
     airgap._materialize_managed_python(source, materialized)
     manifest = airgap._python_runtime_manifest(materialized)
 
     assert not (materialized / "cpython/bin/python3").is_symlink()
+    assert not (materialized / "cpython-family").exists()
+    assert manifest["executable"] == "cpython/bin/python3.12"
     airgap._validate_python_runtime_tree(materialized, manifest)
 
     unsafe = tmp_path / "unsafe"

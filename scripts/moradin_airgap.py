@@ -2531,12 +2531,37 @@ def _materialize_managed_python(source: Path, destination: Path) -> None:
                 raise AirgapError("managed Python link escapes its runtime root")
         elif not path.is_dir() and not path.is_file():
             raise AirgapError("managed Python contains a special file")
-    shutil.copytree(source, destination, symlinks=False)
-    # copytree follows only the links proven to stay within the managed runtime.
+    destination.mkdir()
+    for current, directory_names, file_names in os.walk(
+        source,
+        topdown=True,
+        followlinks=False,
+    ):
+        current_path = Path(current)
+        relative = current_path.relative_to(source)
+        destination_directory = destination / relative
+        destination_directory.mkdir(parents=True, exist_ok=True)
+        retained_directories: list[str] = []
+        for name in sorted(directory_names):
+            candidate = current_path / name
+            if candidate.is_symlink():
+                # uv adds a version-family directory alias. The canonical pinned
+                # runtime is already copied, so retaining the alias would duplicate
+                # the entire tree and create ambiguous executable paths.
+                continue
+            (destination_directory / name).mkdir(exist_ok=True)
+            retained_directories.append(name)
+        directory_names[:] = retained_directories
+        for name in sorted(file_names):
+            candidate = current_path / name
+            resolved = candidate.resolve(strict=True) if candidate.is_symlink() else candidate
+            target = destination_directory / name
+            shutil.copyfile(resolved, target)
+            os.chmod(
+                target,
+                0o755 if resolved.stat().st_mode & stat.S_IXUSR else 0o644,
+            )
     file_records(destination)
-    for path in destination.rglob("*"):
-        if path.is_file():
-            os.chmod(path, 0o755 if path.stat().st_mode & stat.S_IXUSR else 0o644)
 
 
 def _install_airgap_bootstrap(
