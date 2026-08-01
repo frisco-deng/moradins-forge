@@ -60,6 +60,10 @@ podman exec "$container_name" useradd --create-home --home-dir "$consumer_home" 
 	--shell /bin/bash forge
 podman exec "$container_name" /bin/sh -eu -c \
 	'printf "forge ALL=(ALL) NOPASSWD: ALL\n" >/etc/sudoers.d/forge; chmod 0440 /etc/sudoers.d/forge'
+podman exec "$container_name" /bin/sh -eu -c \
+	'visudo -cf /etc/sudoers >/dev/null'
+podman exec --user forge --env HOME="$consumer_home" "$container_name" \
+	sudo -n -v
 
 mapfile -t exclusions < <(
 	cd "$forge_root"
@@ -121,11 +125,16 @@ test "$preview_status" -eq 2
 plan_digest=$(jq -r .plan_sha256 "$scratch_root/preview.json")
 [[ $plan_digest =~ ^[0-9a-f]{64}$ ]]
 
+# Keep the CI stand-in for explicit human sudo acceptance and the sealed apply
+# in one exec session so distributions with ppid-scoped timestamps behave alike.
 podman exec --user forge --env HOME="$consumer_home" "$container_name" \
-	/forge/install/tooling-suite.sh airgap-apply \
-	--bundle "$consumer_home/KIT.tar.gz" \
-	--approve-bundle-sha256 "$bundle_digest" \
-	--approve-offline-plan-sha256 "$plan_digest" >/dev/null
+	/bin/bash -eu -c '
+sudo -n -v
+exec /forge/install/tooling-suite.sh airgap-apply \
+  --bundle "$1" \
+  --approve-bundle-sha256 "$2" \
+  --approve-offline-plan-sha256 "$3"
+' bash "$consumer_home/KIT.tar.gz" "$bundle_digest" "$plan_digest" >/dev/null
 podman exec --user forge --env HOME="$consumer_home" "$container_name" \
 	/forge/install/tooling-suite.sh verify --latest >/dev/null
 
