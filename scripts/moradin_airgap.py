@@ -108,6 +108,7 @@ AIRGAP_MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024
 AIRGAP_MAX_TOTAL_BYTES = 32 * 1024 * 1024 * 1024
 AIRGAP_MAX_RECORD_BYTES = 16 * 1024 * 1024
 AIRGAP_MAX_PACKAGE_RECORDS = 100_000
+AIRGAP_MAX_APT_INDEX_BYTES = 512 * 1024 * 1024
 AIRGAP_SOURCE_DATE_EPOCH = 946684800
 REPO_ROOT = Path(__file__).resolve().parents[1]
 APT_PACKAGE_STATE_FIELDS = (
@@ -1451,19 +1452,36 @@ def _copy_apt_trust_evidence(
     for index, source in enumerate(package_indexes, start=1):
         if source.is_symlink() or not source.is_file():
             raise AirgapError("APT Packages evidence is unsafe")
-        destination_name = f"packages-{index:03d}.txt"
-        target = destination / destination_name
-        _copy_decompressed_apt_index(source, target)
-        digest = sha256_file(target)
-        if not any(digest in release for release in release_texts):
-            target.unlink(missing_ok=True)
+        plain = destination / f".packages-{index:03d}.txt"
+        _copy_decompressed_apt_index(source, plain)
+        uncompressed_size = plain.stat().st_size
+        repository_digest = sha256_file(plain)
+        if (
+            uncompressed_size > AIRGAP_MAX_APT_INDEX_BYTES
+            or not any(repository_digest in release for release in release_texts)
+        ):
+            plain.unlink(missing_ok=True)
             continue
+        destination_name = f"packages-{index:03d}.txt.gz"
+        target = destination / destination_name
+        with plain.open("rb") as source_stream, target.open("wb") as output_stream:
+            with gzip.GzipFile(
+                filename="",
+                mode="wb",
+                fileobj=output_stream,
+                mtime=0,
+            ) as compressed:
+                shutil.copyfileobj(source_stream, compressed, length=1024 * 1024)
+        plain.unlink()
         records.append(
             {
                 "path": destination_name,
                 "kind": "apt-packages-index",
-                "sha256": digest,
+                "sha256": sha256_file(target),
                 "size": target.stat().st_size,
+                "compression": "gzip",
+                "repository_sha256": repository_digest,
+                "uncompressed_size": uncompressed_size,
             }
         )
     if not any(record["kind"] == "apt-packages-index" for record in records):
@@ -2053,18 +2071,45 @@ def _validate_lock_contents(lock: dict[str, Any]) -> None:
     trust_assets = lock.get("trust_assets")
     if not isinstance(trust_assets, list) or not trust_assets:
         raise AirgapError("air-gap lock repository trust closure is empty")
+    observed_trust_kinds: set[str] = set()
     for asset in trust_assets:
         if not isinstance(asset, dict):
             raise AirgapError("air-gap lock trust asset is malformed")
         name = str(asset.get("path", ""))
+        kind = str(asset.get("kind", ""))
         digest = _assert_digest(asset.get("sha256"), label="trust asset digest")
         size = int(asset.get("size", -1))
+        manager = target["package_manager"]
+        allowed_kind = (
+            kind in {"apt-inrelease", "apt-keyring", "apt-packages-index"}
+            if manager == "apt"
+            else kind == f"{manager}-repository-trust"
+        )
         if (
             Path(name).name != name
-            or not str(asset.get("kind", ""))
+            or not allowed_kind
             or file_bindings.get(f"payload/trust/{name}") != (digest, size)
         ):
             raise AirgapError("air-gap trust asset is not payload-bound")
+        if kind == "apt-packages-index" and (
+            asset.get("compression") != "gzip"
+            or not re.fullmatch(
+                r"[0-9a-f]{64}",
+                str(asset.get("repository_sha256", "")),
+            )
+            or not 0
+            < int(asset.get("uncompressed_size", -1))
+            <= AIRGAP_MAX_APT_INDEX_BYTES
+        ):
+            raise AirgapError("air-gap APT index binding is malformed")
+        observed_trust_kinds.add(kind)
+    required_trust_kinds = (
+        {"apt-inrelease", "apt-keyring", "apt-packages-index"}
+        if target["package_manager"] == "apt"
+        else {f"{target['package_manager']}-repository-trust"}
+    )
+    if not required_trust_kinds.issubset(observed_trust_kinds):
+        raise AirgapError("air-gap repository trust closure is incomplete")
 
 
 def load_airgap_lock(path: Path) -> dict[str, Any]:

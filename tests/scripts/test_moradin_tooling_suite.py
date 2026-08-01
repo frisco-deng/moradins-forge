@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import bz2
+import gzip
 import io
 import json
 import os
@@ -30,6 +31,83 @@ def completed(
     returncode: int = 0, stdout: str = "", stderr: str = ""
 ) -> SimpleNamespace:
     return SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
+
+
+def test_offline_apt_trust_verifies_compressed_signed_index(
+    tmp_path: Path,
+) -> None:
+    package_digest = "b" * 64
+    package_index = (
+        "Package: make\n"
+        "Version: 4.3-4.1build2\n"
+        "Architecture: amd64\n"
+        f"SHA256: {package_digest}\n\n"
+    ).encode()
+    repository_digest = hashlib.sha256(package_index).hexdigest()
+    keyring = tmp_path / "archive-keyring.gpg"
+    keyring.write_bytes(b"keyring")
+    release = tmp_path / "inrelease"
+    release.write_text(
+        f"SHA256:\n {repository_digest} {len(package_index)} Packages\n",
+        encoding="utf-8",
+    )
+    index = tmp_path / "packages.txt.gz"
+    index.write_bytes(gzip.compress(package_index, mtime=0))
+    trust_assets = [
+        {
+            "path": keyring.name,
+            "kind": "apt-keyring",
+            "sha256": suite.sha256_file(keyring),
+            "size": keyring.stat().st_size,
+        },
+        {
+            "path": release.name,
+            "kind": "apt-inrelease",
+            "sha256": suite.sha256_file(release),
+            "size": release.stat().st_size,
+        },
+        {
+            "path": index.name,
+            "kind": "apt-packages-index",
+            "sha256": suite.sha256_file(index),
+            "size": index.stat().st_size,
+            "compression": "gzip",
+            "repository_sha256": repository_digest,
+            "uncompressed_size": len(package_index),
+        },
+    ]
+    plan = {
+        "offline": {
+            "trust_assets": trust_assets,
+            "package_assets": [
+                {
+                    "package": "make",
+                    "version": "4.3-4.1build2",
+                    "arch": "amd64",
+                    "sha256": package_digest,
+                    "repository_sha256": package_digest,
+                }
+            ],
+        }
+    }
+    sealed = {
+        f"offline-trust:{path.name}": path
+        for path in (keyring, release, index)
+    }
+
+    suite._verify_offline_apt_trust(
+        plan,
+        sealed,
+        runner=lambda *_args, **_kwargs: completed(),
+    )
+
+    plan["offline"]["trust_assets"][2]["uncompressed_size"] += 1
+    with pytest.raises(suite.ToolingSuiteError, match="content binding"):
+        suite._verify_offline_apt_trust(
+            plan,
+            sealed,
+            runner=lambda *_args, **_kwargs: completed(),
+        )
 
 
 def ready_python_lock(tool_rows: object, **_kwargs: object) -> dict[str, object]:

@@ -140,7 +140,10 @@ Onboarding shows exact diffs and never implies consent to create or patch them.
   engine.
 - APT packages are tied to Packages indexes covered by verified InRelease
   signatures. A target-bound APT simulation determines the exact transaction
-  before download; RPM and Pacman package signatures are verified natively.
+  before download. Full upstream Packages indexes are stored as deterministic
+  gzip assets; offline apply verifies their uncompressed digest against the
+  signed InRelease before parsing package records. RPM and Pacman package
+  signatures are verified natively.
 - The lock binds every payload path, byte size, digest, target, profile,
   catalog, installer, package state, and rollback asset.
 - The kit materializes uv-managed Python links into regular files and binds

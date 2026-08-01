@@ -461,6 +461,17 @@ def _minimal_lock(cache: Path, *, created_at: str) -> dict[str, object]:
     )
     payload = _cache_record(cache, "payload/fixture.txt", b"tool closure")
     trust = _cache_record(cache, "payload/trust/archive.gpg", b"trust fixture")
+    release = _cache_record(
+        cache,
+        "payload/trust/inrelease",
+        b"signed release fixture",
+    )
+    index_content = b"Package: fixture\nVersion: 1\nArchitecture: amd64\n"
+    index = _cache_record(
+        cache,
+        "payload/trust/packages.txt.gz",
+        gzip.compress(index_content, mtime=0),
+    )
     uv = _cache_record(cache, "payload/bootstrap/uv", b"uv fixture")
     python = _cache_record(
         cache,
@@ -515,7 +526,22 @@ def _minimal_lock(cache: Path, *, created_at: str) -> dict[str, object]:
                 "kind": "apt-keyring",
                 "sha256": trust["sha256"],
                 "size": trust["size"],
-            }
+            },
+            {
+                "path": "inrelease",
+                "kind": "apt-inrelease",
+                "sha256": release["sha256"],
+                "size": release["size"],
+            },
+            {
+                "path": "packages.txt.gz",
+                "kind": "apt-packages-index",
+                "sha256": index["sha256"],
+                "size": index["size"],
+                "compression": "gzip",
+                "repository_sha256": hashlib.sha256(index_content).hexdigest(),
+                "uncompressed_size": len(index_content),
+            },
         ],
         "bootstrap": {
             "uv": {
@@ -542,6 +568,8 @@ def _minimal_lock(cache: Path, *, created_at: str) -> dict[str, object]:
                 source_snapshot,
                 payload,
                 trust,
+                release,
+                index,
                 uv,
                 python,
                 python_manifest,

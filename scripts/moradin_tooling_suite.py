@@ -1996,6 +1996,19 @@ def validate_suite_plan_contents(plan: dict[str, Any]) -> None:
                 raise ToolingSuiteError(
                     "offline trust asset does not match the package manager"
                 )
+            if kind == "apt-packages-index" and (
+                asset.get("compression") != "gzip"
+                or not re.fullmatch(
+                    r"[0-9a-f]{64}",
+                    str(asset.get("repository_sha256", "")),
+                )
+                or not 0
+                < int(asset.get("uncompressed_size", -1))
+                <= MAX_ASSET_BYTES
+            ):
+                raise ToolingSuiteError(
+                    "offline APT index compression binding is malformed"
+                )
             seen_trust.add(filename)
         seen_files: set[str] = set()
         seen_packages: set[tuple[str, str, str]] = set()
@@ -3441,16 +3454,37 @@ def _verify_offline_apt_trust(
         verified_digests.update(
             _apt_release_sha256s(release.read_text(encoding="utf-8"))
         )
+    records_by_path = {str(item["path"]): item for item in records}
     indexed_packages: set[tuple[str, str, str, str]] = set()
     for index in indexes:
         assert index is not None
-        if sha256_file(index) not in verified_digests:
+        record = records_by_path[index.name]
+        repository_digest = str(record.get("repository_sha256", ""))
+        expected_size = int(record.get("uncompressed_size", -1))
+        if (
+            record.get("compression") != "gzip"
+            or repository_digest not in verified_digests
+            or not 0 < expected_size <= MAX_ASSET_BYTES
+        ):
             raise ToolingSuiteError(
                 "sealed APT Packages index is absent from signed release metadata"
             )
-        indexed_packages.update(
-            _apt_index_package_hashes(index.read_text(encoding="utf-8"))
-        )
+        try:
+            with gzip.open(index, "rb") as stream:
+                content = stream.read(expected_size + 1)
+            text = content.decode("utf-8")
+        except (OSError, UnicodeDecodeError) as error:
+            raise ToolingSuiteError(
+                "sealed APT Packages index compression is invalid"
+            ) from error
+        if (
+            len(content) != expected_size
+            or hashlib.sha256(content).hexdigest() != repository_digest
+        ):
+            raise ToolingSuiteError(
+                "sealed APT Packages index content binding is invalid"
+            )
+        indexed_packages.update(_apt_index_package_hashes(text))
     for asset in offline.get("package_assets", []):
         digest = str(asset.get("sha256", ""))
         if asset.get("repository_sha256") != digest or (
