@@ -2,7 +2,7 @@
 title: "Moradin Forge Release Artifact Contract V1"
 status: approved
 owner: moradin-forge
-last_reviewed: 2026-07-28
+last_reviewed: 2026-08-04
 source_refs:
   - ../../Makefile
   - ../../scripts/moradin_dogfood.py
@@ -10,7 +10,7 @@ source_refs:
 related_docs:
   - moradin_forge_public_export_contract_v1.md
   - repo_operating_model_v1.md
-  - ../releases/v0.2.0-beta.3.md
+  - ../releases/v0.2.0-beta.4.md
 ---
 
 # Moradin Forge Release Artifact Contract V1
@@ -33,10 +33,10 @@ production promotion, or a `prod` branch or environment.
 - `scripts/moradin_dogfood.py --release-output <path>` is the underlying
   explicit output interface.
 
-The beta.3 release directory contains exactly:
+The beta.4 development release directory contains exactly:
 
-- `moradins-forge-0.2.0-beta.3.tar.gz`
-- `moradins-forge-0.2.0-beta.3.spdx.json`
+- `moradins-forge-0.2.0-beta.4.tar.gz`
+- `moradins-forge-0.2.0-beta.4.spdx.json`
 - `release-manifest.json`
 - `SHA256SUMS`
 
@@ -55,8 +55,8 @@ excluded. The SPDX document derives versions from lockfiles and source commit
 time. The manifest records source SHA, previous release, hashes, rollback, and
 dogfood evidence.
 
-For beta.3, the previous release and normal release rollback target are
-`v0.2.0-beta.1`. The sidecar ownership lineage anchor is an independent
+For beta.4, the previous release and normal release rollback target are
+`v0.2.0-beta.3`. The sidecar ownership lineage anchor is an independent
 adoption contract and remains unchanged.
 
 The same clean source commit and lockfiles must produce byte-identical archive,

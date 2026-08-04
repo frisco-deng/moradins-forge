@@ -525,7 +525,7 @@ the reproducible archive, SPDX SBOM, manifest, and checksums under
 
 ## Release Boundary
 
-Beta.3 adds three-platform onboarding and plan validation, but it does not
+Beta.4 is a development line based on the public beta.3 baseline; it does not
 claim stable production readiness. Signing, production-readiness,
 release-candidate-manifest, and production promotion remain separate human
 gates. Forge does not create or imply a `prod` branch or environment.
@@ -561,4 +561,4 @@ Keep it loopback-only unless the user explicitly approves broader exposure.
 The UI may create install-request artifacts but does not execute host
 installers; consented execution is a native CLI boundary.
 
-Current beta release target: `v0.2.0-beta.3`.
+Current beta development target: `v0.2.0-beta.4`.

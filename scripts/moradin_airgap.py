@@ -3802,7 +3802,7 @@ def download_locked_asset(url: str, destination: Path, digest: str, size: int) -
         raise AirgapError("frozen asset size is unsafe")
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": "moradins-forge-airgap/0.2.0-beta.3"},
+        headers={"User-Agent": "moradins-forge-airgap/0.2.0-beta.4"},
     )
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.is_symlink() or (destination.exists() and not destination.is_file()):

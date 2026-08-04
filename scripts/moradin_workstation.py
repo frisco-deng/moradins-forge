@@ -598,7 +598,7 @@ def _fetch_json(url: str, timeout: float = 8.0) -> dict[str, Any]:
         url,
         headers={
             "Accept": "application/json",
-            "User-Agent": "moradins-forge-version-resolver/0.2.0-beta.3",
+            "User-Agent": "moradins-forge-version-resolver/0.2.0-beta.4",
         },
     )
     with _open_official_url(request, timeout=timeout) as response:
@@ -2843,7 +2843,7 @@ def _download_asset(url: str, destination: Path) -> None:
     _assert_official_asset(url)
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": "moradins-forge-offline-bundle/0.2.0-beta.3"},
+        headers={"User-Agent": "moradins-forge-offline-bundle/0.2.0-beta.4"},
     )
     with _open_official_url(request, timeout=30) as response:
         destination.write_bytes(response.read())

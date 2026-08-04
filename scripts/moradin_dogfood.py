@@ -35,8 +35,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = REPO_ROOT / "artifacts" / "dogfood"
 DOGFOOD_OWNERSHIP_MARKER = ".moradin-dogfood-output.json"
 RELEASE_OWNERSHIP_MARKER = ".moradin-release-output.json"
-RELEASE_VERSION = "v0.2.0-beta.3"
-ROLLBACK_ANCHOR = "v0.2.0-beta.1"
+RELEASE_VERSION = "v0.2.0-beta.4"
+ROLLBACK_ANCHOR = "v0.2.0-beta.3"
 
 
 def utc_now() -> str:
