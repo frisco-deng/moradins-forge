@@ -1,0 +1,22 @@
+<svg width="920" height="390" viewBox="0 0 920 390" role="img" aria-labelledby="title desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="title">Measured release-dogfood summary byte comparison</title>
+  <desc id="desc">Checked-in fixture byte counts compare raw first-hop guidance with a compact primer, and repeated command output with rerun advice.</desc>
+  <rect width="920" height="390" rx="18" fill="#f8fafc"/>
+  <rect x="32" y="28" width="856" height="334" rx="14" fill="#ffffff" stroke="#64748b" stroke-width="2"/>
+  <rect x="60" y="50" width="118" height="34" rx="17" fill="#14532d"/>
+  <text x="119" y="73" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#ffffff">Measured</text>
+  <text x="198" y="73" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#0f172a">Release-dogfood fixture bytes</text>
+  <g font-family="Arial, sans-serif" fill="#0f172a">
+    <text x="60" y="125" font-size="18" font-weight="700">Startup context</text>
+    <text x="60" y="154" font-size="14">Raw guidance: 18,242 bytes</text>
+    <rect x="260" y="138" width="520" height="22" rx="5" fill="#1d4ed8"/>
+    <text x="60" y="186" font-size="14">Compact primer: 484 bytes</text>
+    <rect x="260" y="170" width="14" height="22" rx="5" fill="#16a34a"/>
+    <text x="60" y="239" font-size="18" font-weight="700">Repeated output</text>
+    <text x="60" y="268" font-size="14">Repeated log: 1,606 bytes</text>
+    <rect x="260" y="252" width="520" height="22" rx="5" fill="#1d4ed8"/>
+    <text x="60" y="300" font-size="14">Rerun advice: 136 bytes</text>
+    <rect x="260" y="284" width="44" height="22" rx="5" fill="#16a34a"/>
+    <text x="60" y="340" font-size="13" fill="#334155">Fixture evidence, not a universal token-reduction guarantee.</text>
+  </g>
+</svg>

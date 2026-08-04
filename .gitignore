@@ -25,9 +25,14 @@ public_audit/
 
 # Forge-generated local artifacts
 Harness/artifacts/control/forge_runs/
+Harness/artifacts/control/efficiency/
 Harness/artifacts/control/install_requests/
+Harness/artifacts/control/onboard_runs/
 Harness/artifacts/control/public_export/
 Harness/artifacts/control/repo_registry/
+Harness/artifacts/control/tooling_plans/
+Harness/artifacts/control/tooling_receipts/
+Harness/artifacts/control/upgrade_runs/
 Harness/artifacts/task_lanes/
 
 # BEGIN workspace-tooling

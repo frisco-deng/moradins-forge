@@ -1,6 +1,6 @@
 <svg width="920" height="280" viewBox="0 0 920 280" role="img" aria-labelledby="title desc">
   <title id="title">Moradin Forge token-saving start path</title>
-  <desc id="desc">Bootstrap creates a compact start card so the agent reads less before planning.</desc>
+  <desc id="desc">Bootstrap and a compact primer give an agent one next action before broader inspection.</desc>
   <rect width="920" height="280" rx="18" fill="#f8fafc"/>
   <rect x="36" y="36" width="848" height="198" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
   <text x="62" y="76" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#0f172a">Token-Saving Start Path</text>
@@ -9,11 +9,11 @@
     <text x="116" y="146" font-weight="700">Bootstrap</text>
     <text x="105" y="170">small command</text>
     <rect x="300" y="116" width="160" height="74" rx="10" fill="#fef9c3" stroke="#ca8a04"/>
-    <text x="340" y="146" font-weight="700">Start Card</text>
-    <text x="332" y="170">compact facts</text>
+    <text x="338" y="146" font-weight="700">Primer</text>
+    <text x="326" y="170">under 6 KiB</text>
     <rect x="524" y="116" width="160" height="74" rx="10" fill="#dcfce7" stroke="#16a34a"/>
-    <text x="566" y="146" font-weight="700">Plan Next</text>
-    <text x="555" y="170">known commands</text>
+    <text x="560" y="146" font-weight="700">One Action</text>
+    <text x="551" y="170">repo-native</text>
     <rect x="748" y="116" width="96" height="74" rx="10" fill="#fee2e2" stroke="#dc2626"/>
     <text x="779" y="146" font-weight="700">Ask</text>
     <text x="775" y="170">consent</text>
@@ -26,5 +26,5 @@
     <path d="M694 153h44"/>
     <path d="M732 145l10 8-10 8"/>
   </g>
-  <text x="62" y="220" font-family="Arial, sans-serif" font-size="15" fill="#334155">The first agent-readable artifact is a small sanitized card, not a full repo scan.</text>
+  <text x="62" y="220" font-family="Arial, sans-serif" font-size="15" fill="#334155">The first agent-readable artifact is sanitized and compact, not a broad repository scan.</text>
 </svg>

@@ -1,0 +1,19 @@
+<svg width="920" height="360" viewBox="0 0 920 360" role="img" aria-labelledby="title desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="title">Qualitative Moradin Forge trust architecture</title>
+  <desc id="desc">Official sources flow to unprivileged staging, human approval, a sealed root phase, receipts and rollback, then separately approved agent-file links.</desc>
+  <rect width="920" height="360" rx="18" fill="#f8fafc"/>
+  <rect x="30" y="28" width="860" height="304" rx="14" fill="#ffffff" stroke="#64748b" stroke-width="2"/>
+  <rect x="54" y="50" width="124" height="34" rx="17" fill="#4c1d95"/>
+  <text x="116" y="73" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#ffffff">Qualitative</text>
+  <text x="198" y="73" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#0f172a">Trust Architecture</text>
+  <g font-family="Arial, sans-serif" font-size="15" fill="#0f172a">
+    <rect x="54" y="124" width="126" height="76" rx="10" fill="#dbeafe" stroke="#1d4ed8"/><text x="117" y="154" text-anchor="middle" font-weight="700">Official</text><text x="117" y="177" text-anchor="middle">sources</text>
+    <rect x="218" y="124" width="126" height="76" rx="10" fill="#e0f2fe" stroke="#0369a1"/><text x="281" y="154" text-anchor="middle" font-weight="700">User</text><text x="281" y="177" text-anchor="middle">staging</text>
+    <rect x="382" y="124" width="126" height="76" rx="10" fill="#fef3c7" stroke="#b45309"/><text x="445" y="154" text-anchor="middle" font-weight="700">Human</text><text x="445" y="177" text-anchor="middle">approval</text>
+    <rect x="546" y="124" width="126" height="76" rx="10" fill="#fee2e2" stroke="#b91c1c"/><text x="609" y="154" text-anchor="middle" font-weight="700">Sealed root</text><text x="609" y="177" text-anchor="middle">phase</text>
+    <rect x="710" y="124" width="126" height="76" rx="10" fill="#dcfce7" stroke="#15803d"/><text x="773" y="154" text-anchor="middle" font-weight="700">Receipts</text><text x="773" y="177" text-anchor="middle">and rollback</text>
+    <rect x="302" y="245" width="316" height="54" rx="10" fill="#f3e8ff" stroke="#7e22ce"/><text x="460" y="278" text-anchor="middle" font-weight="700">Separate consent for each agent-file link</text>
+  </g>
+  <g stroke="#475569" stroke-width="3" fill="none" stroke-linecap="round"><path d="M184 162h26"/><path d="M348 162h26"/><path d="M512 162h26"/><path d="M676 162h26"/><path d="M773 208v25H626"/></g>
+  <text x="54" y="318" font-family="Arial, sans-serif" font-size="14" fill="#334155">Trust-boundary explanation; not a quantitative security or performance claim.</text>
+</svg>

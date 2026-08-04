@@ -1,0 +1,924 @@
+schema_version = 1
+
+# One public catalog drives adaptive recommendations, the interactive Linux
+# suite, verification, offline bundles, and generated privileged plans.
+
+[[tools]]
+id = "git"
+label = "Git"
+command = "git"
+category = "bootstrap-core"
+reason = "source control and deterministic repository state"
+profiles = ["practical"]
+always_consider = true
+required = true
+apt_package = "git"
+dnf_package = "git"
+pacman_package = "git"
+brew_formula = "git"
+winget_id = "Git.Git"
+
+[[tools]]
+id = "make"
+label = "GNU Make"
+command = "make"
+category = "bootstrap-core"
+reason = "stable repository-native command entrypoints"
+profiles = ["practical"]
+apt_package = "make"
+dnf_package = "make"
+pacman_package = "make"
+
+[[tools]]
+id = "curl"
+label = "curl"
+command = "curl"
+category = "bootstrap-core"
+reason = "bounded HTTPS retrieval from approved official sources"
+profiles = ["practical"]
+apt_package = "curl"
+dnf_package = "curl"
+pacman_package = "curl"
+
+[[tools]]
+id = "ca_certificates"
+label = "CA certificates"
+command = ""
+category = "bootstrap-core"
+reason = "system trust roots for verified HTTPS downloads"
+profiles = ["practical"]
+apt_package = "ca-certificates"
+dnf_package = "ca-certificates"
+pacman_package = "ca-certificates"
+
+[[tools]]
+id = "gnupg"
+label = "GnuPG"
+command = "gpg"
+category = "bootstrap-core"
+reason = "release and repository signature verification"
+profiles = ["practical"]
+apt_package = "gnupg"
+dnf_package = "gnupg2"
+pacman_package = "gnupg"
+
+[[tools]]
+id = "tar"
+label = "tar"
+command = "tar"
+category = "bootstrap-core"
+reason = "safe extraction of verified release archives"
+profiles = ["practical"]
+apt_package = "tar"
+dnf_package = "tar"
+pacman_package = "tar"
+
+[[tools]]
+id = "unzip"
+label = "unzip"
+command = "unzip"
+category = "bootstrap-core"
+reason = "safe extraction of verified zip archives"
+profiles = ["practical"]
+verification_argv = ["unzip", "-v"]
+apt_package = "unzip"
+dnf_package = "unzip"
+pacman_package = "unzip"
+
+[[tools]]
+id = "xz"
+label = "XZ utilities"
+command = "xz"
+category = "bootstrap-core"
+reason = "verified release archive extraction"
+profiles = ["practical"]
+apt_package = "xz-utils"
+dnf_package = "xz"
+pacman_package = "xz"
+
+[[tools]]
+id = "rsync"
+label = "rsync"
+command = "rsync"
+category = "bootstrap-core"
+reason = "bounded and reproducible local file synchronization"
+profiles = ["practical"]
+apt_package = "rsync"
+dnf_package = "rsync"
+pacman_package = "rsync"
+
+[[tools]]
+id = "acl"
+label = "POSIX ACL tools"
+command = "setfacl"
+category = "bootstrap-core"
+reason = "explicit filesystem permission diagnostics and repair"
+profiles = ["practical"]
+apt_package = "acl"
+dnf_package = "acl"
+pacman_package = "acl"
+
+[[tools]]
+id = "python"
+label = "Python 3.12"
+command = "python3"
+command_candidates = ["python3.14", "python3.13", "python3.12", "python3"]
+category = "runtime-efficiency"
+reason = "portable Forge runtime and Python project validation"
+profiles = ["practical"]
+always_consider = true
+required = true
+install_strategy = "uv-python"
+brew_formula = "python@3.12"
+winget_id = "Python.Python.3.12"
+
+[[tools]]
+id = "uv"
+label = "uv"
+command = "uv"
+category = "runtime-efficiency"
+reason = "reproducible Python environments and isolated user tools"
+profiles = ["practical"]
+always_consider = true
+required = true
+github_repo = "astral-sh/uv"
+winget_id = "astral-sh.uv"
+
+[[tools]]
+id = "ripgrep"
+label = "ripgrep"
+command = "rg"
+category = "runtime-efficiency"
+reason = "fast bounded source and guidance search"
+profiles = ["practical"]
+always_consider = true
+apt_package = "ripgrep"
+dnf_package = "ripgrep"
+pacman_package = "ripgrep"
+brew_formula = "ripgrep"
+winget_id = "BurntSushi.ripgrep.MSVC"
+
+[[tools]]
+id = "fd"
+label = "fd"
+command = "fd"
+category = "runtime-efficiency"
+reason = "fast bounded file discovery"
+profiles = ["practical"]
+always_consider = true
+dnf_package = "fd-find"
+pacman_package = "fd"
+brew_formula = "fd"
+winget_id = "sharkdp.fd"
+github_repo = "sharkdp/fd"
+
+[[tools]]
+id = "jq"
+label = "jq"
+command = "jq"
+category = "structured-data"
+reason = "deterministic JSON inspection"
+profiles = ["practical"]
+always_consider = true
+apt_package = "jq"
+dnf_package = "jq"
+pacman_package = "jq"
+brew_formula = "jq"
+winget_id = "jqlang.jq"
+
+[[tools]]
+id = "yq"
+label = "yq"
+command = "yq"
+category = "structured-data"
+reason = "deterministic YAML inspection"
+profiles = ["practical"]
+always_consider = true
+pacman_package = "yq"
+brew_formula = "yq"
+winget_id = "MikeFarah.yq"
+github_repo = "mikefarah/yq"
+
+[[tools]]
+id = "gh"
+label = "GitHub CLI"
+command = "gh"
+category = "runtime-efficiency"
+reason = "bounded pull-request and workflow inspection"
+profiles = ["practical"]
+always_consider = true
+apt_package = "gh"
+dnf_package = "gh"
+pacman_package = "github-cli"
+brew_formula = "gh"
+winget_id = "GitHub.cli"
+
+[[tools]]
+id = "just"
+label = "just"
+command = "just"
+category = "runtime-efficiency"
+reason = "deterministic project command entrypoints"
+profiles = ["practical"]
+triggers = ["just"]
+apt_package = "just"
+dnf_package = "just"
+pacman_package = "just"
+brew_formula = "just"
+winget_id = "Casey.Just"
+github_repo = "casey/just"
+
+[[tools]]
+id = "watchexec"
+label = "watchexec"
+command = "watchexec"
+category = "runtime-efficiency"
+reason = "bounded watch-mode validation"
+profiles = ["practical"]
+triggers = ["watch"]
+apt_package = "watchexec"
+dnf_package = "watchexec"
+pacman_package = "watchexec"
+brew_formula = "watchexec"
+winget_id = "Watchexec.Watchexec"
+github_repo = "watchexec/watchexec"
+
+[[tools]]
+id = "py_spy"
+label = "py-spy"
+command = "py-spy"
+category = "runtime-efficiency"
+reason = "low-overhead Python performance diagnosis"
+profiles = ["practical"]
+python_package = "py-spy"
+
+[[tools]]
+id = "shellcheck"
+label = "ShellCheck"
+command = "shellcheck"
+category = "shell-project-qa"
+reason = "shell installer and automation validation"
+profiles = ["practical"]
+always_consider = true
+apt_package = "shellcheck"
+dnf_package = "ShellCheck"
+pacman_package = "shellcheck"
+brew_formula = "shellcheck"
+winget_id = "koalaman.shellcheck"
+
+[[tools]]
+id = "shfmt"
+label = "shfmt"
+command = "shfmt"
+category = "shell-project-qa"
+reason = "stable shell formatting"
+profiles = ["practical"]
+always_consider = true
+apt_package = "shfmt"
+dnf_package = "shfmt"
+pacman_package = "shfmt"
+brew_formula = "shfmt"
+winget_id = "mvdan.shfmt"
+github_repo = "mvdan/sh"
+
+[[tools]]
+id = "yamllint"
+label = "yamllint"
+command = "yamllint"
+category = "shell-project-qa"
+reason = "YAML validation for workflows and deployment files"
+profiles = ["practical"]
+always_consider = true
+python_package = "yamllint"
+apt_package = "yamllint"
+dnf_package = "yamllint"
+dnf_repository = "epel"
+pacman_package = "yamllint"
+brew_formula = "yamllint"
+
+[[tools]]
+id = "pre_commit"
+label = "pre-commit"
+command = "pre-commit"
+category = "shell-project-qa"
+reason = "repeatable local repository gates"
+profiles = ["practical"]
+always_consider = true
+python_package = "pre-commit"
+apt_package = "pre-commit"
+dnf_package = "pre-commit"
+dnf_repository = "epel"
+pacman_package = "pre-commit"
+brew_formula = "pre-commit"
+
+[[tools]]
+id = "gitleaks"
+label = "Gitleaks"
+command = "gitleaks"
+category = "security"
+reason = "secret scanning before publication"
+profiles = ["practical"]
+triggers = ["git", "ci", "release"]
+apt_package = "gitleaks"
+dnf_package = "gitleaks"
+pacman_package = "gitleaks"
+brew_formula = "gitleaks"
+winget_id = "Gitleaks.Gitleaks"
+github_repo = "gitleaks/gitleaks"
+
+[[tools]]
+id = "semgrep"
+label = "Semgrep CE"
+command = "semgrep"
+category = "security"
+reason = "portable static analysis"
+profiles = ["practical"]
+triggers = ["python", "node", "go", "rust", "java"]
+python_package = "semgrep"
+brew_formula = "semgrep"
+
+[[tools]]
+id = "pip_audit"
+label = "pip-audit"
+command = "pip-audit"
+category = "security"
+reason = "Python dependency vulnerability scanning"
+profiles = ["practical"]
+triggers = ["python"]
+python_package = "pip-audit"
+
+[[tools]]
+id = "actionlint"
+label = "actionlint"
+command = "actionlint"
+category = "security"
+reason = "GitHub Actions syntax and semantic validation"
+profiles = ["practical"]
+triggers = ["github-actions"]
+brew_formula = "actionlint"
+winget_id = "rhysd.actionlint"
+github_repo = "rhysd/actionlint"
+
+[[tools]]
+id = "zizmor"
+label = "zizmor"
+command = "zizmor"
+category = "security"
+reason = "GitHub Actions security analysis"
+profiles = ["practical"]
+triggers = ["github-actions"]
+python_package = "zizmor"
+brew_formula = "zizmor"
+github_repo = "woodruffw/zizmor"
+
+[[tools]]
+id = "hadolint"
+label = "Hadolint"
+command = "hadolint"
+category = "security"
+reason = "Dockerfile policy validation"
+profiles = ["practical"]
+triggers = ["container"]
+brew_formula = "hadolint"
+winget_id = "hadolint.hadolint"
+github_repo = "hadolint/hadolint"
+
+[[tools]]
+id = "conftest"
+label = "Conftest"
+command = "conftest"
+category = "security"
+reason = "policy-as-code validation for structured configuration"
+profiles = ["practical"]
+triggers = ["container", "kubernetes", "terraform"]
+brew_formula = "conftest"
+github_repo = "open-policy-agent/conftest"
+
+[[tools]]
+id = "trivy"
+label = "Trivy"
+command = "trivy"
+category = "security"
+reason = "filesystem, container, dependency, and IaC scanning"
+profiles = ["practical"]
+triggers = ["container", "kubernetes", "terraform", "release"]
+apt_package = "trivy"
+dnf_package = "trivy"
+pacman_package = "trivy"
+brew_formula = "trivy"
+winget_id = "AquaSecurity.Trivy"
+github_repo = "aquasecurity/trivy"
+
+[[tools]]
+id = "syft"
+label = "Syft"
+command = "syft"
+category = "supply-chain-release"
+reason = "SPDX and CycloneDX software bills of materials"
+profiles = ["practical"]
+triggers = ["container", "release", "production"]
+brew_formula = "syft"
+winget_id = "Anchore.Syft"
+github_repo = "anchore/syft"
+
+[[tools]]
+id = "grype"
+label = "Grype"
+command = "grype"
+category = "supply-chain-release"
+reason = "SBOM and filesystem vulnerability scanning"
+profiles = ["practical"]
+triggers = ["container", "release", "production"]
+brew_formula = "grype"
+winget_id = "Anchore.Grype"
+github_repo = "anchore/grype"
+
+[[tools]]
+id = "osv_scanner"
+label = "OSV-Scanner"
+command = "osv-scanner"
+category = "supply-chain-release"
+reason = "open-source dependency vulnerability scanning"
+profiles = ["practical"]
+triggers = ["python", "node", "go", "rust", "release"]
+brew_formula = "osv-scanner"
+winget_id = "Google.OSV-Scanner"
+github_repo = "google/osv-scanner"
+
+[[tools]]
+id = "cosign"
+label = "Cosign"
+command = "cosign"
+category = "supply-chain-release"
+reason = "artifact and container signature verification"
+profiles = ["practical"]
+triggers = ["signing", "release"]
+brew_formula = "cosign"
+winget_id = "Sigstore.Cosign"
+github_repo = "sigstore/cosign"
+
+[[tools]]
+id = "scorecard"
+label = "OpenSSF Scorecard"
+command = "scorecard"
+category = "supply-chain-release"
+reason = "repository supply-chain posture checks"
+profiles = ["practical"]
+triggers = ["release", "github-actions"]
+verification_argv = ["scorecard", "version"]
+brew_formula = "scorecard"
+github_repo = "ossf/scorecard"
+
+[[tools]]
+id = "sops"
+label = "SOPS"
+command = "sops"
+category = "supply-chain-release"
+reason = "encrypted configuration workflows"
+profiles = ["practical"]
+triggers = ["sops", "kubernetes", "production"]
+apt_package = "sops"
+dnf_package = "sops"
+pacman_package = "sops"
+brew_formula = "sops"
+winget_id = "Mozilla.SOPS"
+github_repo = "getsops/sops"
+
+[[tools]]
+id = "age"
+label = "age"
+command = "age"
+category = "supply-chain-release"
+reason = "small auditable file encryption for local workflows"
+profiles = ["practical"]
+apt_package = "age"
+dnf_package = "age"
+dnf_repository = "epel"
+pacman_package = "age"
+brew_formula = "age"
+github_repo = "FiloSottile/age"
+
+[[tools]]
+id = "reuse"
+label = "REUSE"
+command = "reuse"
+category = "supply-chain-release"
+reason = "machine-checkable licensing and copyright metadata"
+profiles = ["practical"]
+python_package = "reuse"
+apt_package = "reuse"
+dnf_package = "reuse"
+dnf_repository = "epel"
+pacman_package = "reuse"
+brew_formula = "reuse"
+
+[[tools]]
+id = "restic"
+label = "Restic"
+command = "restic"
+category = "supply-chain-release"
+reason = "encrypted rollback and backup workflows"
+profiles = ["practical"]
+verification_argv = ["restic", "version"]
+apt_package = "restic"
+dnf_package = "restic"
+dnf_repository = "epel"
+pacman_package = "restic"
+brew_formula = "restic"
+github_repo = "restic/restic"
+
+[[tools]]
+id = "podman"
+label = "Podman"
+command = "podman"
+category = "container-sandbox"
+reason = "rootless container isolation without a shared privileged socket"
+profiles = ["extended"]
+apt_package = "podman"
+dnf_package = "podman"
+pacman_package = "podman"
+protected_existing = true
+
+[[tools]]
+id = "rootless_uidmap"
+label = "Rootless UID mapping"
+command = "newuidmap"
+category = "container-sandbox"
+reason = "user-namespace identity mapping required by a new rootless Podman engine"
+verification_argv = ["/usr/bin/test", "-x", "/usr/bin/newuidmap"]
+apt_package = "uidmap"
+dnf_package = "shadow-utils"
+pacman_package = "shadow"
+
+[[tools]]
+id = "rootless_network"
+label = "Rootless container networking"
+command = "slirp4netns"
+category = "container-sandbox"
+reason = "unprivileged network namespace support for a new rootless Podman engine"
+apt_package = "slirp4netns"
+dnf_package = "slirp4netns"
+pacman_package = "slirp4netns"
+
+[[tools]]
+id = "rootless_storage"
+label = "Rootless overlay storage"
+command = "fuse-overlayfs"
+category = "container-sandbox"
+reason = "unprivileged overlay storage support for a new rootless Podman engine"
+apt_package = "fuse-overlayfs"
+dnf_package = "fuse-overlayfs"
+pacman_package = "fuse-overlayfs"
+
+[[tools]]
+id = "docker"
+label = "Rootless Docker"
+command = "docker"
+category = "container-sandbox"
+reason = "rootless compatibility for Docker-native project workflows"
+profiles = ["extended"]
+manual_only = true
+protected_existing = true
+service_impact = true
+
+[[tools]]
+id = "distrobox"
+label = "Distrobox"
+command = "distrobox"
+category = "container-sandbox"
+reason = "disposable development environments over a rootless engine"
+profiles = ["extended"]
+apt_package = "distrobox"
+dnf_package = "distrobox"
+dnf_repository = "epel"
+pacman_package = "distrobox"
+github_repo = "89luca89/distrobox"
+
+[[tools]]
+id = "bubblewrap"
+label = "Bubblewrap"
+command = "bwrap"
+category = "container-sandbox"
+reason = "small unprivileged sandbox primitive"
+profiles = ["extended"]
+apt_package = "bubblewrap"
+dnf_package = "bubblewrap"
+pacman_package = "bubblewrap"
+
+[[tools]]
+id = "act"
+label = "Act"
+command = "act"
+category = "container-sandbox"
+reason = "local GitHub Actions workflow emulation"
+profiles = ["extended"]
+brew_formula = "act"
+winget_id = "nektos.act"
+github_repo = "nektos/act"
+
+[[tools]]
+id = "kubectl"
+label = "kubectl"
+command = "kubectl"
+category = "kubernetes"
+reason = "Kubernetes manifest and cluster validation"
+profiles = ["extended"]
+triggers = ["kubernetes"]
+verification_argv = ["kubectl", "version", "--client=true"]
+apt_package = "kubectl"
+dnf_package = "kubectl"
+pacman_package = "kubectl"
+brew_formula = "kubectl"
+winget_id = "Kubernetes.kubectl"
+
+[[tools]]
+id = "kind"
+label = "kind"
+command = "kind"
+category = "kubernetes"
+reason = "disposable Kubernetes integration tests"
+profiles = ["extended"]
+triggers = ["kubernetes"]
+brew_formula = "kind"
+winget_id = "Kubernetes.kind"
+github_repo = "kubernetes-sigs/kind"
+
+[[tools]]
+id = "helm"
+label = "Helm"
+command = "helm"
+category = "kubernetes"
+reason = "Helm chart validation and packaging"
+profiles = ["extended"]
+triggers = ["helm", "kubernetes"]
+apt_package = "helm"
+dnf_package = "helm"
+pacman_package = "helm"
+brew_formula = "helm"
+winget_id = "Helm.Helm"
+github_repo = "helm/helm"
+
+[[tools]]
+id = "kubeconform"
+label = "kubeconform"
+command = "kubeconform"
+category = "kubernetes"
+reason = "offline Kubernetes schema validation"
+profiles = ["extended"]
+triggers = ["kubernetes"]
+brew_formula = "kubeconform"
+github_repo = "yannh/kubeconform"
+
+[[tools]]
+id = "kustomize"
+label = "Kustomize"
+command = "kustomize"
+category = "kubernetes"
+reason = "deterministic Kubernetes overlay rendering"
+profiles = ["extended"]
+triggers = ["kubernetes"]
+apt_package = "kustomize"
+dnf_package = "kustomize"
+pacman_package = "kustomize"
+brew_formula = "kustomize"
+github_repo = "kubernetes-sigs/kustomize"
+
+[[tools]]
+id = "oras"
+label = "ORAS"
+command = "oras"
+category = "kubernetes"
+reason = "OCI artifact transfer and inspection"
+profiles = ["extended"]
+apt_package = "oras"
+dnf_package = "oras"
+pacman_package = "oras"
+brew_formula = "oras"
+github_repo = "oras-project/oras"
+
+[[tools]]
+id = "node"
+label = "Node.js LTS"
+command = "node"
+category = "ui-test"
+reason = "Node and browser project validation"
+profiles = ["extended"]
+triggers = ["node", "ui"]
+apt_package = "nodejs"
+dnf_package = "nodejs"
+pacman_package = "nodejs-lts-jod"
+brew_formula = "node"
+winget_id = "OpenJS.NodeJS.LTS"
+
+[[tools]]
+id = "corepack"
+label = "Corepack"
+command = "corepack"
+category = "ui-test"
+reason = "project-pinned JavaScript package-manager activation"
+profiles = ["extended"]
+apt_package = "node-corepack"
+dnf_package = "nodejs-corepack"
+pacman_package = "corepack"
+
+[[tools]]
+id = "xvfb"
+label = "Xvfb"
+command = "Xvfb"
+category = "ui-test"
+reason = "headless display support without globally downloading browsers"
+profiles = ["extended"]
+verification_argv = ["Xvfb", "-help"]
+apt_package = "xvfb"
+dnf_package = "xorg-x11-server-Xvfb"
+pacman_package = "xorg-server-xvfb"
+
+[[tools]]
+id = "bats"
+label = "Bats"
+command = "bats"
+category = "ui-test"
+reason = "portable shell installer contract tests"
+profiles = ["extended"]
+apt_package = "bats"
+dnf_package = "bats"
+dnf_repository = "epel"
+pacman_package = "bats"
+github_repo = "bats-core/bats-core"
+
+[[tools]]
+id = "expect"
+label = "Expect"
+command = "expect"
+category = "ui-test"
+reason = "terminal interaction contract tests"
+profiles = ["extended"]
+verification_argv = ["expect", "-v"]
+apt_package = "expect"
+dnf_package = "expect"
+pacman_package = "expect"
+
+[[tools]]
+id = "pexpect"
+label = "Pexpect"
+command = ""
+category = "ui-test"
+reason = "Python terminal interaction tests"
+profiles = ["extended"]
+apt_package = "python3-pexpect"
+dnf_package = "python3-pexpect"
+pacman_package = "python-pexpect"
+
+# Specialized tools are visible to Customize but never selected by either
+# Install All profile. Service-heavy entries remain manual handoffs.
+
+[[tools]]
+id = "skopeo"
+label = "Skopeo"
+command = "skopeo"
+category = "specialized-container"
+reason = "daemonless container image inspection and transfer"
+apt_package = "skopeo"
+dnf_package = "skopeo"
+pacman_package = "skopeo"
+
+[[tools]]
+id = "ansible"
+label = "Ansible"
+command = "ansible"
+category = "specialized-automation"
+reason = "configuration automation when project evidence selects it"
+apt_package = "ansible"
+dnf_package = "ansible-core"
+pacman_package = "ansible-core"
+
+[[tools]]
+id = "argocd"
+label = "Argo CD CLI"
+command = "argocd"
+category = "specialized-automation"
+reason = "GitOps control when project evidence selects Argo CD"
+github_repo = "argoproj/argo-cd"
+
+[[tools]]
+id = "incus"
+label = "Incus"
+command = "incus"
+category = "specialized-container"
+reason = "system container isolation requiring service and group review"
+manual_only = true
+service_impact = true
+
+[[tools]]
+id = "playwright"
+label = "Playwright browsers"
+command = "playwright"
+category = "specialized-ui"
+reason = "repository-owned browser validation"
+manual_only = true
+
+[[tools]]
+id = "chromium"
+label = "Chromium"
+command = "chromium"
+category = "specialized-ui"
+reason = "browser runtime selected only by repository evidence"
+manual_only = true
+
+[[tools]]
+id = "clamav"
+label = "ClamAV"
+command = "clamscan"
+category = "specialized-security"
+reason = "malware scanning for artifact intake lanes"
+apt_package = "clamav"
+dnf_package = "clamav"
+dnf_repository = "epel"
+pacman_package = "clamav"
+
+[[tools]]
+id = "yara"
+label = "YARA"
+command = "yara"
+category = "specialized-security"
+reason = "rule-based artifact scanning"
+apt_package = "yara"
+dnf_package = "yara"
+dnf_repository = "epel"
+pacman_package = "yara"
+
+[[tools]]
+id = "modelscan"
+label = "ModelScan"
+command = "modelscan"
+category = "specialized-security"
+reason = "machine-learning model artifact inspection"
+python_package = "modelscan"
+
+[[tools]]
+id = "cargo_audit"
+label = "cargo-audit"
+command = "cargo-audit"
+category = "specialized-rust"
+reason = "Rust dependency vulnerability scanning"
+manual_only = true
+
+[[tools]]
+id = "cargo_deny"
+label = "cargo-deny"
+command = "cargo-deny"
+category = "specialized-rust"
+reason = "Rust dependency policy enforcement"
+manual_only = true
+
+[[tools]]
+id = "maestro"
+label = "Maestro"
+command = "maestro"
+category = "specialized-ui"
+reason = "mobile UI automation selected by project evidence"
+manual_only = true
+
+[[tools]]
+id = "cad"
+label = "CAD validation lane"
+command = ""
+category = "specialized-cad"
+reason = "mechanical CAD validation and export"
+manual_only = true
+
+[[tools]]
+id = "aide"
+label = "AIDE"
+command = "aide"
+category = "specialized-host"
+reason = "host integrity monitoring requiring operator policy"
+manual_only = true
+service_impact = true
+
+[[tools]]
+id = "host_mail"
+label = "Host mail notifications"
+command = ""
+category = "specialized-host"
+reason = "host alert delivery requiring operator configuration"
+manual_only = true
+service_impact = true
+
+[[tools]]
+id = "sonar"
+label = "Sonar tooling"
+command = "sonar-scanner"
+category = "specialized-service"
+reason = "service-backed analysis requiring separate capacity and trust review"
+manual_only = true
+service_impact = true
+
+[[tools]]
+id = "hardened_cluster"
+label = "Hardened cluster lanes"
+command = ""
+category = "specialized-service"
+reason = "STIG and RKE2 controls requiring a dedicated operator runbook"
+manual_only = true
+service_impact = true

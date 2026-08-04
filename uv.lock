@@ -326,7 +326,7 @@ wheels = [
 
 [[package]]
 name = "moradins-forge"
-version = "0.2.0b1"
+version = "0.2.0b3"
 source = { virtual = "." }
 dependencies = [
     { name = "flask" },

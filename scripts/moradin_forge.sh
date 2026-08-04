@@ -18,5 +18,5 @@ if command -v python >/dev/null 2>&1; then
   exec python "$REPO_ROOT/scripts/moradin_forge.py" "$@"
 fi
 
-printf '%s\n' "moradin-forge: Python 3 is required; write an install request from another host or install Python manually." >&2
+printf '%s\n' "moradin-forge: Python 3 is required; run the platform bootstrap to generate a reviewable prerequisite script." >&2
 exit 127

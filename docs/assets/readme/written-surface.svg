@@ -14,9 +14,9 @@
     <text x="339" y="168">Make, Node,</text>
     <text x="342" y="190">Python, CI</text>
     <rect x="512" y="110" width="156" height="92" rx="10" fill="#fef3c7" stroke="#d97706"/>
-    <text x="550" y="142" font-weight="700">Requests</text>
-    <text x="546" y="168">missing tools</text>
-    <text x="545" y="190">human-run only</text>
+    <text x="558" y="142" font-weight="700">Plans</text>
+    <text x="540" y="168">tools + blocks</text>
+    <text x="544" y="190">digest-bound</text>
     <rect x="714" y="110" width="126" height="92" rx="10" fill="#ede9fe" stroke="#7c3aed"/>
     <text x="742" y="142" font-weight="700">Reports</text>
     <text x="739" y="168">rollback and</text>

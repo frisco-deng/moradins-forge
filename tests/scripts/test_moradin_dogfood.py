@@ -11,6 +11,7 @@ import pytest
 from scripts import moradin_dogfood as dogfood
 from scripts.moradin_dogfood import (
     RELEASE_OWNERSHIP_MARKER,
+    RELEASE_VERSION,
     build_parser,
     create_deterministic_archive,
     prepare_owned_output,
@@ -62,10 +63,11 @@ def test_archive_is_deterministic_and_has_portable_root(tmp_path: Path) -> None:
     assert first_sha == second_sha
     with tarfile.open(first, "r:gz") as archive:
         names = archive.getnames()
-        readme = archive.getmember("moradins-forge-0.2.0-beta.1/README.md")
-        docs = archive.getmember("moradins-forge-0.2.0-beta.1/docs")
-    assert "moradins-forge-0.2.0-beta.1/README.md" in names
-    assert "moradins-forge-0.2.0-beta.1/docs/guide.md" in names
+        prefix = f"moradins-forge-{RELEASE_VERSION.removeprefix('v')}"
+        readme = archive.getmember(f"{prefix}/README.md")
+        docs = archive.getmember(f"{prefix}/docs")
+    assert f"{prefix}/README.md" in names
+    assert f"{prefix}/docs/guide.md" in names
     assert readme.mode == 0o644
     assert docs.mode == 0o755
 
@@ -216,9 +218,10 @@ def test_stable_release_artifacts_are_reproducible(
         evidence_path="../dogfood/operator-result.json",
     )
 
+    release_basename = f"moradins-forge-{RELEASE_VERSION.removeprefix('v')}"
     expected_names = {
-        "moradins-forge-0.2.0-beta.1.tar.gz",
-        "moradins-forge-0.2.0-beta.1.spdx.json",
+        f"{release_basename}.tar.gz",
+        f"{release_basename}.spdx.json",
         "release-manifest.json",
         "SHA256SUMS",
     }
@@ -227,6 +230,8 @@ def test_stable_release_artifacts_are_reproducible(
         assert (first / name).read_bytes() == (second / name).read_bytes()
     manifest = json.loads((first / "release-manifest.json").read_text(encoding="utf-8"))
     assert manifest["source_sha"] == source_sha
+    assert manifest["previous_release"] == "v0.2.0-beta.1"
+    assert manifest["rollback_command"] == "git switch --detach v0.2.0-beta.1"
     assert manifest["evidence"] == "../dogfood/operator-result.json"
-    with tarfile.open(first / "moradins-forge-0.2.0-beta.1.tar.gz", "r:gz") as archive:
+    with tarfile.open(first / f"{release_basename}.tar.gz", "r:gz") as archive:
         assert not any("/public_audit/" in name for name in archive.getnames())

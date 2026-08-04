@@ -35,8 +35,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = REPO_ROOT / "artifacts" / "dogfood"
 DOGFOOD_OWNERSHIP_MARKER = ".moradin-dogfood-output.json"
 RELEASE_OWNERSHIP_MARKER = ".moradin-release-output.json"
-RELEASE_VERSION = "v0.2.0-beta.1"
-ROLLBACK_ANCHOR = "v0.1.0-public-alpha"
+RELEASE_VERSION = "v0.2.0-beta.3"
+ROLLBACK_ANCHOR = "v0.2.0-beta.1"
 
 
 def utc_now() -> str:
@@ -397,7 +397,7 @@ def write_release_artifacts(
         "sbom": sbom,
         "public_export_file_count": copied_file_count,
         "data_schema_compatibility": "sidecar ownership record added; existing sidecars are preserved and require fresh adoption",
-        "rollback_command": "git switch --detach v0.1.0-public-alpha",
+        "rollback_command": f"git switch --detach {ROLLBACK_ANCHOR}",
         "evidence": evidence_path,
     }
     write_json(manifest_path, manifest)
@@ -517,7 +517,7 @@ def run_dogfood(
         },
         "rollback_reference": {
             "previous_release": ROLLBACK_ANCHOR,
-            "command": "git switch --detach v0.1.0-public-alpha",
+            "command": f"git switch --detach {ROLLBACK_ANCHOR}",
             "adoption_command": ".moradins-harness/scripts/moradin_forge.sh rollback --target . --approve",
         },
         "release_artifacts": release,
