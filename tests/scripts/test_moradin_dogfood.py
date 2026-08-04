@@ -230,6 +230,8 @@ def test_stable_release_artifacts_are_reproducible(
         assert (first / name).read_bytes() == (second / name).read_bytes()
     manifest = json.loads((first / "release-manifest.json").read_text(encoding="utf-8"))
     assert manifest["source_sha"] == source_sha
+    assert manifest["previous_release"] == "v0.2.0-beta.1"
+    assert manifest["rollback_command"] == "git switch --detach v0.2.0-beta.1"
     assert manifest["evidence"] == "../dogfood/operator-result.json"
     with tarfile.open(first / f"{release_basename}.tar.gz", "r:gz") as archive:
         assert not any("/public_audit/" in name for name in archive.getnames())

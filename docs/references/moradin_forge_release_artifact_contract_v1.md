@@ -55,6 +55,10 @@ excluded. The SPDX document derives versions from lockfiles and source commit
 time. The manifest records source SHA, previous release, hashes, rollback, and
 dogfood evidence.
 
+For beta.3, the previous release and normal release rollback target are
+`v0.2.0-beta.1`. The sidecar ownership lineage anchor is an independent
+adoption contract and remains unchanged.
+
 The same clean source commit and lockfiles must produce byte-identical archive,
 SPDX, manifest, and checksum files.
 
