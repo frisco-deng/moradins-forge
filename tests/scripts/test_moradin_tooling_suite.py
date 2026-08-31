@@ -59,6 +59,62 @@ def test_linux_cli_emits_one_json_result_on_stdout(
     assert captured.err == ""
 
 
+def test_noninteractive_airgap_preview_emits_digest_bound_approval_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from scripts import moradin_airgap as airgap
+
+    bundle_digest = "b" * 64
+    plan_digest = "c" * 64
+    monkeypatch.setattr(
+        airgap,
+        "preview_airgap_apply",
+        lambda *_args, **_kwargs: {
+            "plan": {},
+            "plan_sha256": plan_digest,
+            "bundle": {"stale": False},
+            "package_additions": [],
+            "package_upgrades": [],
+            "disk_bytes": 0,
+            "repository_actions": "offline-only",
+            "rollback": "sealed",
+        },
+    )
+    monkeypatch.setattr(suite, "suite_plan_markdown", lambda _plan: "plan")
+    monkeypatch.setattr(
+        airgap,
+        "apply_airgap_bundle",
+        lambda *_args, **_kwargs: pytest.fail("preview must not apply"),
+    )
+
+    code = suite.main(
+        [
+            "--forge-root",
+            str(tmp_path),
+            "airgap-apply",
+            "--bundle",
+            str(tmp_path / "kit.tar.gz"),
+            "--approve-bundle-sha256",
+            bundle_digest,
+        ]
+    )
+    captured = capsys.readouterr()
+    result = json.loads(captured.out)
+
+    assert code == 2
+    assert result == {
+        "version": "MoradinForgeToolingResultV2",
+        "status": "approval-required",
+        "mutation": False,
+        "bundle_sha256": bundle_digest,
+        "plan_sha256": plan_digest,
+        "required_argument": "--approve-offline-plan-sha256",
+    }
+    assert f"offline_plan_sha256: {plan_digest}" in captured.err
+
+
 def test_root_rpm_signature_verification_requires_verbose_signature_proof() -> None:
     verified = completed(
         stdout="Header V4 RSA/SHA256 Signature, key ID 350d275d: OK\n"

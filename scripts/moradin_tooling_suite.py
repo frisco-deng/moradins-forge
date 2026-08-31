@@ -6144,10 +6144,23 @@ def main(argv: list[str] | None = None) -> int:
                 plan_approval = args.approve_offline_plan_sha256
                 if not plan_approval:
                     if not sys.stdin.isatty() or not sys.stdout.isatty():
-                        raise ToolingSuiteError(
-                            "non-interactive air-gap apply requires "
-                            "--approve-offline-plan-sha256"
+                        print(
+                            json.dumps(
+                                {
+                                    "version": "MoradinForgeToolingResultV2",
+                                    "status": "approval-required",
+                                    "mutation": False,
+                                    "bundle_sha256": args.approve_bundle_sha256,
+                                    "plan_sha256": preview["plan_sha256"],
+                                    "required_argument": (
+                                        "--approve-offline-plan-sha256"
+                                    ),
+                                },
+                                indent=2,
+                                sort_keys=True,
+                            )
                         )
+                        return 2
                     if not _confirm(
                         "Apply this exact offline plan through the sealed sudo phase?"
                     ):
