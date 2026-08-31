@@ -69,7 +69,10 @@ arch)
 	fi
 	printf "Server = https://archive.archlinux.org/repos/%s/\$repo/os/\$arch\n" "$snapshot" \
 		>/etc/pacman.d/mirrorlist
-	"$manager_path" -Syu --needed --noconfirm \
+	# An Arch air-gap kit is a full, frozen transaction. Refresh twice and
+	# permit downgrades so this disposable resolver uses exactly the approved
+	# archive snapshot instead of retaining newer packages from its base image.
+	"$manager_path" -Syyuu --needed --noconfirm \
 		ca-certificates coreutils curl findutils git gnupg pacman-contrib python tar xz
 	;;
 *)
