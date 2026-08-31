@@ -26,23 +26,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Submit dependency graph
-        id: submit
-        # v0.0.7
-        uses: advanced-security/component-detection-dependency-submission-action@64db6d9d15fd76171b996ad40766f64ae4abae9a
-        continue-on-error: true
+        # v0.1.4
+        uses: advanced-security/component-detection-dependency-submission-action@31f25a8de68ae5ce2ca274bc28546a78683c15ce
         with:
-          detectors: UvLock=EnableIfDefaultOff
-      - name: Summarize dependency submission result
-        if: always()
-        shell: bash
-        env:
-          SUBMIT_OUTCOME: ${{ steps.submit.outcome }}
-        run: |
-          set -euo pipefail
-          if [ "${SUBMIT_OUTCOME}" = "success" ]; then
-            echo "[tooling] dependency submission completed"
-          else
-            echo "::warning::Dependency submission did not complete."
-            echo "[tooling] enable the repository Dependency Graph when snapshots should be enforced"
-            echo "[tooling] dependency_submission=soft-skip"
-          fi
+          detectorArgs: UvLock=EnableIfDefaultOff
