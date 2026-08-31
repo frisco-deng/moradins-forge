@@ -2,7 +2,7 @@
 title: "Moradin Forge Repo Operating Model V1"
 status: approved
 owner: moradin-forge
-last_reviewed: 2026-07-28
+last_reviewed: 2026-08-31
 source_refs:
   - ../../README.md
   - ../../AGENTS.md
@@ -29,7 +29,9 @@ branches in this repo.
 
 - Create public branches from `main` for normal product work.
 - Keep `main` protected with required `verify`, `security`, and
-  `submit-dependencies` checks.
+  `dependency-readiness` checks. Dependency submission remains a protected
+  `main` post-merge operation because its write permission cannot run on pull
+  requests.
 - Keep dependency graph, Dependabot security updates, secret scanning, and push
   protection enabled.
 - Run portability and sidecar leak checks before every public PR or release.
@@ -42,6 +44,8 @@ branches in this repo.
   has approved evidence and a human promotion gate.
 - Keep dependency submission enabled for the public repository, including the
   `uv.lock` detector.
+- Keep scheduled dependency/security auditing enabled even when hosted
+  Dependabot reports no open alerts.
 - Run the universal agent contract on Linux, macOS, and Windows CI runners.
   This platform test matrix does not activate signing or production promotion.
 
@@ -52,6 +56,7 @@ Use these gates before public PRs and releases:
 - `make test`
 - `make verify-ci`
 - `make verify-security`
+- `make dependency-readiness`
 - `make payload-validate`
 - `make payload-smoke`
 - `make forge-smoke`

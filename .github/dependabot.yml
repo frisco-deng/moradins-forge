@@ -10,6 +10,15 @@ updates:
     groups:
       uv-minor-patch:
         applies-to: version-updates
+        exclude-patterns:
+          - "ruff"
+        update-types:
+          - "minor"
+          - "patch"
+      ruff-policy:
+        applies-to: version-updates
+        patterns:
+          - "ruff"
         update-types:
           - "minor"
           - "patch"
@@ -23,6 +32,21 @@ updates:
     groups:
       npm-minor-patch:
         applies-to: version-updates
+        exclude-patterns:
+          - "playwright"
+          - "@playwright/*"
+          - "@vitest/browser-playwright"
+          - "vitest-browser-react"
+        update-types:
+          - "minor"
+          - "patch"
+      browser-stack:
+        applies-to: version-updates
+        patterns:
+          - "playwright"
+          - "@playwright/*"
+          - "@vitest/browser-playwright"
+          - "vitest-browser-react"
         update-types:
           - "minor"
           - "patch"
