@@ -529,7 +529,11 @@ def _run(
             env=selected_environment,
             cwd=cwd,
         )
-    except (OSError, subprocess.TimeoutExpired) as error:
+    except subprocess.TimeoutExpired as error:
+        raise ToolingSuiteError(
+            f"command timed out without completing: {argv[0]}"
+        ) from error
+    except OSError as error:
         raise ToolingSuiteError(
             f"command could not be executed safely: {argv[0]}"
         ) from error
@@ -1014,6 +1018,7 @@ def _package_versions(
         query = _run(
             [
                 "dnf",
+                "--cacheonly",
                 "--quiet",
                 "repoquery",
                 "--latest-limit",
@@ -1085,6 +1090,7 @@ def _package_sizes(
         result = _run(
             [
                 "dnf",
+                "--cacheonly",
                 "--quiet",
                 "repoquery",
                 "--latest-limit",
@@ -1118,7 +1124,7 @@ def _epel_enabled(
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> bool:
     result = _run(
-        ["dnf", "--quiet", "repolist", "--enabled", "epel"],
+        ["dnf", "--cacheonly", "--quiet", "repolist", "--enabled", "epel"],
         runner=runner,
     )
     return result.returncode == 0 and any(

@@ -85,6 +85,19 @@ def test_native_doctor_reports_all_blockers_without_network(
     assert report["doctor_sha256"] == native._digest(report, "doctor_sha256")
 
 
+def test_native_identity_falls_back_when_getuid_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delattr(native.os, "getuid", raising=False)
+    monkeypatch.setattr(native.getpass, "getuser", lambda: "portable-user")
+
+    first = native._identity_sha256("macos")
+    second = native._identity_sha256("macos")
+
+    assert first == second
+    assert first != native._identity_sha256("windows")
+
+
 def test_native_cli_emits_one_json_result_on_stdout(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

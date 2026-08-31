@@ -2,6 +2,13 @@
 set -euo pipefail
 
 umask 077
+builder_phase=initialization
+builder_failure() {
+	local status=$?
+	printf 'Air-gap builder failed during %s (exit %s).\n' "$builder_phase" "$status" >&2
+	exit "$status"
+}
+trap builder_failure ERR
 SAFE_PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 PATH=$SAFE_PATH
 export PATH
@@ -12,14 +19,16 @@ output=${2:?output path is required}
 forge_root=/forge
 
 trusted_manager() {
-	local candidate owner permissions
+	local candidate resolved owner permissions
 	for candidate in "$@"; do
-		[[ -x $candidate && ! -L $candidate ]] || continue
-		owner=$(stat -c '%u' -- "$candidate")
-		permissions=$(stat -c '%a' -- "$candidate")
+		[[ -x $candidate ]] || continue
+		resolved=$(readlink -f -- "$candidate") || continue
+		[[ -x $resolved && -f $resolved && ! -L $resolved ]] || continue
+		owner=$(stat -c '%u' -- "$resolved")
+		permissions=$(stat -c '%a' -- "$resolved")
 		permissions=${permissions: -3}
 		if [[ $owner == 0 ]] && (((8#$permissions & 8#022) == 0)); then
-			printf '%s\n' "$candidate"
+			printf '%s\n' "$resolved"
 			return 0
 		fi
 	done
@@ -36,6 +45,7 @@ if [[ ! -f $request || -L $request || -e $output ]]; then
 fi
 
 os_id=$(sed -n 's/^ID=//p' /etc/os-release | head -n 1 | tr -d '"')
+builder_phase=package-manager-bootstrap
 case $os_id in
 ubuntu | debian)
 	manager_path=$(trusted_manager /usr/bin/apt-get)
@@ -80,7 +90,10 @@ arch)
 	exit 2
 	;;
 esac
+MORADIN_FORGE_PACKAGE_MANAGER_PATH=$manager_path
+export MORADIN_FORGE_PACKAGE_MANAGER_PATH
 
+builder_phase=python-discovery
 python_path=$(command -v python3 || command -v python3.11 || true)
 if [[ -z $python_path ]]; then
 	printf '%s\n' 'The disposable builder could not provision Python.' >&2
@@ -110,6 +123,7 @@ cleanup() {
 	find "$scratch" -depth -delete 2>/dev/null || true
 }
 trap cleanup EXIT
+builder_phase=uv-bootstrap
 uv_archive=$scratch/uv.tar.gz
 curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
 	--output "$uv_archive" \
@@ -138,6 +152,7 @@ install -m 0755 -- "$extracted_uv" "$uv_path"
 python_install=$scratch/python
 UV_PYTHON_INSTALL_DIR=$python_install
 export UV_PYTHON_INSTALL_DIR
+builder_phase=python-bootstrap
 "$uv_path" python install --managed-python --no-config --install-dir "$python_install" 3.12.8
 managed_python=$("$uv_path" python find --no-config --no-python-downloads --python-preference only-managed 3.12.8)
 if [[ ! -x $managed_python ]]; then
@@ -151,6 +166,7 @@ PATH=$(dirname -- "$managed_python"):$(dirname -- "$uv_path"):$SAFE_PATH
 export PATH
 mkdir -p -- "$(dirname -- "$output")"
 
+builder_phase=target-payload-resolution
 "$managed_python" "$forge_root/scripts/moradin_airgap.py" \
 	_container-build --request "$request" --output "$output" --forge-root "$forge_root"
 

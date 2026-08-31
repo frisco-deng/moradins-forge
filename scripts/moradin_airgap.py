@@ -120,6 +120,17 @@ AIRGAP_MAX_PACKAGE_RECORDS = 100_000
 AIRGAP_MAX_APT_INDEX_BYTES = 512 * 1024 * 1024
 AIRGAP_SOURCE_DATE_EPOCH = 946684800
 REPO_ROOT = Path(__file__).resolve().parents[1]
+AIRGAP_SYSTEM_COMMAND_PATHS = {
+    "apt-get": ("/usr/bin/apt-get",),
+    "dpkg-deb": ("/usr/bin/dpkg-deb",),
+    "dpkg-query": ("/usr/bin/dpkg-query",),
+    "dnf": ("/usr/bin/dnf", "/usr/bin/dnf5"),
+    "pacman": ("/usr/bin/pacman",),
+    "pactree": ("/usr/bin/pactree",),
+    "rpm": ("/usr/bin/rpm",),
+    "rpmkeys": ("/usr/bin/rpmkeys",),
+}
+AIRGAP_PACKAGE_MANAGERS = {"apt-get", "dnf", "pacman"}
 APT_PACKAGE_STATE_FIELDS = (
     "package",
     "version",
@@ -314,6 +325,38 @@ def _normalized_target_facts(facts: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def _trusted_airgap_command(command: str) -> Path:
+    candidates = AIRGAP_SYSTEM_COMMAND_PATHS.get(command, ())
+    if not candidates:
+        raise AirgapError(f"air-gap command is not allowlisted: {command}")
+    known: set[Path] = set()
+    for raw in candidates:
+        try:
+            known.add(Path(raw).resolve(strict=True))
+        except OSError:
+            continue
+    bound = os.environ.get("MORADIN_FORGE_PACKAGE_MANAGER_PATH", "")
+    selected = (bound,) if command in AIRGAP_PACKAGE_MANAGERS and bound else candidates
+    for raw in selected:
+        path = Path(raw)
+        if not path.is_absolute():
+            continue
+        try:
+            resolved = path.resolve(strict=True)
+            metadata = resolved.stat()
+        except OSError:
+            continue
+        if (
+            resolved in known
+            and resolved.is_file()
+            and metadata.st_uid == 0
+            and not metadata.st_mode & 0o022
+            and os.access(resolved, os.X_OK)
+        ):
+            return resolved
+    raise AirgapError(f"verified absolute air-gap command is unavailable: {command}")
+
+
 def _run(
     argv: Sequence[str],
     *,
@@ -321,20 +364,36 @@ def _run(
     timeout: int = 120,
     cwd: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
+    arguments = list(argv)
+    if (
+        runner is subprocess.run
+        and arguments
+        and arguments[0] in AIRGAP_SYSTEM_COMMAND_PATHS
+    ):
+        arguments[0] = _trusted_airgap_command(arguments[0]).as_posix()
     environment = {
         "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
     }
-    return runner(
-        list(argv),
-        cwd=cwd,
-        env=environment,
-        text=True,
-        capture_output=True,
-        check=False,
-        timeout=timeout,
-    )
+    try:
+        return runner(
+            arguments,
+            cwd=cwd,
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise AirgapError(
+            f"air-gap command timed out without completing: {argv[0]}"
+        ) from error
+    except OSError as error:
+        raise AirgapError(
+            f"air-gap command could not be executed safely: {argv[0]}"
+        ) from error
 
 
 def _rpm_signature_verified(result: subprocess.CompletedProcess[str]) -> bool:
@@ -2018,7 +2077,10 @@ def run_target_builder(
         if output.is_dir() and not output.is_symlink():
             shutil.rmtree(output)
         detail = result.stderr.strip().splitlines()[-1] if result.stderr.strip() else ""
-        raise AirgapError(f"rootless target builder failed: {detail or 'unknown error'}")
+        raise AirgapError(
+            "rootless target builder failed: "
+            + (detail or f"sanitized exit status {result.returncode}")
+        )
     payload_root = output / "target-payload"
     resolved = _load_json_record(
         payload_root / "resolved.json",

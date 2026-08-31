@@ -77,7 +77,8 @@ def _digest(payload: dict[str, Any], field: str) -> str:
 
 
 def _identity_sha256(system: str) -> str:
-    identity = str(os.getuid()) if system == "macos" else getpass.getuser()
+    getuid = getattr(os, "getuid", None)
+    identity = str(getuid()) if callable(getuid) else getpass.getuser()
     return hashlib.sha256(f"moradin-forge\0{system}\0{identity}".encode()).hexdigest()
 
 
@@ -136,7 +137,10 @@ def _trusted_manager(system: str) -> Path | None:
     if not resolved.is_file() or not os.access(resolved, os.X_OK):
         return None
     if system == "macos":
-        if metadata.st_mode & 0o022 or metadata.st_uid not in {0, os.getuid()}:
+        getuid = getattr(os, "getuid", None)
+        if not callable(getuid):
+            return None
+        if metadata.st_mode & 0o022 or metadata.st_uid not in {0, getuid()}:
             return None
     elif resolved.suffix.lower() != ".exe" or not _windows_authenticode_valid(resolved):
         return None

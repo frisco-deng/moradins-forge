@@ -69,6 +69,25 @@ def completed(
     return SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
 
 
+def test_airgap_run_uses_verified_absolute_manager(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    true_path = Path("/usr/bin/true")
+    assert true_path.is_file()
+    seen: list[str] = []
+
+    def trusted(command: str) -> Path:
+        seen.append(command)
+        return true_path
+
+    monkeypatch.setattr(airgap, "_trusted_airgap_command", trusted)
+
+    result = airgap._run(["dnf", "--version"], runner=airgap.subprocess.run)
+
+    assert result.returncode == 0
+    assert seen == ["dnf"]
+
+
 def test_rpm_signature_verification_accepts_verbose_rsa_proof() -> None:
     verified = completed(
         stdout=(

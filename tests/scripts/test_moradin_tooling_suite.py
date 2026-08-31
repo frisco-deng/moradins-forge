@@ -775,6 +775,8 @@ def test_package_version_adapters(
 ) -> None:
     def runner(argv: list[str], **_kwargs: object) -> SimpleNamespace:
         key = argv[0]
+        if argv[0] == "dnf":
+            assert argv[1] == "--cacheonly"
         if argv[0] == "pacman":
             key = "pacman-Q" if argv[1] == "-Q" else "pacman-Si"
         return responses[key]
