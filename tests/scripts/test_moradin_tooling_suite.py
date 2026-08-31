@@ -33,6 +33,32 @@ def completed(
     return SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
 
 
+def test_linux_cli_emits_one_json_result_on_stdout(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    payload = {
+        "version": suite.DOCTOR_VERSION,
+        "status": "ready",
+        "platform": {},
+        "runtime": {},
+        "target_uid": 1000,
+        "blockers": [],
+        "warnings": [],
+        "network_accessed": False,
+        "privacy": "fixture",
+    }
+    payload["doctor_sha256"] = suite._record_digest(payload, "doctor_sha256")
+    monkeypatch.setattr(suite, "build_doctor_report", lambda: payload)
+
+    code = suite.main(["doctor", "--output", "json"])
+    captured = capsys.readouterr()
+
+    assert code == 0
+    assert json.loads(captured.out) == payload
+    assert captured.err == ""
+
+
 def test_root_rpm_signature_verification_requires_verbose_signature_proof() -> None:
     verified = completed(
         stdout="Header V4 RSA/SHA256 Signature, key ID 350d275d: OK\n"
@@ -483,6 +509,36 @@ def test_rehashed_plan_cannot_redirect_catalog_owned_release(
         )
 
 
+def test_plan_rejects_protected_container_state_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_planner: None,
+) -> None:
+    monkeypatch.setattr(suite, "host_facts", lambda: APT_FACTS)
+    monkeypatch.setattr(suite, "command_present", lambda _command: False)
+    plan = suite.build_suite_plan(
+        forge_root=suite.REPO_ROOT,
+        profile="custom",
+        include_tools=["git"],
+        facts=APT_FACTS,
+        resolver=fixed_resolver,
+    )
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(plan), encoding="utf-8")
+    monkeypatch.setattr(
+        suite,
+        "command_present",
+        lambda command: command == "docker",
+    )
+
+    with pytest.raises(suite.ToolingSuiteError, match="protected"):
+        suite.load_suite_plan(
+            path,
+            approved_sha256=plan["plan_sha256"],
+            forge_root=suite.REPO_ROOT,
+        )
+
+
 def test_arm64_plan_uses_arm64_resolution(
     isolated_planner: None,
 ) -> None:
@@ -905,9 +961,15 @@ def test_root_global_install_receipt_and_rollback(tmp_path: Path) -> None:
     assert receipt["receipt_sha256"] == suite._record_digest(receipt, "receipt_sha256")
     assert receipt["installer_manifest_sha256"] == suite.installer_manifest_sha256()
 
+    receipt_path = Path(receipt["receipt"])
+    legacy = json.loads(receipt_path.read_text(encoding="utf-8"))
+    legacy["version"] = suite.LEGACY_ROOT_RECEIPT_VERSION
+    legacy["receipt_sha256"] = suite._record_digest(legacy, "receipt_sha256")
+    receipt_path.write_text(json.dumps(legacy), encoding="utf-8")
+
     rollback = suite.rollback_root_receipt(
-        Path(receipt["receipt"]),
-        approved_sha256=receipt["receipt_sha256"],
+        receipt_path,
+        approved_sha256=legacy["receipt_sha256"],
         runner=runner,
         require_root=False,
         root_prefix=tmp_path / "root",

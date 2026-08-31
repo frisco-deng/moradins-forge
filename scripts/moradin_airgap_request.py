@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Python 3.9-compatible, disconnected AirgapRequestV1 generator."""
+"""Python 3.9-compatible disconnected V2 air-gap request generator."""
 
 from __future__ import print_function
 
@@ -26,11 +26,14 @@ SUPPORTED_TARGETS = {
 }
 INSTALLER_FILES = (
     "install/tooling-suite.sh",
+    "install/tooling-suite-macos.sh",
+    "install/tooling-suite.ps1",
     "install/airgap-container-build.sh",
     "scripts/moradin_airgap_request.py",
     "scripts/moradin_airgap_bootstrap.py",
     "scripts/moradin_airgap.py",
     "scripts/moradin_tooling_suite.py",
+    "scripts/moradin_tooling_suite_native.py",
     "scripts/moradin_workstation.py",
     "catalog/workstation-tools.toml",
 )
@@ -346,7 +349,7 @@ def build_request(args):
     inventory = installed_inventory(manager)
     apt_package_state = installed_apt_package_state() if manager == "apt" else []
     payload = {
-        "version": "AirgapRequestV1",
+        "version": "MoradinForgeAirgapRequestV2",
         "generated_at": datetime.datetime.now(
             datetime.timezone.utc
         ).replace(microsecond=0).isoformat(),

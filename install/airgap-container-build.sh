@@ -11,6 +11,21 @@ request=${1:?request path is required}
 output=${2:?output path is required}
 forge_root=/forge
 
+trusted_manager() {
+	local candidate owner permissions
+	for candidate in "$@"; do
+		[[ -x $candidate && ! -L $candidate ]] || continue
+		owner=$(stat -c '%u' -- "$candidate")
+		permissions=$(stat -c '%a' -- "$candidate")
+		permissions=${permissions: -3}
+		if [[ $owner == 0 ]] && (((8#$permissions & 8#022) == 0)); then
+			printf '%s\n' "$candidate"
+			return 0
+		fi
+	done
+	return 1
+}
+
 if [[ $EUID -ne 0 ]]; then
 	printf '%s\n' 'The disposable rootless builder container must initialize as container root.' >&2
 	exit 2
@@ -23,26 +38,30 @@ fi
 os_id=$(sed -n 's/^ID=//p' /etc/os-release | head -n 1 | tr -d '"')
 case $os_id in
 ubuntu | debian)
+	manager_path=$(trusted_manager /usr/bin/apt-get)
 	export DEBIAN_FRONTEND=noninteractive
-	apt-get update
-	apt-get install -y --no-install-recommends \
+	"$manager_path" update
+	"$manager_path" install -y --no-install-recommends \
 		ca-certificates coreutils curl dpkg-dev findutils git \
 		gnupg lz4 python3 tar xz-utils
 	;;
 fedora)
-	dnf install -y --setopt=install_weak_deps=False \
+	manager_path=$(trusted_manager /usr/bin/dnf /usr/bin/dnf5)
+	"$manager_path" install -y --setopt=install_weak_deps=False \
 		ca-certificates coreutils curl dnf-plugins-core findutils git gnupg2 \
 		python3 rpm-sign tar xz
 	;;
 rocky | almalinux | rhel)
-	dnf install -y --setopt=install_weak_deps=False \
+	manager_path=$(trusted_manager /usr/bin/dnf /usr/bin/dnf5)
+	"$manager_path" install -y --setopt=install_weak_deps=False \
 		ca-certificates coreutils-single curl-minimal dnf-plugins-core findutils \
 		git gnupg2 python3.11 rpm-sign tar xz
 	if python3.11 -c 'import json,sys; p=json.load(open(sys.argv[1], encoding="utf-8")); raise SystemExit("epel" not in p.get("approved_repositories", []))' "$request"; then
-		dnf install -y --setopt=install_weak_deps=False epel-release
+		"$manager_path" install -y --setopt=install_weak_deps=False epel-release
 	fi
 	;;
 arch)
+	manager_path=$(trusted_manager /usr/bin/pacman)
 	snapshot=${AIRGAP_ARCH_SNAPSHOT:-}
 	if [[ ! $snapshot =~ ^[0-9]{4}/[0-9]{2}/[0-9]{2}$ ]]; then
 		printf '%s\n' 'A frozen YYYY/MM/DD Arch snapshot is required.' >&2
@@ -50,7 +69,7 @@ arch)
 	fi
 	printf "Server = https://archive.archlinux.org/repos/%s/\$repo/os/\$arch\n" "$snapshot" \
 		>/etc/pacman.d/mirrorlist
-	pacman -Syu --needed --noconfirm \
+	"$manager_path" -Syu --needed --noconfirm \
 		ca-certificates coreutils curl findutils git gnupg pacman-contrib python tar xz
 	;;
 *)

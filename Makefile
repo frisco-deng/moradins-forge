@@ -1,4 +1,4 @@
-.PHONY: lint-py lint-md test test-py ui-test ui-build dependency-readiness payload-validate payload-smoke template-validate template-smoke forge-explain forge-readiness forge-brief forge-onboard forge-tooling-suite forge-tooling-suite-plan forge-tooling-suite-apply forge-tooling-suite-bundle forge-tooling-suite-verify forge-tooling-suite-rollback forge-airgap-request forge-airgap-build forge-airgap-verify forge-airgap-apply forge-tooling-plan forge-tooling-update-plan forge-tooling-apply forge-tooling-bundle forge-tooling-rollback forge-plan forge-adopt-dry-run forge-adopt forge-verify forge-upgrade-plan forge-upgrade forge-upgrade-rollback forge-rollback forge-smoke forge-dogfood-smoke forge-release-artifacts generate-readme-figures verify-readme-figures public-export public-portability-check
+.PHONY: lint-py lint-md test test-py ui-test ui-build dependency-readiness payload-validate payload-smoke template-validate template-smoke forge-explain forge-readiness forge-brief forge-onboard forge-tooling-suite forge-tooling-suite-doctor forge-tooling-suite-status forge-tooling-suite-plan forge-tooling-suite-apply forge-tooling-suite-bundle forge-tooling-suite-verify forge-tooling-suite-rollback forge-airgap-request forge-airgap-build forge-airgap-verify forge-airgap-apply forge-tooling-plan forge-tooling-update-plan forge-tooling-apply forge-tooling-bundle forge-tooling-rollback forge-plan forge-adopt-dry-run forge-adopt forge-verify forge-upgrade-plan forge-upgrade forge-upgrade-rollback forge-rollback forge-smoke forge-dogfood-smoke forge-release-artifacts generate-readme-figures verify-readme-figures public-export public-portability-check
 
 PUBLIC_EXPORT_DIR ?= /tmp/moradin-forge-public-export-check
 PUBLIC_SIDECAR_SMOKE_DIR ?= /tmp/moradin-forge-sidecar-smoke-check
@@ -68,6 +68,12 @@ forge-onboard:
 
 forge-tooling-suite:
 	install/tooling-suite.sh
+
+forge-tooling-suite-doctor:
+	install/tooling-suite.sh doctor --output summary
+
+forge-tooling-suite-status:
+	install/tooling-suite.sh status --progress plain
 
 forge-tooling-suite-plan:
 	@if [ -z "$(OUTPUT)" ]; then echo "Usage: make forge-tooling-suite-plan OUTPUT=<plan.json> [PROFILE=practical|extended] [SELECT='tool ...']"; exit 1; fi

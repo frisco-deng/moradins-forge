@@ -14,7 +14,7 @@ import tempfile
 from pathlib import Path
 
 
-LOCK_VERSION = "AirgapLockV1"
+LOCK_VERSION = "MoradinForgeAirgapLockV2"
 RUNTIME_MANIFEST_VERSION = "MoradinForgePythonRuntimeManifestV1"
 MAX_FILE_BYTES = 512 * 1024 * 1024
 MAX_TOTAL_BYTES = 8 * 1024 * 1024 * 1024

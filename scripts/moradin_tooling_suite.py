@@ -75,16 +75,32 @@ except ModuleNotFoundError:  # pragma: no cover - direct script execution
     )
 
 
-SUITE_PLAN_VERSION = "MoradinForgeToolingSuitePlanV1"
-SUITE_RECEIPT_VERSION = "MoradinForgeToolingSuiteReceiptV1"
-ROOT_RECEIPT_VERSION = "MoradinForgeRootToolingReceiptV1"
-SUITE_ROLLBACK_VERSION = "MoradinForgeToolingSuiteRollbackV1"
-SUITE_BUNDLE_VERSION = "MoradinForgeToolingSuiteBundleV1"
+CATALOG_VERSION = "MoradinForgeToolCatalogV2"
+DOCTOR_VERSION = "MoradinForgeToolingDoctorV1"
+SUITE_PLAN_VERSION = "MoradinForgeToolingSuitePlanV2"
+CHECKPOINT_VERSION = "MoradinForgeToolingCheckpointV1"
+SUITE_RECEIPT_VERSION = "MoradinForgeToolingSuiteReceiptV2"
+ROOT_RECEIPT_VERSION = "MoradinForgeRootToolingReceiptV2"
+SUITE_ROLLBACK_VERSION = "MoradinForgeToolingSuiteRollbackV2"
+SUITE_BUNDLE_VERSION = "MoradinForgeToolingSuiteBundleV2"
+LEGACY_SUITE_RECEIPT_VERSION = "MoradinForgeToolingSuiteReceiptV1"
+LEGACY_ROOT_RECEIPT_VERSION = "MoradinForgeRootToolingReceiptV1"
 PLAN_TTL = timedelta(hours=24)
 SAFE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 SUPPORTED_PROFILES = {"practical", "extended", "custom"}
 SUPPORTED_ARCHES = {"amd64", "arm64"}
 SUPPORTED_MANAGERS = {"apt", "dnf", "pacman"}
+SYSTEM_COMMAND_PATHS = {
+    "apt-cache": ("/usr/bin/apt-cache",),
+    "apt-get": ("/usr/bin/apt-get",),
+    "dpkg": ("/usr/bin/dpkg",),
+    "dpkg-deb": ("/usr/bin/dpkg-deb",),
+    "dpkg-query": ("/usr/bin/dpkg-query",),
+    "dnf": ("/usr/bin/dnf", "/usr/bin/dnf5"),
+    "rpm": ("/usr/bin/rpm",),
+    "pacman": ("/usr/bin/pacman",),
+    "pactree": ("/usr/bin/pactree",),
+}
 MAX_ASSET_BYTES = 512 * 1024 * 1024
 MAX_ARCHIVE_MEMBERS = 2048
 BOOTSTRAP_UV_VERSION = "0.10.12"
@@ -95,11 +111,14 @@ BOOTSTRAP_UV_BINARY_SHA256 = {
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INSTALLER_FILES = (
     Path("install/tooling-suite.sh"),
+    Path("install/tooling-suite-macos.sh"),
+    Path("install/tooling-suite.ps1"),
     Path("install/airgap-container-build.sh"),
     Path("scripts/moradin_airgap_request.py"),
     Path("scripts/moradin_airgap_bootstrap.py"),
     Path("scripts/moradin_airgap.py"),
     Path("scripts/moradin_tooling_suite.py"),
+    Path("scripts/moradin_tooling_suite_native.py"),
     Path("scripts/moradin_workstation.py"),
     Path("catalog/workstation-tools.toml"),
 )
@@ -116,11 +135,14 @@ from pathlib import Path
 
 FILES = (
     "install/tooling-suite.sh",
+    "install/tooling-suite-macos.sh",
+    "install/tooling-suite.ps1",
     "install/airgap-container-build.sh",
     "scripts/moradin_airgap_request.py",
     "scripts/moradin_airgap_bootstrap.py",
     "scripts/moradin_airgap.py",
     "scripts/moradin_tooling_suite.py",
+    "scripts/moradin_tooling_suite_native.py",
     "scripts/moradin_workstation.py",
     "catalog/workstation-tools.toml",
 )
@@ -484,6 +506,9 @@ def _run(
     env: dict[str, str] | None = None,
     cwd: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
+    arguments = list(argv)
+    if runner is subprocess.run and arguments and arguments[0] in SYSTEM_COMMAND_PATHS:
+        arguments[0] = _trusted_system_command(arguments[0]).as_posix()
     selected_environment = (
         env
         if env is not None
@@ -496,7 +521,7 @@ def _run(
     )
     try:
         return runner(
-            list(argv),
+            arguments,
             check=False,
             capture_output=True,
             text=True,
@@ -508,6 +533,36 @@ def _run(
         raise ToolingSuiteError(
             f"command could not be executed safely: {argv[0]}"
         ) from error
+
+
+def _trusted_system_command(command: str) -> Path:
+    """Resolve a package command to a root-owned, immutable absolute path."""
+    candidates = SYSTEM_COMMAND_PATHS.get(command, ())
+    for raw in candidates:
+        path = Path(raw)
+        try:
+            resolved = path.resolve(strict=True)
+            metadata = resolved.stat()
+        except OSError:
+            continue
+        if (
+            resolved.is_file()
+            and metadata.st_uid == 0
+            and not metadata.st_mode & 0o022
+            and os.access(resolved, os.X_OK)
+        ):
+            return resolved
+    raise ToolingSuiteError(f"verified absolute command is unavailable: {command}")
+
+
+def _known_system_command_paths(command: str) -> set[str]:
+    paths = set(SYSTEM_COMMAND_PATHS.get(command, ()))
+    for raw in SYSTEM_COMMAND_PATHS.get(command, ()):
+        try:
+            paths.add(Path(raw).resolve(strict=True).as_posix())
+        except OSError:
+            continue
+    return paths
 
 
 def _rpm_signature_verified(result: subprocess.CompletedProcess[str]) -> bool:
@@ -582,13 +637,102 @@ def host_facts(
             ]
         ).encode("utf-8")
     ).hexdigest()
+    manager_command = {"apt": "apt-get", "dnf": "dnf", "pacman": "pacman"}[manager]
+    manager_path = _trusted_system_command(manager_command).as_posix()
     return {
         "system": "linux",
         "arch": arch,
         "os_id": release.get("ID", "unknown").lower(),
         "os_version": release.get("VERSION_ID", "unknown"),
         "package_manager": manager,
+        "package_manager_path": manager_path,
         "host_fingerprint_sha256": fingerprint,
+    }
+
+
+def build_doctor_report(
+    *,
+    facts: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Aggregate network-free installer blockers without mutating the host."""
+    blockers: list[dict[str, str]] = []
+    warnings: list[dict[str, str]] = []
+    try:
+        detected = dict(facts or host_facts())
+    except ToolingSuiteError as error:
+        detected = {
+            "system": platform.system().lower(),
+            "arch": normalized_arch(),
+            "os_id": "unsupported",
+            "os_version": "unsupported",
+            "package_manager": "",
+            "package_manager_path": "",
+            "host_fingerprint_sha256": "",
+        }
+        blockers.append({"id": "platform", "reason": str(error)})
+
+    manager = str(detected.get("package_manager", ""))
+    manager_path = str(detected.get("package_manager_path", ""))
+    if manager in SUPPORTED_MANAGERS and not manager_path:
+        manager_command = {"apt": "apt-get", "dnf": "dnf", "pacman": "pacman"}[manager]
+        try:
+            manager_path = _trusted_system_command(manager_command).as_posix()
+            detected["package_manager_path"] = manager_path
+        except ToolingSuiteError as error:
+            blockers.append({"id": "package-manager", "reason": str(error)})
+    if os.geteuid() == 0:
+        blockers.append(
+            {"id": "target-user", "reason": "run the suite as the target user, not root"}
+        )
+    home = Path.home()
+    home_writable = (
+        os.access(home, os.W_OK)
+        if home.exists()
+        else home.parent.is_dir() and os.access(home.parent, os.W_OK)
+    )
+    if not home_writable:
+        blockers.append(
+            {"id": "user-home", "reason": "the target user home is not writable"}
+        )
+    if any(command_present(item) for item in ("docker", "podman")):
+        warnings.append(
+            {
+                "id": "container-state",
+                "reason": "an existing container engine will be preserved",
+            }
+        )
+    runtime = {
+        "python": ".".join(str(part) for part in sys.version_info[:3]),
+        "implementation": platform.python_implementation(),
+        "minimum": "3.11",
+    }
+    if sys.version_info < (3, 11):
+        blockers.append({"id": "runtime", "reason": "Python 3.11 or newer is required"})
+    payload: dict[str, Any] = {
+        "version": DOCTOR_VERSION,
+        "status": "blocked" if blockers else "ready",
+        "platform": detected,
+        "runtime": runtime,
+        "target_uid": os.getuid(),
+        "blockers": blockers,
+        "warnings": warnings,
+        "network_accessed": False,
+        "privacy": "No workspace contents, hostnames, user paths, credentials, or telemetry are recorded.",
+    }
+    payload["doctor_sha256"] = _record_digest(payload, "doctor_sha256")
+    return payload
+
+
+def _protected_state(facts: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "container_engines": sorted(
+            name for name in ("docker", "podman") if command_present(name)
+        ),
+        "package_manager": str(facts["package_manager"]),
+        "package_manager_path": str(facts["package_manager_path"]),
+        "target_uid": os.getuid(),
+        "path_sha256": sha256_bytes(os.environ.get("PATH", "").encode()),
+        "kernel_sha256": sha256_bytes(platform.release().encode()),
     }
 
 
@@ -1470,6 +1614,7 @@ def build_suite_plan(
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     resolver: Callable[..., dict[str, Any]] = resolve_latest_version,
 ) -> dict[str, Any]:
+    injected_facts = facts is not None
     facts = dict(facts or host_facts())
     if facts.get("system") != "linux" or facts.get("arch") not in SUPPORTED_ARCHES:
         raise ToolingSuiteError(
@@ -1478,6 +1623,15 @@ def build_suite_plan(
     manager = str(facts.get("package_manager", ""))
     if manager not in SUPPORTED_MANAGERS:
         raise ToolingSuiteError("tooling-suite plan has an unsupported package manager")
+    if not facts.get("package_manager_path"):
+        manager_command = {"apt": "apt-get", "dnf": "dnf", "pacman": "pacman"}[manager]
+        if injected_facts:
+            facts["package_manager_path"] = SYSTEM_COMMAND_PATHS[manager_command][0]
+        else:
+            facts["package_manager_path"] = _trusted_system_command(
+                manager_command
+            ).as_posix()
+    doctor = build_doctor_report(facts=facts)
     approved, repositories, capabilities = _workspace_evidence(workspaces)
     specs = _selected_specs(
         profile,
@@ -1569,6 +1723,11 @@ def build_suite_plan(
             "required tools lack a verified automatic installation: "
             + ", ".join(required_manual)
         )
+    if doctor["status"] != "ready":
+        status = "blocked"
+        blockers.extend(
+            f"doctor/{item['id']}: {item['reason']}" for item in doctor["blockers"]
+        )
     python_lock = build_python_tool_lock(
         [
             {
@@ -1615,6 +1774,52 @@ def build_suite_plan(
         if row["install_action"]["kind"] == "system-package"
         and not int(row["resolved"].get("installed_size", 0) or 0)
     )
+    transitions = [
+        {
+            "tool_id": row["id"],
+            "from": row["installed_version"] or "absent",
+            "to": str(
+                row["install_action"].get("version")
+                or row["resolved"].get("version")
+                or row["status"]
+            ),
+            "action": row["install_action"]["kind"],
+            "rollback": row["install_action"].get("rollback_closure", "not-mutating"),
+        }
+        for row in rows
+    ]
+    package_simulation = [
+        {
+            "tool_id": row["id"],
+            "manager": row["install_action"]["manager"],
+            "package": row["install_action"]["package"],
+            "version": row["install_action"]["version"],
+            "operation": row["status"],
+        }
+        for row in rows
+        if row["install_action"]["kind"] == "system-package"
+    ]
+    prepared_assets = sorted(
+        [
+            {
+                "tool_id": row["id"],
+                "sha256": row["resolved"]["sha256"],
+                "size": int(row["resolved"].get("asset_size", 0) or 0),
+            }
+            for row in rows
+            if row["install_action"]["kind"] in {"forge-user", "forge-global"}
+        ]
+        + [
+            {
+                "tool_id": f"python:{asset['package']}",
+                "sha256": asset["sha256"],
+                "size": int(asset.get("size", 0) or 0),
+            }
+            for asset in python_lock.get("assets", [])
+        ],
+        key=lambda item: item["tool_id"],
+    )
+    protected_state = _protected_state(facts)
     payload: dict[str, Any] = {
         "version": SUITE_PLAN_VERSION,
         "generated_at": now.isoformat(),
@@ -1626,6 +1831,10 @@ def build_suite_plan(
         "container_engine": container_engine,
         "platform": facts,
         "target_uid": os.getuid(),
+        "doctor": doctor,
+        "doctor_sha256": doctor["doctor_sha256"],
+        "catalog_version": CATALOG_VERSION,
+        "runtime": doctor["runtime"],
         "approved_workspaces": [path.as_posix() for path in approved],
         "repositories": repositories,
         "capabilities": sorted(capabilities),
@@ -1636,6 +1845,31 @@ def build_suite_plan(
         "tools": rows,
         "python_tool_lock": python_lock,
         "root_actions": root_actions,
+        "package_simulation": package_simulation,
+        "transition_matrix": transitions,
+        "prepared_assets": prepared_assets,
+        "protected_state_sha256": sha256_bytes(
+            canonical_json_bytes(protected_state)
+        ),
+        "rollback_closure": {
+            "root_actions": [
+                {
+                    "tool_id": action["tool_id"],
+                    "closure": action.get("rollback_closure", ""),
+                }
+                for action in root_actions
+            ],
+            "user_actions": [
+                {
+                    "tool_id": row["id"],
+                    "closure": row["install_action"].get(
+                        "rollback_closure", "atomic-version-switch"
+                    ),
+                }
+                for row in rows
+                if row["install_action"]["kind"] in {"forge-user", "user-local"}
+            ],
+        },
         "estimated_disk": {
             "verified_download_bytes": verified_download_bytes,
             "system_package_download_bytes": package_download_bytes,
@@ -1741,8 +1975,39 @@ def validate_suite_plan_contents(plan: dict[str, Any]) -> None:
         or platform_row.get("system") != "linux"
         or platform_row.get("arch") not in SUPPORTED_ARCHES
         or platform_row.get("package_manager") not in SUPPORTED_MANAGERS
+        or platform_row.get("package_manager_path")
+        not in set().union(
+            *(
+                _known_system_command_paths(command)
+                for command in ("apt-get", "dnf", "pacman")
+            )
+        )
     ):
         raise ToolingSuiteError("tooling-suite platform binding is unsupported")
+    doctor = plan.get("doctor", {})
+    if (
+        plan.get("catalog_version") != CATALOG_VERSION
+        or not isinstance(doctor, dict)
+        or doctor.get("version") != DOCTOR_VERSION
+        or doctor.get("doctor_sha256") != _record_digest(doctor, "doctor_sha256")
+        or plan.get("doctor_sha256") != doctor.get("doctor_sha256")
+        or plan.get("runtime") != doctor.get("runtime")
+    ):
+        raise ToolingSuiteError("tooling-suite doctor or catalog binding is malformed")
+    for field in (
+        "package_simulation",
+        "transition_matrix",
+        "prepared_assets",
+    ):
+        if not isinstance(plan.get(field), list):
+            raise ToolingSuiteError(f"tooling-suite {field} binding is malformed")
+    if (
+        not re.fullmatch(
+            r"[0-9a-f]{64}", str(plan.get("protected_state_sha256", ""))
+        )
+        or not isinstance(plan.get("rollback_closure"), dict)
+    ):
+        raise ToolingSuiteError("tooling-suite protected state binding is malformed")
     if plan.get("profile") not in SUPPORTED_PROFILES:
         raise ToolingSuiteError("tooling-suite profile is unsupported")
     if plan.get("status") not in {
@@ -1966,7 +2231,7 @@ def validate_suite_plan_contents(plan: dict[str, Any]) -> None:
     if offline is not None:
         if (
             not isinstance(offline, dict)
-            or offline.get("version") != "AirgapOfflinePlanV1"
+            or offline.get("version") != "MoradinForgeAirgapOfflinePlanV2"
             or offline.get("network") != "disabled"
             or not re.fullmatch(
                 r"[0-9a-f]{64}", str(offline.get("bundle_sha256", ""))
@@ -2159,13 +2424,25 @@ def load_suite_plan(
             "installer implementation changed after the plan was approved"
         )
     if require_current_host:
-        current = host_facts()
+        current = dict(host_facts())
         expected = plan.get("platform", {})
+        if not current.get("package_manager_path"):
+            current_manager = str(current.get("package_manager", ""))
+            manager_command = {
+                "apt": "apt-get",
+                "dnf": "dnf",
+                "pacman": "pacman",
+            }.get(current_manager, "")
+            if manager_command:
+                current["package_manager_path"] = _trusted_system_command(
+                    manager_command
+                ).as_posix()
         for key in (
             "system",
             "arch",
             "os_id",
             "package_manager",
+            "package_manager_path",
             "host_fingerprint_sha256",
         ):
             if expected.get(key) != current.get(key):
@@ -2175,6 +2452,11 @@ def load_suite_plan(
         if int(plan.get("target_uid", -1)) != os.getuid():
             raise ToolingSuiteError(
                 "tooling-suite plan does not match the invoking user"
+            )
+        protected = sha256_bytes(canonical_json_bytes(_protected_state(current)))
+        if plan.get("protected_state_sha256") != protected:
+            raise ToolingSuiteError(
+                "tooling-suite protected container, provider, PATH, or kernel state changed"
             )
     validate_suite_plan_contents(plan)
     return plan
@@ -2714,6 +2996,123 @@ def _user_roots() -> tuple[Path, Path, Path]:
     data = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
     state = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state"))
     return data / "moradins-forge", state / "moradins-forge", Path.home() / ".local/bin"
+
+
+def _checkpoint_root(plan_sha256: str) -> Path:
+    if not re.fullmatch(r"[0-9a-f]{64}", plan_sha256):
+        raise ToolingSuiteError("checkpoint plan digest is malformed")
+    return _user_roots()[1] / "checkpoints" / plan_sha256
+
+
+def _write_checkpoint(
+    plan: dict[str, Any],
+    component: str,
+    *,
+    status: str,
+    evidence: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not re.fullmatch(r"[a-z][a-z0-9-]{1,63}", component):
+        raise ToolingSuiteError("checkpoint component is malformed")
+    if status not in {"pass", "fail"}:
+        raise ToolingSuiteError("checkpoint status is malformed")
+    payload: dict[str, Any] = {
+        "version": CHECKPOINT_VERSION,
+        "generated_at": utc_now(),
+        "plan_sha256": plan["plan_sha256"],
+        "component": component,
+        "status": status,
+        "catalog_sha256": plan["catalog_sha256"],
+        "installer_manifest_sha256": plan["installer_manifest_sha256"],
+        "protected_state_sha256": plan["protected_state_sha256"],
+        "evidence": evidence or {},
+    }
+    payload["checkpoint_sha256"] = _record_digest(
+        payload, "checkpoint_sha256"
+    )
+    root = _checkpoint_root(str(plan["plan_sha256"]))
+    root.mkdir(parents=True, exist_ok=True)
+    destination = root / f"{component}.json"
+    temporary = root / f".{component}.json.new"
+    write_json(temporary, payload)
+    os.replace(temporary, destination)
+    return payload
+
+
+def _load_checkpoint(
+    plan: dict[str, Any], component: str
+) -> dict[str, Any] | None:
+    path = _checkpoint_root(str(plan["plan_sha256"])) / f"{component}.json"
+    if not path.exists():
+        return None
+    if path.is_symlink() or not path.is_file():
+        raise ToolingSuiteError("checkpoint must be a regular file")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ToolingSuiteError("checkpoint is invalid") from error
+    if (
+        not isinstance(payload, dict)
+        or payload.get("version") != CHECKPOINT_VERSION
+        or payload.get("plan_sha256") != plan["plan_sha256"]
+        or payload.get("component") != component
+        or payload.get("catalog_sha256") != plan["catalog_sha256"]
+        or payload.get("installer_manifest_sha256")
+        != plan["installer_manifest_sha256"]
+        or payload.get("protected_state_sha256")
+        != plan["protected_state_sha256"]
+        or payload.get("checkpoint_sha256")
+        != _record_digest(payload, "checkpoint_sha256")
+    ):
+        raise ToolingSuiteError("checkpoint binding is invalid")
+    return payload
+
+
+def _emit_progress(mode: str, event: str, **fields: object) -> None:
+    selected = "plain" if mode == "auto" and sys.stderr.isatty() else mode
+    if selected in {"off", "auto"}:
+        return
+    payload = {"version": "MoradinForgeToolingProgressV1", "event": event, **fields}
+    if selected == "json":
+        print(json.dumps(payload, sort_keys=True), file=sys.stderr, flush=True)
+    else:
+        detail = " ".join(f"{key}={value}" for key, value in fields.items())
+        print(f"[moradin-forge] {event}{' ' + detail if detail else ''}", file=sys.stderr, flush=True)
+
+
+def tooling_suite_status() -> dict[str, Any]:
+    _data_root, state_root, _bin_root = _user_roots()
+    checkpoints: list[dict[str, str]] = []
+    checkpoint_base = state_root / "checkpoints"
+    if checkpoint_base.is_dir() and not checkpoint_base.is_symlink():
+        for path in sorted(checkpoint_base.glob("*/*.json"))[-200:]:
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if isinstance(payload, dict) and payload.get("version") == CHECKPOINT_VERSION:
+                checkpoints.append(
+                    {
+                        "plan_sha256": str(payload.get("plan_sha256", "")),
+                        "component": str(payload.get("component", "")),
+                        "status": str(payload.get("status", "")),
+                    }
+                )
+    latest_receipt = ""
+    receipt_status = "missing"
+    try:
+        receipt_path, receipt = _load_user_receipt("latest")
+        latest_receipt = receipt_path.parent.name
+        receipt_status = str(receipt.get("status", "unknown"))
+    except ToolingSuiteError:
+        pass
+    return {
+        "version": "MoradinForgeToolingStatusV1",
+        "status": "ready" if receipt_status == "pass" else "attention",
+        "latest_receipt": latest_receipt,
+        "latest_receipt_status": receipt_status,
+        "checkpoints": checkpoints,
+        "privacy": "Status contains digests, component names, and outcomes only.",
+    }
 
 
 def _trusted_user_uv(bin_root: Path, owned_root: Path) -> Path:
@@ -4123,6 +4522,13 @@ def apply_root_transaction(
                 "dependency drift was retained by design: "
                 + ", ".join(dependency_drift)
             ) from error
+        for failed_root in (receipt_root, backup_root):
+            if (
+                failed_root.is_dir()
+                and not failed_root.is_symlink()
+                and failed_root.resolve().parent == failed_root.parent.resolve()
+            ):
+                shutil.rmtree(failed_root)
         raise
     receipt: dict[str, Any] = {
         "version": ROOT_RECEIPT_VERSION,
@@ -4306,7 +4712,10 @@ def rollback_root_receipt(
         receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise ToolingSuiteError("root receipt is invalid") from error
-    if not isinstance(receipt, dict) or receipt.get("version") != ROOT_RECEIPT_VERSION:
+    if not isinstance(receipt, dict) or receipt.get("version") not in {
+        ROOT_RECEIPT_VERSION,
+        LEGACY_ROOT_RECEIPT_VERSION,
+    }:
         raise ToolingSuiteError("root receipt version is unsupported")
     recorded = str(receipt.get("receipt_sha256", ""))
     if recorded != approved_sha256 or recorded != _record_digest(
@@ -4450,6 +4859,30 @@ def _invoke_root_rollback(
     return payload
 
 
+def _completed_receipt_for_plan(plan_sha256: str) -> tuple[Path, dict[str, Any]] | None:
+    _data_root, state_root, _bin_root = _user_roots()
+    for path in reversed(sorted((state_root / "receipts").glob("*/receipt.json"))):
+        if path.is_symlink() or not path.is_file():
+            continue
+        try:
+            receipt = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if (
+            isinstance(receipt, dict)
+            and receipt.get("version") in {
+                SUITE_RECEIPT_VERSION,
+                LEGACY_SUITE_RECEIPT_VERSION,
+            }
+            and receipt.get("plan_sha256") == plan_sha256
+            and receipt.get("status") == "pass"
+            and receipt.get("receipt_sha256")
+            == _record_digest(receipt, "receipt_sha256")
+        ):
+            return path, receipt
+    return None
+
+
 def apply_suite_plan(
     plan_path: Path,
     *,
@@ -4458,6 +4891,7 @@ def apply_suite_plan(
     downloader: Callable[[str, Path], None] = _download_asset,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     root_applier: Callable[[dict[str, Any], Path], dict[str, Any]] | None = None,
+    progress: str = "off",
 ) -> dict[str, Any]:
     plan = load_suite_plan(
         plan_path,
@@ -4468,10 +4902,26 @@ def apply_suite_plan(
         raise ToolingSuiteError(
             f"tooling-suite plan is not applicable: {plan['status']}"
         )
+    completed = _completed_receipt_for_plan(str(plan["plan_sha256"]))
+    if completed is not None:
+        receipt_path, receipt = completed
+        verification = verify_suite_receipt(receipt_path.as_posix(), runner=runner)
+        if verification["status"] != "pass":
+            raise ToolingSuiteError(
+                "completed plan receipt no longer verifies; use the receipt rollback path"
+            )
+        _emit_progress(progress, "verified-completed-plan", plan_sha256=plan["plan_sha256"])
+        return {
+            **receipt,
+            "receipt": receipt_path.as_posix(),
+            "idempotent_reapply": True,
+            "verification": verification,
+        }
     data_root, state_root, bin_root = _user_roots()
     generation = str(plan["plan_sha256"])[:16]
     cache_base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
     stage_root = cache_base / "moradins-forge" / "tooling-suite" / generation
+    _emit_progress(progress, "staging", plan_sha256=plan["plan_sha256"])
     if stage_root.exists():
         validate_staged_assets(stage_root, plan)
     else:
@@ -4481,34 +4931,95 @@ def apply_suite_plan(
             forge_root=forge_root,
             downloader=downloader,
         )
+    _write_checkpoint(
+        plan,
+        "assets-staged",
+        status="pass",
+        evidence={"stage_manifest_sha256": sha256_file(stage_root / "stage-manifest.json")},
+    )
+    _emit_progress(progress, "staged", plan_sha256=plan["plan_sha256"])
     user_operations: list[dict[str, Any]] = []
     generation_root = data_root / "tools" / generation
     root_receipt: dict[str, Any] | None = None
+    resumed_components: list[str] = []
+    phase = "user-actions"
     try:
         if plan["status"] == "ready":
-            user_operations, generation_root = _apply_user_actions(
-                plan,
-                stage_root,
-                runner=runner,
-            )
-            _verify_user_actions(plan, runner=runner)
+            user_checkpoint = _load_checkpoint(plan, "user-actions")
+            if user_checkpoint and user_checkpoint.get("status") == "pass":
+                evidence = user_checkpoint.get("evidence", {})
+                user_operations = list(evidence.get("operations", []))
+                if not generation_root.is_dir() or generation_root.is_symlink():
+                    raise ToolingSuiteError(
+                        "user checkpoint exists but its versioned generation is unavailable"
+                    )
+                _verify_user_actions(plan, runner=runner)
+                resumed_components.append("user-actions")
+            else:
+                _emit_progress(progress, "applying-user-actions")
+                user_operations, generation_root = _apply_user_actions(
+                    plan,
+                    stage_root,
+                    runner=runner,
+                )
+                _verify_user_actions(plan, runner=runner)
+                _write_checkpoint(
+                    plan,
+                    "user-actions",
+                    status="pass",
+                    evidence={"operations": user_operations},
+                )
         needs_root = bool(plan["root_actions"] or plan.get("repository_bootstrap"))
         if needs_root:
-            root_receipt = (
-                root_applier(plan, stage_root)
-                if root_applier is not None
-                else _invoke_root_apply(
-                    plan_path,
-                    stage_root,
-                    approved_sha256=approved_sha256,
-                    installer_manifest_digest=str(plan["installer_manifest_sha256"]),
+            phase = "root-actions"
+            root_checkpoint = _load_checkpoint(plan, "root-actions")
+            if root_checkpoint and root_checkpoint.get("status") == "pass":
+                evidence = root_checkpoint.get("evidence", {})
+                root_receipt = dict(evidence.get("receipt", {}))
+                if plan["status"] == "ready":
+                    _verify_root_actions_as_user(plan, runner=runner)
+                resumed_components.append("root-actions")
+            else:
+                _emit_progress(progress, "awaiting-human-root-approval")
+                root_receipt = (
+                    root_applier(plan, stage_root)
+                    if root_applier is not None
+                    else _invoke_root_apply(
+                        plan_path,
+                        stage_root,
+                        approved_sha256=approved_sha256,
+                        installer_manifest_digest=str(plan["installer_manifest_sha256"]),
+                    )
                 )
-            )
-            if plan["status"] == "ready":
+                if plan["status"] == "ready":
+                    _verify_root_actions_as_user(plan, runner=runner)
+                _write_checkpoint(
+                    plan,
+                    "root-actions",
+                    status="pass",
+                    evidence={"receipt": root_receipt},
+                )
+        phase = "verification"
+        if plan["status"] == "ready":
+            _verify_user_actions(plan, runner=runner)
+            if needs_root:
                 _verify_root_actions_as_user(plan, runner=runner)
+        _write_checkpoint(
+            plan,
+            "verification",
+            status="pass",
+            evidence={"resumed_components": resumed_components},
+        )
+        _emit_progress(progress, "verified", plan_sha256=plan["plan_sha256"])
     except Exception as apply_error:
+        _write_checkpoint(
+            plan,
+            phase,
+            status="fail",
+            evidence={"error_type": type(apply_error).__name__},
+        )
         root_rollback_error: Exception | None = None
-        if (
+        if phase == "root-actions" and (
             root_receipt
             and root_receipt.get("receipt")
             and root_receipt.get("receipt_sha256")
@@ -4530,16 +5041,6 @@ def apply_suite_plan(
                 )
             except Exception as error:  # preserve root recovery evidence
                 root_rollback_error = error
-        _rollback_user_operations(
-            user_operations,
-            owned_root=data_root / "tools",
-            bin_root=bin_root,
-        )
-        _remove_user_generation(
-            generation_root,
-            owned_root=data_root / "tools",
-            bin_root=bin_root,
-        )
         if root_rollback_error is not None:
             raise ToolingSuiteError(
                 "post-apply verification failed and automatic root rollback also failed; "
@@ -4563,6 +5064,13 @@ def apply_suite_plan(
             "plan_sha256": plan["plan_sha256"],
             "profile": plan["profile"],
             "generation": generation,
+            "resumed_components": resumed_components,
+            "checkpoints": [
+                "assets-staged",
+                "user-actions",
+                *( ["root-actions"] if root_receipt else [] ),
+                "verification",
+            ],
             "user_operations": user_operations,
             "root_receipt": (
                 {
@@ -4591,6 +5099,12 @@ def apply_suite_plan(
         receipt["receipt_sha256"] = _record_digest(receipt, "receipt_sha256")
         receipt_path = receipt_dir / "receipt.json"
         write_json(receipt_path, receipt)
+        _write_checkpoint(
+            plan,
+            "receipt",
+            status="pass",
+            evidence={"receipt_id": receipt_dir.name},
+        )
     except Exception as receipt_error:
         root_rollback_error: Exception | None = None
         if (
@@ -4657,7 +5171,10 @@ def _load_user_receipt(path_or_latest: str) -> tuple[Path, dict[str, Any]]:
         receipt = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise ToolingSuiteError("tooling-suite receipt is invalid") from error
-    if not isinstance(receipt, dict) or receipt.get("version") != SUITE_RECEIPT_VERSION:
+    if not isinstance(receipt, dict) or receipt.get("version") not in {
+        SUITE_RECEIPT_VERSION,
+        LEGACY_SUITE_RECEIPT_VERSION,
+    }:
         raise ToolingSuiteError("tooling-suite receipt version is unsupported")
     if receipt.get("receipt_sha256") != _record_digest(receipt, "receipt_sha256"):
         raise ToolingSuiteError("tooling-suite receipt digest does not match")
@@ -4713,12 +5230,17 @@ def verify_suite_receipt(
             }
         )
     return {
-        "version": "MoradinForgeToolingSuiteVerifyV1",
+        "version": "MoradinForgeToolingSuiteVerifyV2",
         "status": "pass"
         if all(item["status"] == "pass" for item in checks)
         else "fail",
         "receipt_sha256": receipt["receipt_sha256"],
         "checks": checks,
+        "onboard_handoff": (
+            "scripts/moradin_forge.sh onboard --workspace <approved-workspace>"
+            if all(item["status"] == "pass" for item in checks)
+            else ""
+        ),
     }
 
 
@@ -4818,6 +5340,15 @@ def _portable_suite_plan(plan: dict[str, Any]) -> dict[str, Any]:
     platform_row = portable.get("platform", {})
     platform_row["host_fingerprint_sha256"] = "<host-bound-at-apply>"
     portable["target_uid"] = "<target-uid>"
+    doctor = portable.get("doctor", {})
+    if isinstance(doctor, dict):
+        doctor_platform = doctor.get("platform", {})
+        if isinstance(doctor_platform, dict):
+            doctor_platform["host_fingerprint_sha256"] = "<host-bound-at-apply>"
+        doctor["target_uid"] = "<target-uid>"
+        doctor.pop("doctor_sha256", None)
+        doctor["doctor_sha256"] = _record_digest(doctor, "doctor_sha256")
+        portable["doctor_sha256"] = doctor["doctor_sha256"]
     portable["source_plan_sha256"] = source_sha
     portable["portable"] = True
     portable["plan_sha256"] = plan_digest(portable)
@@ -4899,19 +5430,27 @@ def _confirm(prompt: str) -> bool:
     return _prompt(f"{prompt} [y/N] ").lower() in {"y", "yes"}
 
 
-def _print_onboard_handoff(*, offline: bool = False) -> None:
+def _print_onboard_handoff(*, offline: bool = False, stream: Any = None) -> None:
+    stream = sys.stdout if stream is None else stream
     offline_flag = " --offline" if offline else ""
-    print("\nCopyable agent prompt:")
-    print("```text")
-    print("I have completed the Moradin Forge tooling installation.")
-    print("Ask which workspace roots I approve, then run:")
+    print("\nCopyable agent prompt:", file=stream)
+    print("```text", file=stream)
+    print("I have completed the Moradin Forge tooling installation.", file=stream)
+    print("Ask which workspace roots I approve, then run:", file=stream)
     print(
         "scripts/moradin_forge.sh onboard --workspace "
-        f"<approved-workspace>{offline_flag}"
+        f"<approved-workspace>{offline_flag}",
+        file=stream,
     )
-    print("Show discovered repositories and every proposed provider file change.")
-    print("Ask separately before creating or patching each guidance file.")
-    print("```")
+    print(
+        "Show discovered repositories and every proposed provider file change.",
+        file=stream,
+    )
+    print(
+        "Ask separately before creating or patching each guidance file.",
+        file=stream,
+    )
+    print("```", file=stream)
 
 
 def _plan_needs_python_312_bootstrap(plan: dict[str, Any]) -> bool:
@@ -5313,6 +5852,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("interactive", help="Open the Install All or Customize menu.")
 
+    doctor = subparsers.add_parser(
+        "doctor", help="Run aggregate network-free host readiness checks."
+    )
+    doctor.add_argument("--output", choices=("auto", "summary", "json"), default="auto")
+
+    status = subparsers.add_parser(
+        "status", help="Report receipt and resumable checkpoint state."
+    )
+    status.add_argument(
+        "--progress", choices=("auto", "plain", "json", "off"), default="auto"
+    )
+
     plan_parser = subparsers.add_parser(
         "plan", help="Build a deterministic tooling-suite plan."
     )
@@ -5337,6 +5888,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     apply_parser.add_argument("--plan", type=Path, required=True)
     apply_parser.add_argument("--approve-plan-sha256", required=True)
+    apply_parser.add_argument(
+        "--progress", choices=("auto", "plain", "json", "off"), default="auto"
+    )
 
     bundle = subparsers.add_parser(
         "bundle",
@@ -5429,6 +5983,28 @@ def main(argv: list[str] | None = None) -> int:
                 import moradin_airgap as airgap  # type: ignore[no-redef]
         if args.command == "interactive":
             return interactive(forge_root=forge_root)
+        if args.command == "doctor":
+            payload = build_doctor_report()
+            selected = (
+                "summary"
+                if args.output == "auto" and sys.stderr.isatty()
+                else "json"
+                if args.output == "auto"
+                else args.output
+            )
+            if selected == "summary":
+                print(
+                    f"Moradin Forge doctor: {payload['status']} "
+                    f"({len(payload['blockers'])} blockers, {len(payload['warnings'])} warnings)",
+                    file=sys.stderr,
+                )
+            print(json.dumps(payload, indent=2, sort_keys=True))
+            return 0 if payload["status"] == "ready" else 2
+        if args.command == "status":
+            _emit_progress(args.progress, "reading-status")
+            payload = tooling_suite_status()
+            print(json.dumps(payload, indent=2, sort_keys=True))
+            return 0
         if args.command == "plan":
             profile = "custom" if args.custom else str(args.profile)
             payload = build_suite_plan(
@@ -5443,21 +6019,21 @@ def main(argv: list[str] | None = None) -> int:
                 refresh_versions=args.refresh_versions,
             )
             artifacts = write_suite_plan(payload, args.output.resolve())
-            if args.json:
-                print(
-                    json.dumps(
-                        {**payload, "artifacts": artifacts}, indent=2, sort_keys=True
-                    )
+            print(
+                json.dumps(
+                    {**payload, "artifacts": artifacts}, indent=2, sort_keys=True
                 )
-            else:
-                print(suite_plan_markdown(payload).rstrip())
-                print(f"plan_artifact: {artifacts['json']}")
+            )
             return 0 if payload["status"] in {"ready", "repository-bootstrap"} else 2
         if args.command == "apply":
             payload = apply_suite_plan(
                 args.plan,
                 approved_sha256=args.approve_plan_sha256,
                 forge_root=forge_root,
+                progress=args.progress,
+            )
+            payload["onboard_handoff"] = (
+                "scripts/moradin_forge.sh onboard --workspace <approved-workspace>"
             )
             print(json.dumps(payload, indent=2, sort_keys=True))
             return 0
@@ -5540,16 +6116,19 @@ def main(argv: list[str] | None = None) -> int:
                     expected_sha256=args.approve_bundle_sha256,
                     forge_root=forge_root,
                 )
-                if args.json:
-                    print(json.dumps(preview, indent=2, sort_keys=True))
-                else:
-                    print(suite_plan_markdown(preview["plan"]).rstrip())
-                    print(f"offline_package_additions: {len(preview['package_additions'])}")
-                    print(f"offline_package_upgrades: {len(preview['package_upgrades'])}")
-                    print(f"offline_package_bytes: {preview['disk_bytes']}")
-                    print(f"repository_actions: {preview['repository_actions']}")
-                    print(f"rollback: {preview['rollback']}")
-                    print(f"offline_plan_sha256: {preview['plan_sha256']}")
+                print(suite_plan_markdown(preview["plan"]).rstrip(), file=sys.stderr)
+                print(
+                    f"offline_package_additions: {len(preview['package_additions'])}",
+                    file=sys.stderr,
+                )
+                print(
+                    f"offline_package_upgrades: {len(preview['package_upgrades'])}",
+                    file=sys.stderr,
+                )
+                print(f"offline_package_bytes: {preview['disk_bytes']}", file=sys.stderr)
+                print(f"repository_actions: {preview['repository_actions']}", file=sys.stderr)
+                print(f"rollback: {preview['rollback']}", file=sys.stderr)
+                print(f"offline_plan_sha256: {preview['plan_sha256']}", file=sys.stderr)
                 stale_approval = args.approve_stale_bundle_sha256
                 if preview["bundle"]["stale"] and not stale_approval:
                     if not sys.stdin.isatty():
@@ -5572,7 +6151,17 @@ def main(argv: list[str] | None = None) -> int:
                     if not _confirm(
                         "Apply this exact offline plan through the sealed sudo phase?"
                     ):
-                        print("Air-gap apply cancelled without changes.")
+                        print(
+                            json.dumps(
+                                {
+                                    "version": airgap.AIRGAP_APPLY_VERSION,
+                                    "status": "cancelled",
+                                    "mutation": False,
+                                },
+                                indent=2,
+                                sort_keys=True,
+                            )
+                        )
                         return 0
                     plan_approval = str(preview["plan_sha256"])
                 payload = airgap.apply_airgap_bundle(
@@ -5587,7 +6176,7 @@ def main(argv: list[str] | None = None) -> int:
                 raise ToolingSuiteError(str(error)) from error
             print(json.dumps(payload, indent=2, sort_keys=True))
             if payload["status"] == "pass":
-                _print_onboard_handoff(offline=True)
+                _print_onboard_handoff(offline=True, stream=sys.stderr)
             return 0
         if args.command == "_root-apply":
             if os.geteuid() != 0:
@@ -5633,6 +6222,18 @@ def main(argv: list[str] | None = None) -> int:
             return 0 if payload["status"] == "pass" else 1
     except (ToolingSuiteError, WorkstationError) as error:
         print(f"moradin-tooling-suite: {error}", file=sys.stderr)
+        if args.command != "interactive":
+            print(
+                json.dumps(
+                    {
+                        "version": "MoradinForgeToolingResultV2",
+                        "status": "error",
+                        "error": str(error),
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
         return 2
     return 1
 

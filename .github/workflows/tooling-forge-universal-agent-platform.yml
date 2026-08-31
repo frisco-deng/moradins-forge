@@ -53,6 +53,7 @@ jobs:
           uv run pytest -q
           tests/scripts/test_universal_agent_platform.py
           tests/scripts/test_agent_handoffs.py
+          tests/scripts/test_moradin_tooling_suite_native.py
       - name: Run Linux native bootstrap
         if: runner.os == 'Linux'
         shell: bash
@@ -76,11 +77,19 @@ jobs:
       - name: Run macOS native bootstrap
         if: runner.os == 'macOS'
         shell: bash
-        run: install/bootstrap-macos.sh --deps none --dry-run --json
+        run: |
+          install/bootstrap-macos.sh --deps none --dry-run --json
+          install/tooling-suite-macos.sh doctor --output json
+          install/tooling-suite-macos.sh plan --custom --select git \
+            --output "${RUNNER_TEMP}/moradin-tooling-suite-plan.json"
       - name: Run Windows native bootstrap
         if: runner.os == 'Windows'
         shell: pwsh
-        run: .\install\bootstrap-windows.ps1 -Deps none -DryRun -Json
+        run: |
+          .\install\bootstrap-windows.ps1 -Deps none -DryRun -Json
+          .\install\tooling-suite.ps1 doctor --output json
+          .\install\tooling-suite.ps1 plan --custom --select git `
+            --output "$env:RUNNER_TEMP/moradin-tooling-suite-plan.json"
 
   linux-distro-lifecycle:
     name: Linux tooling suite / ${{ matrix.name }}
