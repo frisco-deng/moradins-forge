@@ -18,7 +18,7 @@ dev = [
     "pytest>=9.0.3",
     "pytest-cov>=7.0.0",
     "pytest-xdist[psutil]>=3.8.0",
-    "ruff>=0.15.2",
+    "ruff>=0.16.3",
 ]
 
 [tool.pytest.ini_options]
