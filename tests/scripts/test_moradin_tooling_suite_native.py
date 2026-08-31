@@ -298,6 +298,19 @@ def test_native_wrappers_never_launch_hidden_elevation() -> None:
     assert "moradin_tooling_suite_native.py" in windows
 
 
+def test_windows_ci_accepts_only_the_expected_missing_winget_blocker() -> None:
+    workflow = Path(
+        ".github/workflows/tooling-forge-universal-agent-platform.yml"
+    ).read_text(encoding="utf-8")
+    windows_step = workflow.split("- name: Run Windows native bootstrap", maxsplit=1)[1]
+    windows_step = windows_step.split("\n\n  linux-distro-lifecycle:", maxsplit=1)[0]
+
+    assert "$planExit -eq 2" in windows_step
+    assert "$blockerIds -notcontains 'package-manager'" in windows_step
+    assert "$_ -ne 'package-manager'" in windows_step
+    assert "exit 0" in windows_step
+
+
 def test_linux_v1_receipt_remains_digest_readable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
