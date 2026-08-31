@@ -3,6 +3,8 @@ name: Tooling / Security Core
 on:
   workflow_dispatch:
   pull_request:
+  schedule:
+    - cron: "23 9 * * 1"
   push:
     branches:
       - main
