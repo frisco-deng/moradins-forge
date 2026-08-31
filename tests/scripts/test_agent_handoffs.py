@@ -34,7 +34,7 @@ def test_readme_starts_with_self_contained_agent_intercept() -> None:
     assert "path or shell-profile configuration" in first_read_lower
     assert "agents never enter credentials, run sudo" in first_read_lower
     assert "install/tooling-suite.sh" in first_read_lower
-    assert "digest-binding the exact root transaction" in first_read_lower
+    assert "digest-binding the exact transaction" in first_read_lower
     assert "verified checksum/signature" in first_read_lower
     assert "air-gapped alternative" in first_read_lower
     assert "asset-only" in first_read_lower

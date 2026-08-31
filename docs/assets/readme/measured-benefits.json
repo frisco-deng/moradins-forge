@@ -3,19 +3,19 @@
   "disclaimer": "Release-dogfood fixture evidence only; results are not a universal token-reduction or performance guarantee.",
   "inputs": [
     {
-      "bytes": 8965,
+      "bytes": 9217,
       "path": "AGENTS.md",
-      "sha256": "7caa0c7ee02cb28a78c18dcb7bc971de4de87cfedfd7e3c540df32eb3da52997"
+      "sha256": "f13fff5647cb353be0fac5b889628ca6054562b0ac2199dc616efad34753ac12"
     },
     {
-      "bytes": 5339,
+      "bytes": 5747,
       "path": "FORGE.md",
-      "sha256": "08179d9abf1ab2fcd3563d5f81cb3e86c2d126a98a012655c4c300ca894b8816"
+      "sha256": "1fd154ca97203fe215dd5d05d2fa9e057c1da952740e0550cff3770e00e24d1b"
     },
     {
-      "bytes": 3938,
+      "bytes": 4343,
       "path": "Harness/entrypoints/forge.md",
-      "sha256": "20f5c0c65e6e51ca4adc3955f14a767aa6ea1ad70f5f0f5c2f20b0cfc99e6307"
+      "sha256": "0f51db4dc24826f77a44e8705213f930f24555502ee55a42e148ce37fb1d80f6"
     },
     {
       "bytes": 484,
@@ -41,9 +41,9 @@
       "without_reuse_bytes": 1606
     },
     "startup_context": {
-      "avoided_bytes": 17758,
+      "avoided_bytes": 18823,
       "with_summary_bytes": 484,
-      "without_summary_bytes": 18242
+      "without_summary_bytes": 19307
     }
   },
   "scope": "release-dogfood-fixtures",

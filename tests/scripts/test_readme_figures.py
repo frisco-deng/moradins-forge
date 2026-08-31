@@ -11,6 +11,7 @@ from scripts import generate_readme_figures
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIGURES = {
     "three-step-setup.svg": "Illustrative",
+    "connected-platforms.svg": "Qualitative",
     "trust-architecture.svg": "Qualitative",
     "airgap-round-trip.svg": "Qualitative",
     "measured-benefits.svg": "Measured",

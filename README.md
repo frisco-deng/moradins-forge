@@ -7,12 +7,14 @@ repository guide. The primary path is deliberately short:
 
 1. **User or Agent — Clone Forge.** Pull this public repository yourself, or
    ask your coding agent to clone it over HTTPS and read this page.
-2. **User — Run the guided Linux installer.** The agent may explain the menu
-   and later verify its receipt, but the user launches the installer, reviews
-   the exact plan, and personally approves any sudo phase.
+2. **User — Run the guided installer for this OS.** The agent may explain the
+   plan and later verify its receipt, but the user launches the installer,
+   reviews the exact operations, and personally approves any elevated phase.
 3. **Agent, then User — Link approved repositories.** The agent discovers only
    approved workspace roots, shows every proposed provider-file change, and
    asks separately before creating or patching each file.
+
+Linux or WSL:
 
 ```sh
 git clone https://github.com/frisco-deng/moradins-forge.git <forge-root>
@@ -20,6 +22,10 @@ cd <forge-root>
 ./install/tooling-suite.sh
 scripts/moradin_forge.sh onboard --workspace <approved-workspace>
 ```
+
+macOS uses `./install/tooling-suite-macos.sh`; Windows PowerShell uses
+`.\install\tooling-suite.ps1`. All three expose the same connected
+`doctor`, `status`, `plan`, `apply`, `verify`, and `rollback` commands.
 
 After installation, the suite prints a copyable prompt containing the third
 command. Repeat `--workspace` for each independently approved root. Add
@@ -33,6 +39,14 @@ Text equivalent — **Illustrative:** clone the public repository; the user runs
 and approves the tooling installer; then an agent discovers approved repos and
 shows each guidance patch for separate user consent. This figure makes no
 performance claim.
+
+![Connected Platforms — Qualitative](docs/assets/readme/connected-platforms.svg)
+
+Text equivalent — **Qualitative:** Linux and WSL use signed native package
+metadata plus Forge-owned assets, macOS uses Homebrew plus isolated uv tools,
+and Windows uses WinGet plus isolated uv tools. Each path produces the same V2
+doctor, digest-bound plan, checkpoints, receipt, verification, and rollback
+contract. Complete air-gap kits remain Linux-only.
 
 ![Trust Architecture — Qualitative](docs/assets/readme/trust-architecture.svg)
 
@@ -92,7 +106,7 @@ disabled, receipts the result, and onboards offline.
 ![Measured Benefits — Measured](docs/assets/readme/measured-benefits.svg)
 
 <!-- measured-benefits-text:start -->
-Text equivalent — **Measured release-dogfood fixtures:** startup context was 18,242 raw bytes versus 484 primer bytes; repeated output was 1,606 raw bytes versus 136 rerun-advice bytes. These checked-in fixture results are not a universal token-reduction guarantee.
+Text equivalent — **Measured release-dogfood fixtures:** startup context was 19,307 raw bytes versus 484 primer bytes; repeated output was 1,606 raw bytes versus 136 rerun-advice bytes. These checked-in fixture results are not a universal token-reduction guarantee.
 <!-- measured-benefits-text:end -->
 
 The evidence is checked in at
@@ -130,13 +144,15 @@ You are at Moradin's Forge.
    - PATH or shell-profile configuration;
    - privileged-script generation and the user's execution of that script.
 6. Execute only approved user-level actions. Agents never enter credentials,
-   run sudo, or launch the interactive host installer for the user. A human may
-   run `install/tooling-suite.sh`; for normal tool actions that human-run
-   program may request sudo only after displaying and digest-binding the exact
-   root transaction. A missing runtime/downloader may trigger a separate
-   default-No prompt for named signed-manager prerequisites. The older adaptive
-   flow continues to generate a reviewable privileged script for the user.
-   Verify either path afterward.
+   run sudo/elevation, or launch the host installer for the user. A human may
+   run `install/tooling-suite.sh` on Linux/WSL,
+   `install/tooling-suite-macos.sh` on macOS, or `install/tooling-suite.ps1` on
+   Windows. Begin with the network-free doctor. The human-run program may
+   mutate only after displaying and digest-binding the exact transaction. A
+   missing runtime/provider may produce a separate reviewable prerequisite
+   handoff. The older adaptive flow continues to generate a reviewable
+   privileged script for the user. Verify either path afterward. Complete
+   air-gap kits remain Linux-only.
 7. Apply the sidecar and each approved agent marker block transactionally.
    Preserve unrelated files and guidance. Run security and repository-native
    validation, then report exact writes and rollback commands.
@@ -175,7 +191,7 @@ Forge separates approval into distinct boundaries:
 | Missing agent file creation | Matching `--create-agent-file` |
 | PATH or shell profile | `--approve-user-config` |
 | Privileged packages | Generate, review, and personally run the script |
-| Interactive Linux suite | Personally launch it and confirm the exact plan digest |
+| Native tooling suite | Personally launch the OS entrypoint and confirm the exact plan digest |
 | Sidecar adoption | `apply --approve` |
 | Sidecar upgrade | Exact upgrade-plan SHA-256 |
 | Rollback | Explicit `--approve` |
@@ -228,25 +244,52 @@ elevated PowerShell script. Forge never elevates itself.
 
 ## Onboarding and Tooling
 
-### Interactive Linux baseline
+### Connected tooling suite V2
 
-For the simplest complete workstation path on Linux or WSL, the user runs:
+Start with the network-free aggregate doctor, then plan only missing or
+drifted components. Choose the native entrypoint for the current system:
 
 ```sh
-install/tooling-suite.sh
+# Linux or WSL
+./install/tooling-suite.sh doctor --output summary
+
+# macOS
+./install/tooling-suite-macos.sh doctor --output summary
 ```
 
-The first menu offers **Install All** or **Customize**. Install All then offers
-the recommended Practical profile or the broader Extended profile. The program
-runs as the target user, stages checksum-verified assets without privilege, and
-shows additions, upgrades, manual items, repository changes, rollback limits,
-disk estimates, and the exact plan SHA-256. Only after a default-No
-confirmation does the human-run program invoke sudo for the bound root phase.
-If Python 3.11 or download prerequisites are missing, it may first offer a
-separate, minimal signed-package-manager bootstrap; that prompt is also
-default-No and is not plan approval. If a selected full profile needs Python
-3.12, the suite separately offers a user-level, verified-uv install into the
-Forge bootstrap prefix and replans before any host-tool approval.
+```powershell
+# Windows PowerShell
+.\install\tooling-suite.ps1 doctor --output summary
+```
+
+Linux retains the guided menu: **Install All**, **Customize**, **Verify**,
+**Rollback**, **Air-Gapped Setup**, or **Exit**. Install All offers the
+recommended lean Practical profile and the broader portable Extended profile.
+Every system stages verified assets without hidden elevation and shows
+additions, upgrades, manual items, protected-state changes, rollback limits,
+and the exact plan SHA-256 before mutation. Linux sudo is invoked only by the
+human-run program after a default-No confirmation. Windows writes the exact
+elevated PowerShell phase for the human to inspect and run; the agent does not
+launch it.
+
+V2 writes a verified checkpoint after each component. A retry within the
+24-hour plan lifetime resumes valid components; a fresh plan after expiry
+detects completed components instead of downloading or mutating them again.
+Failure rolls back only the incomplete component. A completed plan is
+verification-only when reapplied.
+
+On Linux, if Python 3.11 or download prerequisites are missing, the suite may
+first offer a separate, minimal signed-package-manager bootstrap; that prompt
+is also default-No and is not plan approval.
+
+The connected providers are signed apt/dnf/pacman metadata and official assets
+on Linux, Homebrew and isolated uv tools on macOS, and WinGet and isolated uv
+tools on Windows. Unsupported provider/architecture combinations fail closed
+or become explicit manual handoffs.
+
+If a selected Linux profile needs Python 3.12, the suite separately offers a
+user-level, verified-uv install into the Forge bootstrap prefix and replans
+before any host-tool approval.
 
 The suite supports apt, dnf, and pacman families on amd64 and arm64. It never
 uses `curl | bash`, AUR helpers, root pip/npm, or the Docker group. It performs
@@ -267,12 +310,16 @@ must pass `podman info` as the target user.
 Deterministic automation uses the same catalog and transaction engine:
 
 ```sh
-install/tooling-suite.sh plan --profile practical --output <tooling-suite-plan.json>
-install/tooling-suite.sh apply \
+./install/tooling-suite.sh plan --profile practical --output <tooling-suite-plan.json>
+./install/tooling-suite.sh apply \
   --plan <tooling-suite-plan.json> \
   --approve-plan-sha256 <sha256>
-install/tooling-suite.sh verify --latest
+./install/tooling-suite.sh verify --latest
 ```
+
+Substitute `./install/tooling-suite-macos.sh` or
+`.\install\tooling-suite.ps1` for connected macOS or Windows execution. Progress
+goes to stderr; automation receives exactly one JSON result on stdout.
 
 Use `--profile extended --container-engine podman` for the extended baseline,
 or `--custom --select <tool-id>` with repeatable `--select` and `--exclude`.
@@ -289,8 +336,15 @@ matching user receipts under the XDG state directory.
 New direct packages are removed without autoremove during rollback; potentially
 shared dependency packages are retained and reported instead of being purged.
 
-Agents may propose the command, inspect a plan, and verify its receipt. The
-human must launch and approve the sudo-capable path personally.
+The Extended profile adds the portable archive, Python QA, IaC, automation,
+recovery/transfer, container/Kubernetes, UI/test, and security capabilities
+listed in the V2 contract. Terraform and Packer remain selectable manual
+handoffs with their BUSL license visible; they are not default or offline
+redistribution content.
+
+Agents may propose commands, inspect plans, and verify receipts. A human must
+launch and approve every sudo or elevated phase personally. Complete air-gap
+request/build/verify/apply remains available only from the Linux entrypoint.
 
 ### Adaptive workspace plan
 
@@ -487,6 +541,8 @@ checks refuse unowned or modified managed content.
 - `make forge-explain`
 - `make forge-onboard WORKSPACE=<approved-workspace>`
 - `make forge-tooling-suite`
+- `make forge-tooling-suite-doctor`
+- `make forge-tooling-suite-status`
 - `make forge-tooling-suite-plan OUTPUT=<plan.json> PROFILE=practical`
 - `make forge-tooling-suite-apply PLAN=<plan.json> PLAN_SHA256=<digest>`
 - `make forge-tooling-suite-bundle PLAN=<plan.json> OUTPUT=<directory>`
@@ -530,6 +586,15 @@ claim stable production readiness. Signing, production-readiness,
 release-candidate-manifest, and production promotion remain separate human
 gates. Forge does not create or imply a `prod` branch or environment.
 
+Version 1.0 means the Forge interfaces are stable and supported under semantic
+versioning; it does not certify every host Forge can modify as production
+ready. The first release candidate additionally requires signed archive, SBOM,
+provenance, and manifest artifacts; independent Linux, macOS, Windows, and
+Linux air-gap qualification; required stable CodeQL; zero unresolved
+high/critical vulnerabilities; and a minimum 14-day observation period with no
+release-blocking regression. Track the evidence in the
+[v1.0 readiness checklist](docs/15_checklists/v1_readiness.md).
+
 Before a public prerelease, run the repository-native security, SBOM, leak,
 payload, portability, fresh-clone, release-build, and review-ready gates. The
 public payload must remain independent of private Moradin Harness history and
@@ -539,13 +604,15 @@ host-specific state.
 
 - [Agent integration contract](docs/references/moradin_forge_agent_integration_contract_v1.md)
 - [Tooling execution contract](docs/references/tooling_readiness_install_execution_contract_v2.md)
-- [Linux tooling suite contract](docs/references/moradin_forge_tooling_suite_contract_v1.md)
+- [Tooling suite V2 contract](docs/references/moradin_forge_tooling_suite_contract_v2.md)
+- [Linux tooling suite V1 compatibility](docs/references/moradin_forge_tooling_suite_contract_v1.md)
 - [Installer bootstrap contract](docs/references/moradin_forge_installer_bootstrap_contract_v1.md)
 - [Transactional upgrade contract](docs/references/moradin_forge_upgrade_contract_v1.md)
 - [Agent efficiency contract](docs/references/moradin_agent_efficiency_contract_v1.md)
 - [Public portability contract](docs/references/moradin_forge_public_export_contract_v1.md)
 - [Release artifact contract](docs/references/moradin_forge_release_artifact_contract_v1.md)
 - [Moradin payload contract](docs/references/moradin_payload_contract_v1.md)
+- [Support and compatibility policy](SUPPORT.md)
 - [Agent handoff prompt](Harness/entrypoints/forge_agent_handoff.md)
 
 ## Optional Workbench

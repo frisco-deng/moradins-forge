@@ -2,7 +2,7 @@
 title: "Moradin Forge Air-Gapped Tooling Suite"
 status: beta
 owner: platform-operations
-last_reviewed: 2026-07-31
+last_reviewed: 2026-08-31
 source_refs:
   - ../../install/tooling-suite.sh
   - ../../scripts/moradin_airgap_bootstrap.py
@@ -11,6 +11,7 @@ source_refs:
   - ../../scripts/moradin_tooling_suite.py
 related_docs:
   - ../references/moradin_forge_tooling_suite_contract_v1.md
+  - ../references/moradin_forge_tooling_suite_contract_v2.md
   - ../references/moradin_forge_agent_integration_contract_v1.md
   - ../references/moradin_forge_public_export_contract_v1.md
 ---
@@ -53,7 +54,7 @@ requires both a frozen `--arch-snapshot YYYY/MM/DD` and
 `--approve-arch-package-inventory` because its full package inventory is part
 of the synchronized rollback boundary.
 
-`AirgapRequestV1` records selected tools, target platform, relevant installed
+`MoradinForgeAirgapRequestV2` records selected tools, target platform, relevant installed
 package state, approved repositories, and catalog/installer digests. It omits
 workspace content, raw paths, credentials, prompts, hostnames, and machine
 identifiers. Review it before transport.
@@ -82,8 +83,9 @@ private registries, or credentials.
   --output KIT.tar.gz
 ```
 
-The command writes `KIT.tar.gz.lock.json` beside the kit. Rebuild from the
-frozen lock when every content-addressed asset remains available:
+The command writes a `MoradinForgeAirgapLockV2` record at
+`KIT.tar.gz.lock.json` beside the kit. Rebuild from the frozen lock when every
+content-addressed asset remains available:
 
 ```sh
 ./install/tooling-suite.sh airgap-build \
@@ -91,7 +93,8 @@ frozen lock when every content-addressed asset remains available:
   --output KIT-REBUILT.tar.gz
 ```
 
-The rebuild must be byte-identical. The kit includes a sanitized single-commit
+The rebuild must be byte-identical. Its `MoradinForgeAirgapBundleV2` manifest
+binds the lock and target snapshot. The kit includes a sanitized single-commit
 Forge Git bundle and source snapshot, pinned uv and managed Python, standalone
 binaries, Python wheels, the target's complete signed package dependency and
 rollback closure, trust metadata, a portable suite plan, SPDX SBOM,
@@ -137,7 +140,9 @@ Onboarding shows exact diffs and never implies consent to create or patch them.
 ## Trust and Network Controls
 
 - The builder uses a digest-pinned target image through an existing rootless
-  engine.
+  engine. Its repository metadata and rollback packages are bound to that same
+  snapshot; Arch uses the exact approved dated snapshot for both installation
+  and rollback closure.
 - APT packages are tied to Packages indexes covered by verified InRelease
   signatures. A target-bound APT simulation determines the exact transaction
   before download. Full upstream Packages indexes are stored as deterministic

@@ -9,8 +9,9 @@ Moradin's Forge is local-first and consent-gated.
 - Forge does not publish, upload, or phone home with target repo contents.
 - Forge writes a sidecar only after explicit approval.
 - Forge preserves target root workflows by default.
-- Forge writes install requests as human-run instructions instead of executing
-  privileged setup commands.
+- Agent-driven adaptive setup writes privileged install requests as human-run
+  instructions. The separately launched native tooling suite may enter its
+  sealed elevated phase only through the user's exact plan approval.
 - Forge bootstrap scripts only clone or prime the repo and write a sanitized
   start card; they do not install host tools or run adoption.
 - Forge verification scans generated sidecars for forbidden host-specific
@@ -53,6 +54,7 @@ Security references:
 - `docs/references/moradin_forge_agent_integration_contract_v1.md`
 - `docs/references/moradin_forge_installer_bootstrap_contract_v1.md`
 - `docs/references/moradin_forge_tooling_suite_contract_v1.md`
+- `docs/references/moradin_forge_tooling_suite_contract_v2.md`
 - `docs/references/repo_operating_model_v1.md`
 - `docs/references/tooling_readiness_install_request_contract_v1.md`
 - `docs/15_checklists/security_review.md`

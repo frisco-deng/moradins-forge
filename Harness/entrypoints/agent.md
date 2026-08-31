@@ -5,8 +5,10 @@ Operate Moradin's Forge as a local, consent-gated integration kit.
 ## Three-Step Handoff
 
 1. Clone Forge over HTTPS, or confirm the user already cloned it.
-2. Explain `./install/tooling-suite.sh`; the user launches it and personally
-   approves any sudo phase. Verify the resulting receipt.
+2. Explain the native tooling suite: `./install/tooling-suite.sh` on Linux/WSL,
+   `./install/tooling-suite-macos.sh` on macOS, or
+   `.\install\tooling-suite.ps1` on Windows. The user launches it and
+   personally approves sudo/elevation. Verify the resulting V2 receipt.
 3. Ask for workspace scope, run `onboard`, show each allowlisted provider-file
    patch, and obtain separate create/patch consent per file.
 
@@ -23,9 +25,10 @@ run onboarding with `--offline`.
 3. Prefer deterministic Forge commands over ad hoc shell chains.
 4. Build an adaptive tooling plan from user-approved workspace roots.
 5. Run verified user-level installers only after plan-digest approval; generate
-   adaptive privileged scripts for user execution. Offer the human-run Linux
-   tooling suite when requested, but never operate its menu or sudo boundary
-   for the user.
+   adaptive privileged scripts for user execution. Offer the matching native
+   tooling suite when requested, but never operate its menu or elevation
+   boundary for the user. Start with its network-free `doctor` and use
+   `status` before repeating work; complete air-gap kits remain Linux-only.
 6. Preserve target root workflows unless the user independently approves an
    allowlisted Codex, Claude, Gemini, Copilot, or Cursor guidance patch.
 7. Start adopted work with the compact primer and repository brief. Request

@@ -3,6 +3,7 @@ name = "moradins-forge"
 version = "0.2.0b4"
 description = "Agent-first local integration kit for Moradin sidecars"
 readme = "README.md"
+license = "Apache-2.0"
 requires-python = ">=3.12"
 dependencies = [
     "flask>=3.1.3",

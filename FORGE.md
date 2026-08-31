@@ -3,8 +3,9 @@
 Moradin's Forge is the agent-first entrypoint for this repo.
 
 The public handoff has three steps: clone Forge, ask the user to run the guided
-Linux tooling suite, then onboard only user-approved workspace roots. The agent
-explains and verifies the suite; the user operates its menu and approves sudo.
+tooling suite for the current OS, then onboard only user-approved workspace
+roots. The agent explains and verifies the suite; the user operates it and
+approves Linux sudo or a generated Windows elevated phase.
 Onboarding shows exact provider diffs and requires separate consent per file.
 
 If the user sent you here as Codex, Claude Code, or another coding agent:
@@ -27,8 +28,8 @@ If the user sent you here as Codex, Claude Code, or another coding agent:
 5. Ask the user for explicit consent before running any apply command.
 6. After consent, Forge may execute verified user-level installers. Adaptive
    privileged work is emitted as a reviewable script for the user to run. The
-   separate human-run Linux suite may request sudo only after the user reviews
-   and confirms its exact digest-bound transaction.
+   native suite may elevate only after the user reviews and confirms its exact
+   digest-bound transaction.
 
 If the user wants a low-token first pass, run the platform bootstrap first:
 
@@ -47,14 +48,22 @@ Bootstrap only clones or primes Forge and writes a sanitized start card under
 `artifacts/bootstrap/latest/`; it never installs host tools, patches a target
 repo, or runs `apply`.
 
-For a complete Linux workstation baseline, ask the user to personally run:
+For a connected workstation baseline, ask the user to personally run one of:
 
 ```sh
-install/tooling-suite.sh
+./install/tooling-suite.sh                 # Linux or WSL
+./install/tooling-suite-macos.sh           # macOS
 ```
 
-Agents may explain, plan, and verify this flow but must not select menu options,
-confirm its digest, invoke sudo, or supply credentials for the user.
+```powershell
+.\install\tooling-suite.ps1                # Windows
+```
+
+Begin with `doctor --output summary`. Each native path exposes `status`,
+`plan`, `apply`, `verify`, and `rollback` through the same V2 records. Agents
+may explain, plan, and verify this flow but must not select menu options,
+confirm its digest, invoke sudo/elevation, or supply credentials for the user.
+Only the Linux entrypoint builds and applies complete air-gap kits.
 
 For a disconnected Linux target, follow
 `docs/11_ops/air_gapped_tooling_suite.md`. Generate a sanitized request on the
