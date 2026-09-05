@@ -2,7 +2,7 @@
 title: "Moradin Forge Docs Index"
 status: approved
 owner: moradin-forge
-last_reviewed: 2026-07-31
+last_reviewed: 2026-08-31
 source_refs:
   - ../README.md
   - ../FORGE.md
@@ -26,6 +26,8 @@ Start here:
 - [Air-Gapped Tooling Suite](11_ops/air_gapped_tooling_suite.md)
 - [Product Specs](product_specs/index.md)
 - [Reference Contracts](references/index.md)
+- [v1.0 Readiness](15_checklists/v1_readiness.md)
+- [Support and Compatibility](../SUPPORT.md)
 
 The first-read agent path remains `README.md`, `FORGE.md`, `AGENTS.md`, and
 `Harness/entrypoints/forge.md`.

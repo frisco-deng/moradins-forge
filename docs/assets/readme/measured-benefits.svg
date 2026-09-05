@@ -8,10 +8,10 @@
   <text x="198" y="73" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#0f172a">Release-dogfood fixture bytes</text>
   <g font-family="Arial, sans-serif" fill="#0f172a">
     <text x="60" y="125" font-size="18" font-weight="700">Startup context</text>
-    <text x="60" y="154" font-size="14">Raw guidance: 18,242 bytes</text>
+    <text x="60" y="154" font-size="14">Raw guidance: 19,307 bytes</text>
     <rect x="260" y="138" width="520" height="22" rx="5" fill="#1d4ed8"/>
     <text x="60" y="186" font-size="14">Compact primer: 484 bytes</text>
-    <rect x="260" y="170" width="14" height="22" rx="5" fill="#16a34a"/>
+    <rect x="260" y="170" width="13" height="22" rx="5" fill="#16a34a"/>
     <text x="60" y="239" font-size="18" font-weight="700">Repeated output</text>
     <text x="60" y="268" font-size="14">Repeated log: 1,606 bytes</text>
     <rect x="260" y="252" width="520" height="22" rx="5" fill="#1d4ed8"/>

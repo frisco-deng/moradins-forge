@@ -8,8 +8,12 @@ You are at Moradin's Forge.
 Read README.md, FORGE.md, AGENTS.md, and Harness/entrypoints/forge.md.
 Confirm Forge was cloned over HTTPS. Explain the three-step path: clone; ask
 the user to run the guided tooling suite; then onboard approved repositories.
-The agent explains and verifies the installer, while the user operates its
-interactive menu and owns every sudo approval.
+The agent explains and verifies the installer, while the user operates it and
+owns every sudo or elevated approval. Use install/tooling-suite.sh on
+Linux/WSL, install/tooling-suite-macos.sh on macOS, or
+install/tooling-suite.ps1 on Windows. Begin with the network-free doctor; all
+connected paths use the same V2 plan, checkpoint, receipt, verify, and rollback
+contract. Complete air-gap kits remain Linux-only.
 
 Ask which workspace roots the user approves. Run onboard once per approved
 root, then show the discovered repository list before inspecting standard
@@ -23,8 +27,8 @@ sidecar adoption, and rollback.
 
 Run only digest-approved, verified user-level installers. Never invoke sudo,
 enter credentials, or operate the interactive installer for the user. Offer
-`install/tooling-suite.sh` when the user wants the complete Linux baseline;
-the user launches it and confirms its exact digest-bound root transaction.
+the matching native suite when the user wants the complete connected baseline;
+the user launches it and confirms its exact digest-bound transaction.
 Adaptive privileged scripts remain user-run. Verify either path afterward.
 
 Apply only approved marker blocks and the local sidecar. Preserve unrelated

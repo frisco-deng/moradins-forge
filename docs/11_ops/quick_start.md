@@ -17,7 +17,7 @@ related_docs:
 The primary connected flow has three steps:
 
 1. Clone Forge over HTTPS.
-2. The user runs and approves the guided Linux tooling suite.
+2. The user runs and approves the guided tooling suite for the current OS.
 3. The agent onboards only approved workspace roots and shows each supported
    provider-file diff for separate consent.
 
@@ -27,6 +27,12 @@ cd <forge-root>
 ./install/tooling-suite.sh
 scripts/moradin_forge.sh onboard --workspace <approved-workspace>
 ```
+
+Use `./install/tooling-suite-macos.sh` on macOS or
+`.\install\tooling-suite.ps1` in Windows PowerShell. Start any connected path
+with `doctor --output summary`; all three then expose `status`, `plan`, `apply`,
+`verify`, and `rollback` under the V2 digest/checkpoint/receipt contract.
+Complete air-gap commands are Linux-only.
 
 The suite prints a copyable prompt for step 3. Use repeatable
 `--agent-provider codex|claude|copilot|gemini|cursor` when an additional

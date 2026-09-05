@@ -36,6 +36,7 @@ related_docs:
 - [Task Routing](task_routing.md)
 - [Project Builder Beta Checklist](project_builder_beta_checklist.md)
 - [Project Builder Beta Acceptance Matrix](project_builder_beta_acceptance_matrix.md)
+- [Moradin Forge v1.0 Readiness](v1_readiness.md)
 
 ## Read Order
 
@@ -55,6 +56,7 @@ related_docs:
 14. [Task Routing](task_routing.md)
 15. [Project Builder Beta Checklist](project_builder_beta_checklist.md)
 16. [Project Builder Beta Acceptance Matrix](project_builder_beta_acceptance_matrix.md)
+17. [Moradin Forge v1.0 Readiness](v1_readiness.md)
 
 ## Operating Notes
 

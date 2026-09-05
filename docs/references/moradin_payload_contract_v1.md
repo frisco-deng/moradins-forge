@@ -30,8 +30,9 @@ manifest for agent-first local adoption.
 - Agent-first entrypoint: `FORGE.md`
 - Bootstrap entrypoints: `install/bootstrap-linux.sh`,
   `install/bootstrap-macos.sh`, and `install/bootstrap-windows.ps1`
-- Human-run Linux baseline: `install/tooling-suite.sh` with the shared
-  `catalog/workstation-tools.toml`
+- Human-run connected baselines: `install/tooling-suite.sh`,
+  `install/tooling-suite-macos.sh`, and `install/tooling-suite.ps1` with the
+  shared `catalog/workstation-tools.toml`
 - Complete Linux offline implementation: `scripts/moradin_airgap.py` and
   `install/airgap-container-build.sh`
 - Deterministic README evidence: `scripts/generate_readme_figures.py` and

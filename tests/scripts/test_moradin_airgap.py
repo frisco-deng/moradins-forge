@@ -69,6 +69,25 @@ def completed(
     return SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
 
 
+def test_airgap_run_uses_verified_absolute_manager(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    true_path = Path("/usr/bin/true")
+    assert true_path.is_file()
+    seen: list[str] = []
+
+    def trusted(command: str) -> Path:
+        seen.append(command)
+        return true_path
+
+    monkeypatch.setattr(airgap, "_trusted_airgap_command", trusted)
+
+    result = airgap._run(["dnf", "--version"], runner=airgap.subprocess.run)
+
+    assert result.returncode == 0
+    assert seen == ["dnf"]
+
+
 def test_rpm_signature_verification_accepts_verbose_rsa_proof() -> None:
     verified = completed(
         stdout=(
@@ -792,6 +811,13 @@ def _minimal_lock(cache: Path, *, created_at: str) -> dict[str, object]:
         ),
         "stale_after_days": 30,
         "privacy": "sanitized fixture",
+    }
+    lock["repository_snapshot"] = {
+        "target_image": airgap.TARGET_IMAGES[("ubuntu", "24.04")],
+        "arch_snapshot": "",
+        "trust_sha256": airgap.sha256_bytes(
+            airgap.canonical_json_bytes(lock["trust_assets"])
+        ),
     }
     lock["lock_sha256"] = airgap._record_digest(lock, "lock_sha256")
     return lock

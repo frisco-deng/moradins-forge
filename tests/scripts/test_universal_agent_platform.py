@@ -121,7 +121,8 @@ def test_generated_privileged_scripts_are_dry_run_first_and_reversible() -> None
     assert "command -v git" in bash
     assert "-not $Apply" in powershell
     assert "dry-run packages:" in powershell
-    assert "winget install --exact" in powershell
+    assert "& $manager install --exact" in powershell
+    assert "$manager = 'winget'" in powershell
     assert "reversal:" in powershell
     assert "should-not-run" not in powershell
 

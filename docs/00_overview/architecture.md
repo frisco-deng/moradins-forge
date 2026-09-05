@@ -2,8 +2,10 @@
 title: "Architecture Overview"
 status: approved
 owner: platform-architecture
-last_reviewed: 2026-03-03
-source_refs: []
+last_reviewed: 2026-08-31
+source_refs:
+  - ../../README.md
+  - ../references/moradin_forge_tooling_suite_contract_v2.md
 related_docs:
   - implementation_phases.md
   - service_catalog.md
@@ -17,14 +19,25 @@ related_docs:
 - Preserve deterministic harness governance and quality gate execution.
 - Provide a local Builder control plane that can create/import/generate project repos safely.
 - Keep discovery synthesis optional-LLM with deterministic fallback.
+- Provide equivalent consent-gated connected tooling contracts on Linux/WSL,
+  macOS, and Windows without hiding native provider differences.
 
 ## Core Surfaces
 
 - Tracker UI (`dev_tracker/ui`) for observability and builder operations.
 - Control API (`dev_tracker/ui/scripts/control-api.mjs`) for local orchestration endpoints.
 - Governance docs under `Harness/artifacts/control/` and `docs/exec_plans/`.
+- Native tooling entrypoints feed one V2 doctor, plan, checkpoint, receipt,
+  verification, and rollback contract. The provider boundary is signed
+  apt/dnf/pacman metadata on Linux, Homebrew on macOS, and WinGet on Windows.
+- Complete target-specific air-gap request/build/verify/apply is Linux-only and
+  binds its target image, repository metadata, install packages, and rollback
+  packages to one frozen snapshot.
+- Agents may plan and verify. Humans launch the installer and approve every
+  sudo or elevated phase.
 
 ## Non-Goals
 
 - No automatic execution endpoint after synthesis generation.
 - No implicit branch/routing bypass for cycle closeout.
+- No claim that macOS or Windows have complete offline installation in beta.4.

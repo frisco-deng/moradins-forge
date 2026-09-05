@@ -2,7 +2,7 @@
 title: "Moradin Forge Repo Operating Model V1"
 status: approved
 owner: moradin-forge
-last_reviewed: 2026-07-28
+last_reviewed: 2026-08-31
 source_refs:
   - ../../README.md
   - ../../AGENTS.md
@@ -14,6 +14,7 @@ related_docs:
   - tooling_readiness_install_request_contract_v1.md
   - tooling_readiness_install_execution_contract_v2.md
   - moradin_forge_tooling_suite_contract_v1.md
+  - moradin_forge_tooling_suite_contract_v2.md
   - moradin_forge_upgrade_contract_v1.md
 ---
 
@@ -29,7 +30,9 @@ branches in this repo.
 
 - Create public branches from `main` for normal product work.
 - Keep `main` protected with required `verify`, `security`, and
-  `submit-dependencies` checks.
+  `dependency-readiness` checks. Dependency submission remains a protected
+  `main` post-merge operation because its write permission cannot run on pull
+  requests.
 - Keep dependency graph, Dependabot security updates, secret scanning, and push
   protection enabled.
 - Run portability and sidecar leak checks before every public PR or release.
@@ -42,6 +45,8 @@ branches in this repo.
   has approved evidence and a human promotion gate.
 - Keep dependency submission enabled for the public repository, including the
   `uv.lock` detector.
+- Keep scheduled dependency/security auditing enabled even when hosted
+  Dependabot reports no open alerts.
 - Run the universal agent contract on Linux, macOS, and Windows CI runners.
   This platform test matrix does not activate signing or production promotion.
 
@@ -52,6 +57,7 @@ Use these gates before public PRs and releases:
 - `make test`
 - `make verify-ci`
 - `make verify-security`
+- `make dependency-readiness`
 - `make payload-validate`
 - `make payload-smoke`
 - `make forge-smoke`
@@ -59,6 +65,8 @@ Use these gates before public PRs and releases:
 - `make public-portability-check`
 - `install/bootstrap-linux.sh --dry-run --json`
 - `install/tooling-suite.sh plan --custom --select git --output <temp-dir>/plan.json`
+- `install/tooling-suite-macos.sh doctor --output json`
+- `install/tooling-suite.ps1 doctor --output json`
 - ShellCheck and shfmt for `install/tooling-suite.sh`
 - native Linux, macOS, and Windows onboarding/installer contract CI
 - `npm --prefix dev_tracker/ui ci`

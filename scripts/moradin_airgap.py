@@ -32,6 +32,7 @@ try:
         SUPPORTED_ARCHES,
         ToolingSuiteError,
         _package_versions,
+        _protected_state,
         _expected_stage_items,
         _expected_constraints,
         _record_digest as suite_record_digest,
@@ -71,6 +72,7 @@ except ModuleNotFoundError:  # pragma: no cover - direct script execution
         SUPPORTED_ARCHES,
         ToolingSuiteError,
         _package_versions,
+        _protected_state,
         _expected_stage_items,
         _expected_constraints,
         _record_digest as suite_record_digest,
@@ -103,11 +105,11 @@ except ModuleNotFoundError:  # pragma: no cover - direct script execution
     )
 
 
-AIRGAP_REQUEST_VERSION = "AirgapRequestV1"
-AIRGAP_LOCK_VERSION = "AirgapLockV1"
-AIRGAP_BUNDLE_VERSION = "AirgapBundleV1"
-AIRGAP_VERIFY_VERSION = "AirgapVerifyV1"
-AIRGAP_APPLY_VERSION = "AirgapApplyV1"
+AIRGAP_REQUEST_VERSION = "MoradinForgeAirgapRequestV2"
+AIRGAP_LOCK_VERSION = "MoradinForgeAirgapLockV2"
+AIRGAP_BUNDLE_VERSION = "MoradinForgeAirgapBundleV2"
+AIRGAP_VERIFY_VERSION = "MoradinForgeAirgapVerifyV2"
+AIRGAP_APPLY_VERSION = "MoradinForgeAirgapApplyV2"
 PYTHON_RUNTIME_MANIFEST_VERSION = "MoradinForgePythonRuntimeManifestV1"
 AIRGAP_MAX_AGE = timedelta(days=30)
 AIRGAP_MAX_MEMBERS = 50_000
@@ -118,6 +120,17 @@ AIRGAP_MAX_PACKAGE_RECORDS = 100_000
 AIRGAP_MAX_APT_INDEX_BYTES = 512 * 1024 * 1024
 AIRGAP_SOURCE_DATE_EPOCH = 946684800
 REPO_ROOT = Path(__file__).resolve().parents[1]
+AIRGAP_SYSTEM_COMMAND_PATHS = {
+    "apt-get": ("/usr/bin/apt-get",),
+    "dpkg-deb": ("/usr/bin/dpkg-deb",),
+    "dpkg-query": ("/usr/bin/dpkg-query",),
+    "dnf": ("/usr/bin/dnf", "/usr/bin/dnf5"),
+    "pacman": ("/usr/bin/pacman",),
+    "pactree": ("/usr/bin/pactree",),
+    "rpm": ("/usr/bin/rpm",),
+    "rpmkeys": ("/usr/bin/rpmkeys",),
+}
+AIRGAP_PACKAGE_MANAGERS = {"apt-get", "dnf", "pacman"}
 APT_PACKAGE_STATE_FIELDS = (
     "package",
     "version",
@@ -312,6 +325,38 @@ def _normalized_target_facts(facts: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def _trusted_airgap_command(command: str) -> Path:
+    candidates = AIRGAP_SYSTEM_COMMAND_PATHS.get(command, ())
+    if not candidates:
+        raise AirgapError(f"air-gap command is not allowlisted: {command}")
+    known: set[Path] = set()
+    for raw in candidates:
+        try:
+            known.add(Path(raw).resolve(strict=True))
+        except OSError:
+            continue
+    bound = os.environ.get("MORADIN_FORGE_PACKAGE_MANAGER_PATH", "")
+    selected = (bound,) if command in AIRGAP_PACKAGE_MANAGERS and bound else candidates
+    for raw in selected:
+        path = Path(raw)
+        if not path.is_absolute():
+            continue
+        try:
+            resolved = path.resolve(strict=True)
+            metadata = resolved.stat()
+        except OSError:
+            continue
+        if (
+            resolved in known
+            and resolved.is_file()
+            and metadata.st_uid == 0
+            and not metadata.st_mode & 0o022
+            and os.access(resolved, os.X_OK)
+        ):
+            return resolved
+    raise AirgapError(f"verified absolute air-gap command is unavailable: {command}")
+
+
 def _run(
     argv: Sequence[str],
     *,
@@ -319,20 +364,36 @@ def _run(
     timeout: int = 120,
     cwd: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
+    arguments = list(argv)
+    if (
+        runner is subprocess.run
+        and arguments
+        and arguments[0] in AIRGAP_SYSTEM_COMMAND_PATHS
+    ):
+        arguments[0] = _trusted_airgap_command(arguments[0]).as_posix()
     environment = {
         "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
     }
-    return runner(
-        list(argv),
-        cwd=cwd,
-        env=environment,
-        text=True,
-        capture_output=True,
-        check=False,
-        timeout=timeout,
-    )
+    try:
+        return runner(
+            arguments,
+            cwd=cwd,
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise AirgapError(
+            f"air-gap command timed out without completing: {argv[0]}"
+        ) from error
+    except OSError as error:
+        raise AirgapError(
+            f"air-gap command could not be executed safely: {argv[0]}"
+        ) from error
 
 
 def _rpm_signature_verified(result: subprocess.CompletedProcess[str]) -> bool:
@@ -696,7 +757,9 @@ def load_airgap_request(
         "request_sha256",
     }
     if set(payload) != required_fields:
-        raise AirgapError("air-gap request fields do not match AirgapRequestV1")
+        raise AirgapError(
+            "air-gap request fields do not match MoradinForgeAirgapRequestV2"
+        )
     target = _normalized_target_facts(payload.get("target", {}))
     if payload.get("target") != target:
         raise AirgapError("air-gap request target fields are not canonical")
@@ -2014,7 +2077,10 @@ def run_target_builder(
         if output.is_dir() and not output.is_symlink():
             shutil.rmtree(output)
         detail = result.stderr.strip().splitlines()[-1] if result.stderr.strip() else ""
-        raise AirgapError(f"rootless target builder failed: {detail or 'unknown error'}")
+        raise AirgapError(
+            "rootless target builder failed: "
+            + (detail or f"sanitized exit status {result.returncode}")
+        )
     payload_root = output / "target-payload"
     resolved = _load_json_record(
         payload_root / "resolved.json",
@@ -2189,6 +2255,25 @@ def _validate_lock_contents(lock: dict[str, Any]) -> None:
             raise AirgapError("Arch air-gap lock requires its package inventory")
     elif arch_inventory:
         raise AirgapError("non-Arch air-gap lock must not contain Arch package state")
+    repository_snapshot = lock.get("repository_snapshot")
+    target_key = (target["os_id"], target["version_id"])
+    expected_image = TARGET_IMAGES.get(target_key, "")
+    if (
+        not isinstance(repository_snapshot, dict)
+        or set(repository_snapshot)
+        != {"target_image", "arch_snapshot", "trust_sha256"}
+        or repository_snapshot.get("target_image") != expected_image
+        or repository_snapshot.get("arch_snapshot")
+        != (lock.get("arch_snapshot", "") if target["package_manager"] == "pacman" else "")
+        or not re.fullmatch(
+            r"[0-9a-f]{64}", str(repository_snapshot.get("trust_sha256", ""))
+        )
+        or repository_snapshot.get("trust_sha256")
+        != sha256_bytes(canonical_json_bytes(lock.get("trust_assets", [])))
+    ):
+        raise AirgapError(
+            "air-gap lock repository snapshot is not bound to its target image and trust metadata"
+        )
     try:
         created = datetime.fromisoformat(str(lock["created_at"]))
     except (KeyError, TypeError, ValueError) as error:
@@ -2411,6 +2496,7 @@ def _assemble_airgap_kit(
             "source_sha": lock["source_sha"],
             "target": lock["target"],
             "profile": lock["profile"],
+            "repository_snapshot": lock["repository_snapshot"],
             "network_apply": "disabled",
             "privacy": (
                 "Contains Forge, tool assets, package closure, trust evidence, and "
@@ -2475,6 +2561,21 @@ def build_airgap_bundle_from_request(
         source_root.mkdir()
         source = build_sanitized_source(forge_root, source_root)
         source_records = _cache_tree(source_root, prefix="forge")
+        trust_assets = resolved_payload.get("trust_assets", [])
+        repository_snapshot = {
+            "target_image": TARGET_IMAGES[
+                (
+                    str(request["target"]["os_id"]),
+                    str(request["target"]["version_id"]),
+                )
+            ],
+            "arch_snapshot": (
+                str(request.get("arch_snapshot", ""))
+                if request["target"]["package_manager"] == "pacman"
+                else ""
+            ),
+            "trust_sha256": sha256_bytes(canonical_json_bytes(trust_assets)),
+        }
         lock: dict[str, Any] = {
             "version": AIRGAP_LOCK_VERSION,
             "created_at": datetime.now(tz=UTC).replace(microsecond=0).isoformat(),
@@ -2495,13 +2596,14 @@ def build_airgap_bundle_from_request(
             "arch_package_inventory": request.get(
                 "arch_package_inventory", []
             ),
+            "repository_snapshot": repository_snapshot,
             "expected_package_state": request.get("installed_packages", []),
             "catalog_sha256": request["catalog_sha256"],
             "installer_manifest_sha256": request["installer_manifest_sha256"],
             "source": source,
             "suite_plan": portable_plan,
             "package_assets": resolved_payload.get("package_assets", []),
-            "trust_assets": resolved_payload.get("trust_assets", []),
+            "trust_assets": trust_assets,
             "bootstrap": {
                 "uv": resolved_payload.get("uv", {}),
                 "python": resolved_payload.get("python", {}),
@@ -2631,10 +2733,13 @@ def rebind_airgap_plan(
     plan["expires_at"] = (now + PLAN_TTL).isoformat()
     plan["platform"] = current_facts
     plan["target_uid"] = os.getuid()
+    plan["protected_state_sha256"] = sha256_bytes(
+        canonical_json_bytes(_protected_state(current_facts))
+    )
     plan["approved_workspaces"] = []
     plan["repositories"] = []
     plan["offline"] = {
-        "version": "AirgapOfflinePlanV1",
+        "version": "MoradinForgeAirgapOfflinePlanV2",
         "network": "disabled",
         "bundle_sha256": _assert_digest(
             bundle_sha256,
@@ -3110,7 +3215,7 @@ def _verify_existing_airgap_apply(
         return None
     receipt = _load_json_record(
         receipt_path,
-        version="AirgapApplyReceiptV1",
+        version="MoradinForgeAirgapApplyReceiptV2",
         digest_field="receipt_sha256",
     )
     if receipt.get("bundle_sha256") != bundle_sha256:
@@ -3268,7 +3373,7 @@ def apply_airgap_bundle(
         if suite_verification["status"] != "pass":
             raise AirgapError("post-install tooling-suite verification failed")
         receipt: dict[str, Any] = {
-            "version": "AirgapApplyReceiptV1",
+            "version": "MoradinForgeAirgapApplyReceiptV2",
             "generated_at": utc_now(),
             "bundle_sha256": bundle_sha,
             "lock_sha256": lock["lock_sha256"],
@@ -3701,7 +3806,10 @@ def verify_extracted_bundle(root: Path) -> dict[str, Any]:
         version=AIRGAP_LOCK_VERSION,
         digest_field="lock_sha256",
     )
-    if manifest.get("lock_sha256") != lock["lock_sha256"]:
+    if (
+        manifest.get("lock_sha256") != lock["lock_sha256"]
+        or manifest.get("repository_snapshot") != lock.get("repository_snapshot")
+    ):
         raise AirgapError("air-gap manifest is not bound to its lock")
     source = lock.get("source", {})
     for key in ("git_bundle", "source_snapshot"):
@@ -3802,7 +3910,7 @@ def download_locked_asset(url: str, destination: Path, digest: str, size: int) -
         raise AirgapError("frozen asset size is unsafe")
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": "moradins-forge-airgap/0.2.0-beta.3"},
+        headers={"User-Agent": "moradins-forge-airgap/0.2.0-beta.4"},
     )
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.is_symlink() or (destination.exists() and not destination.is_file()):

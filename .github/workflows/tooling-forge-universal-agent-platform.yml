@@ -53,6 +53,7 @@ jobs:
           uv run pytest -q
           tests/scripts/test_universal_agent_platform.py
           tests/scripts/test_agent_handoffs.py
+          tests/scripts/test_moradin_tooling_suite_native.py
       - name: Run Linux native bootstrap
         if: runner.os == 'Linux'
         shell: bash
@@ -76,11 +77,41 @@ jobs:
       - name: Run macOS native bootstrap
         if: runner.os == 'macOS'
         shell: bash
-        run: install/bootstrap-macos.sh --deps none --dry-run --json
+        run: |
+          install/bootstrap-macos.sh --deps none --dry-run --json
+          install/tooling-suite-macos.sh doctor --output json
+          install/tooling-suite-macos.sh plan --custom --select git \
+            --output "${RUNNER_TEMP}/moradin-tooling-suite-plan.json"
       - name: Run Windows native bootstrap
         if: runner.os == 'Windows'
         shell: pwsh
-        run: .\install\bootstrap-windows.ps1 -Deps none -DryRun -Json
+        run: |
+          .\install\bootstrap-windows.ps1 -Deps none -DryRun -Json
+          .\install\tooling-suite.ps1 doctor --output json
+          $doctorExit = $LASTEXITCODE
+          if ($doctorExit -notin @(0, 2)) {
+            exit $doctorExit
+          }
+          $planPath = "$env:RUNNER_TEMP/moradin-tooling-suite-plan.json"
+          .\install\tooling-suite.ps1 plan --custom --select git `
+            --output $planPath
+          $planExit = $LASTEXITCODE
+          if ($planExit -eq 2) {
+            $plan = Get-Content -Raw -LiteralPath $planPath | ConvertFrom-Json
+            $blockerIds = @($plan.blockers | ForEach-Object { $_.id })
+            $unexpected = @($blockerIds | Where-Object { $_ -ne 'package-manager' })
+            if (
+              $plan.status -ne 'blocked' -or
+              $blockerIds -notcontains 'package-manager' -or
+              $unexpected.Count -ne 0
+            ) {
+              Write-Error 'Windows native plan has unexpected blockers.'
+              exit 1
+            }
+            Write-Host 'WinGet is unavailable; verified the expected fail-closed plan.'
+            exit 0
+          }
+          exit $planExit
 
   linux-distro-lifecycle:
     name: Linux tooling suite / ${{ matrix.name }}

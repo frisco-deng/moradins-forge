@@ -1,7 +1,8 @@
-schema_version = 1
+schema_version = 2
+catalog_version = "MoradinForgeToolCatalogV2"
 
-# One public catalog drives adaptive recommendations, the interactive Linux
-# suite, verification, offline bundles, and generated privileged plans.
+# One public catalog drives adaptive recommendations, connected native suites,
+# verification, Linux offline bundles, and generated privileged plans.
 
 [[tools]]
 id = "git"
@@ -142,6 +143,7 @@ profiles = ["practical"]
 always_consider = true
 required = true
 github_repo = "astral-sh/uv"
+brew_formula = "uv"
 winget_id = "astral-sh.uv"
 
 [[tools]]
@@ -778,9 +780,11 @@ label = "Skopeo"
 command = "skopeo"
 category = "specialized-container"
 reason = "daemonless container image inspection and transfer"
+profiles = ["extended"]
 apt_package = "skopeo"
 dnf_package = "skopeo"
 pacman_package = "skopeo"
+brew_formula = "skopeo"
 
 [[tools]]
 id = "ansible"
@@ -788,9 +792,12 @@ label = "Ansible"
 command = "ansible"
 category = "specialized-automation"
 reason = "configuration automation when project evidence selects it"
+profiles = ["extended"]
 apt_package = "ansible"
 dnf_package = "ansible-core"
 pacman_package = "ansible-core"
+brew_formula = "ansible"
+python_package = "ansible-core"
 
 [[tools]]
 id = "argocd"
@@ -798,6 +805,9 @@ label = "Argo CD CLI"
 command = "argocd"
 category = "specialized-automation"
 reason = "GitOps control when project evidence selects Argo CD"
+profiles = ["extended"]
+brew_formula = "argocd"
+winget_id = "ArgoCD.ArgoCD"
 github_repo = "argoproj/argo-cd"
 
 [[tools]]
@@ -831,6 +841,7 @@ label = "ClamAV"
 command = "clamscan"
 category = "specialized-security"
 reason = "malware scanning for artifact intake lanes"
+profiles = ["extended"]
 apt_package = "clamav"
 dnf_package = "clamav"
 dnf_repository = "epel"
@@ -842,6 +853,7 @@ label = "YARA"
 command = "yara"
 category = "specialized-security"
 reason = "rule-based artifact scanning"
+profiles = ["extended"]
 apt_package = "yara"
 dnf_package = "yara"
 dnf_repository = "epel"
@@ -853,6 +865,7 @@ label = "ModelScan"
 command = "modelscan"
 category = "specialized-security"
 reason = "machine-learning model artifact inspection"
+profiles = ["extended"]
 python_package = "modelscan"
 
 [[tools]]
@@ -861,7 +874,9 @@ label = "cargo-audit"
 command = "cargo-audit"
 category = "specialized-rust"
 reason = "Rust dependency vulnerability scanning"
-manual_only = true
+profiles = ["extended"]
+brew_formula = "cargo-audit"
+github_repo = "rustsec/rustsec"
 
 [[tools]]
 id = "cargo_deny"
@@ -869,6 +884,179 @@ label = "cargo-deny"
 command = "cargo-deny"
 category = "specialized-rust"
 reason = "Rust dependency policy enforcement"
+profiles = ["extended"]
+brew_formula = "cargo-deny"
+github_repo = "EmbarkStudios/cargo-deny"
+
+# Portable engineering additions derived from the full workstation baseline.
+
+[[tools]]
+id = "openssl"
+label = "OpenSSL"
+command = "openssl"
+category = "archive-foundation"
+reason = "certificate, signature, and encrypted transport diagnostics"
+profiles = ["extended"]
+apt_package = "openssl"
+dnf_package = "openssl"
+pacman_package = "openssl"
+brew_formula = "openssl@3"
+
+[[tools]]
+id = "zip"
+label = "Zip"
+command = "zip"
+category = "archive-foundation"
+reason = "portable deterministic zip archive creation"
+profiles = ["extended"]
+apt_package = "zip"
+dnf_package = "zip"
+pacman_package = "zip"
+brew_formula = "zip"
+
+[[tools]]
+id = "bzip2"
+label = "bzip2"
+command = "bzip2"
+category = "archive-foundation"
+reason = "legacy verified archive compatibility"
+profiles = ["extended"]
+apt_package = "bzip2"
+dnf_package = "bzip2"
+pacman_package = "bzip2"
+brew_formula = "bzip2"
+
+[[tools]]
+id = "zstd"
+label = "Zstandard"
+command = "zstd"
+category = "archive-foundation"
+reason = "fast reproducible artifact compression"
+profiles = ["extended"]
+apt_package = "zstd"
+dnf_package = "zstd"
+pacman_package = "zstd"
+brew_formula = "zstd"
+winget_id = "Facebook.Zstandard"
+
+[[tools]]
+id = "ruff"
+label = "Ruff"
+command = "ruff"
+category = "archive-foundation"
+reason = "fast Python linting and formatting under repository-owned policy"
+profiles = ["extended"]
+python_package = "ruff"
+github_repo = "astral-sh/ruff"
+winget_id = "astral-sh.ruff"
+
+[[tools]]
+id = "pyright"
+label = "Pyright"
+command = "pyright"
+category = "archive-foundation"
+reason = "portable Python static type analysis"
+profiles = ["extended"]
+python_package = "pyright"
+brew_formula = "pyright"
+winget_id = "Microsoft.Pyright"
+
+[[tools]]
+id = "opentofu"
+label = "OpenTofu"
+command = "tofu"
+category = "infrastructure-as-code"
+reason = "open-source infrastructure planning and validation"
+profiles = ["extended"]
+brew_formula = "opentofu"
+winget_id = "OpenTofu.Tofu"
+github_repo = "opentofu/opentofu"
+
+[[tools]]
+id = "tflint"
+label = "TFLint"
+command = "tflint"
+category = "infrastructure-as-code"
+reason = "Terraform and OpenTofu configuration linting"
+profiles = ["extended"]
+brew_formula = "tflint"
+github_repo = "terraform-linters/tflint"
+
+[[tools]]
+id = "terraform_docs"
+label = "terraform-docs"
+command = "terraform-docs"
+category = "infrastructure-as-code"
+reason = "deterministic infrastructure module documentation"
+profiles = ["extended"]
+brew_formula = "terraform-docs"
+github_repo = "terraform-docs/terraform-docs"
+
+[[tools]]
+id = "rclone"
+label = "rclone"
+command = "rclone"
+category = "recovery-transfer"
+reason = "reviewable artifact and backup transfer"
+profiles = ["extended"]
+apt_package = "rclone"
+dnf_package = "rclone"
+dnf_repository = "epel"
+pacman_package = "rclone"
+brew_formula = "rclone"
+winget_id = "Rclone.Rclone"
+github_repo = "rclone/rclone"
+
+[[tools]]
+id = "velero"
+label = "Velero"
+command = "velero"
+category = "recovery-transfer"
+reason = "Kubernetes backup and restore validation"
+profiles = ["extended"]
+brew_formula = "velero"
+github_repo = "vmware-tanzu/velero"
+
+[[tools]]
+id = "crane"
+label = "crane"
+command = "crane"
+category = "recovery-transfer"
+reason = "daemonless OCI registry inspection and transfer"
+profiles = ["extended"]
+brew_formula = "crane"
+github_repo = "google/go-containerregistry"
+
+[[tools]]
+id = "terraform"
+label = "Terraform (BUSL)"
+command = "terraform"
+category = "specialized-license"
+reason = "BUSL-licensed infrastructure tooling requiring explicit license review"
+manual_only = true
+
+[[tools]]
+id = "packer"
+label = "Packer (BUSL)"
+command = "packer"
+category = "specialized-license"
+reason = "BUSL-licensed image tooling excluded from default and offline redistribution"
+manual_only = true
+
+[[tools]]
+id = "govc"
+label = "govc"
+command = "govc"
+category = "specialized-virtualization"
+reason = "VMware automation requiring project evidence and endpoint trust review"
+manual_only = true
+
+[[tools]]
+id = "openjdk"
+label = "OpenJDK"
+command = "java"
+category = "specialized-runtime"
+reason = "JVM runtime selected only by repository evidence"
 manual_only = true
 
 [[tools]]

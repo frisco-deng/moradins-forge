@@ -2,6 +2,13 @@
 set -euo pipefail
 
 umask 077
+builder_phase=initialization
+builder_failure() {
+	local status=$?
+	printf 'Air-gap builder failed during %s (exit %s).\n' "$builder_phase" "$status" >&2
+	exit "$status"
+}
+trap builder_failure ERR
 SAFE_PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 PATH=$SAFE_PATH
 export PATH
@@ -10,6 +17,23 @@ unset CDPATH ENV BASH_ENV PYTHONHOME PYTHONPATH LD_LIBRARY_PATH LD_PRELOAD
 request=${1:?request path is required}
 output=${2:?output path is required}
 forge_root=/forge
+
+trusted_manager() {
+	local candidate resolved owner permissions
+	for candidate in "$@"; do
+		[[ -x $candidate ]] || continue
+		resolved=$(readlink -f -- "$candidate") || continue
+		[[ -x $resolved && -f $resolved && ! -L $resolved ]] || continue
+		owner=$(stat -c '%u' -- "$resolved")
+		permissions=$(stat -c '%a' -- "$resolved")
+		permissions=${permissions: -3}
+		if [[ $owner == 0 ]] && (((8#$permissions & 8#022) == 0)); then
+			printf '%s\n' "$resolved"
+			return 0
+		fi
+	done
+	return 1
+}
 
 if [[ $EUID -ne 0 ]]; then
 	printf '%s\n' 'The disposable rootless builder container must initialize as container root.' >&2
@@ -21,28 +45,33 @@ if [[ ! -f $request || -L $request || -e $output ]]; then
 fi
 
 os_id=$(sed -n 's/^ID=//p' /etc/os-release | head -n 1 | tr -d '"')
+builder_phase=package-manager-bootstrap
 case $os_id in
 ubuntu | debian)
+	manager_path=$(trusted_manager /usr/bin/apt-get)
 	export DEBIAN_FRONTEND=noninteractive
-	apt-get update
-	apt-get install -y --no-install-recommends \
+	"$manager_path" update
+	"$manager_path" install -y --no-install-recommends \
 		ca-certificates coreutils curl dpkg-dev findutils git \
 		gnupg lz4 python3 tar xz-utils
 	;;
 fedora)
-	dnf install -y --setopt=install_weak_deps=False \
+	manager_path=$(trusted_manager /usr/bin/dnf /usr/bin/dnf5)
+	"$manager_path" install -y --setopt=install_weak_deps=False \
 		ca-certificates coreutils curl dnf-plugins-core findutils git gnupg2 \
 		python3 rpm-sign tar xz
 	;;
 rocky | almalinux | rhel)
-	dnf install -y --setopt=install_weak_deps=False \
+	manager_path=$(trusted_manager /usr/bin/dnf /usr/bin/dnf5)
+	"$manager_path" install -y --setopt=install_weak_deps=False \
 		ca-certificates coreutils-single curl-minimal dnf-plugins-core findutils \
 		git gnupg2 python3.11 rpm-sign tar xz
 	if python3.11 -c 'import json,sys; p=json.load(open(sys.argv[1], encoding="utf-8")); raise SystemExit("epel" not in p.get("approved_repositories", []))' "$request"; then
-		dnf install -y --setopt=install_weak_deps=False epel-release
+		"$manager_path" install -y --setopt=install_weak_deps=False epel-release
 	fi
 	;;
 arch)
+	manager_path=$(trusted_manager /usr/bin/pacman)
 	snapshot=${AIRGAP_ARCH_SNAPSHOT:-}
 	if [[ ! $snapshot =~ ^[0-9]{4}/[0-9]{2}/[0-9]{2}$ ]]; then
 		printf '%s\n' 'A frozen YYYY/MM/DD Arch snapshot is required.' >&2
@@ -50,7 +79,10 @@ arch)
 	fi
 	printf "Server = https://archive.archlinux.org/repos/%s/\$repo/os/\$arch\n" "$snapshot" \
 		>/etc/pacman.d/mirrorlist
-	pacman -Syu --needed --noconfirm \
+	# An Arch air-gap kit is a full, frozen transaction. Refresh twice and
+	# permit downgrades so this disposable resolver uses exactly the approved
+	# archive snapshot instead of retaining newer packages from its base image.
+	"$manager_path" -Syyuu --needed --noconfirm \
 		ca-certificates coreutils curl findutils git gnupg pacman-contrib python tar xz
 	;;
 *)
@@ -58,7 +90,10 @@ arch)
 	exit 2
 	;;
 esac
+MORADIN_FORGE_PACKAGE_MANAGER_PATH=$manager_path
+export MORADIN_FORGE_PACKAGE_MANAGER_PATH
 
+builder_phase=python-discovery
 python_path=$(command -v python3 || command -v python3.11 || true)
 if [[ -z $python_path ]]; then
 	printf '%s\n' 'The disposable builder could not provision Python.' >&2
@@ -88,6 +123,7 @@ cleanup() {
 	find "$scratch" -depth -delete 2>/dev/null || true
 }
 trap cleanup EXIT
+builder_phase=uv-bootstrap
 uv_archive=$scratch/uv.tar.gz
 curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
 	--output "$uv_archive" \
@@ -116,6 +152,7 @@ install -m 0755 -- "$extracted_uv" "$uv_path"
 python_install=$scratch/python
 UV_PYTHON_INSTALL_DIR=$python_install
 export UV_PYTHON_INSTALL_DIR
+builder_phase=python-bootstrap
 "$uv_path" python install --managed-python --no-config --install-dir "$python_install" 3.12.8
 managed_python=$("$uv_path" python find --no-config --no-python-downloads --python-preference only-managed 3.12.8)
 if [[ ! -x $managed_python ]]; then
@@ -129,6 +166,7 @@ PATH=$(dirname -- "$managed_python"):$(dirname -- "$uv_path"):$SAFE_PATH
 export PATH
 mkdir -p -- "$(dirname -- "$output")"
 
+builder_phase=target-payload-resolution
 "$managed_python" "$forge_root/scripts/moradin_airgap.py" \
 	_container-build --request "$request" --output "$output" --forge-root "$forge_root"
 

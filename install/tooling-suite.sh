@@ -103,24 +103,39 @@ find_request_python() {
 }
 
 install_bootstrap_prerequisites() {
-	local os_id id_like manager python_package
+	local os_id id_like manager manager_path python_package owner permissions
 	local -a bootstrap_packages
 	bootstrap_packages=()
 	os_id=$(sed -n 's/^ID=//p' /etc/os-release | head -n 1 | tr -d '"')
 	id_like=$(sed -n 's/^ID_LIKE=//p' /etc/os-release | head -n 1 | tr -d '"')
 	manager=
+	manager_path=
 	python_package=python3
 	if [[ $os_id == ubuntu || $os_id == debian || $id_like == *debian* ]]; then
 		manager=apt
+		manager_path=/usr/bin/apt-get
 	elif [[ $os_id == fedora || $os_id == rhel || $os_id == rocky ||
 		$os_id == almalinux || $id_like == *rhel* || $id_like == *fedora* ]]; then
 		manager=dnf
+		if [[ -x /usr/bin/dnf && ! -L /usr/bin/dnf ]]; then
+			manager_path=/usr/bin/dnf
+		elif [[ -x /usr/bin/dnf5 && ! -L /usr/bin/dnf5 ]]; then
+			manager_path=/usr/bin/dnf5
+		fi
 	elif [[ $os_id == arch || $id_like == *arch* ]]; then
 		manager=pacman
+		manager_path=/usr/bin/pacman
 		python_package=python
 	fi
-	if [[ -z $manager ]]; then
+	if [[ -z $manager || -z $manager_path || ! -x $manager_path || -L $manager_path ]]; then
 		printf '%s\n' 'Cannot bootstrap prerequisites on this Linux distribution.' >&2
+		exit 2
+	fi
+	owner=$(stat -c '%u' -- "$manager_path")
+	permissions=$(stat -c '%a' -- "$manager_path")
+	permissions=${permissions: -3}
+	if [[ $owner != 0 ]] || (((8#$permissions & 8#022) != 0)); then
+		printf '%s\n' 'The package manager is not a trusted root-owned executable.' >&2
 		exit 2
 	fi
 	if ! find_python >/dev/null 2>&1; then
@@ -133,9 +148,9 @@ install_bootstrap_prerequisites() {
 			fi
 			;;
 		dnf)
-			if dnf --quiet repoquery --latest-limit 1 python3.12 >/dev/null 2>&1; then
+			if "$manager_path" --quiet repoquery --latest-limit 1 python3.12 >/dev/null 2>&1; then
 				python_package=python3.12
-			elif dnf --quiet repoquery --latest-limit 1 python3.11 >/dev/null 2>&1; then
+			elif "$manager_path" --quiet repoquery --latest-limit 1 python3.11 >/dev/null 2>&1; then
 				python_package=python3.11
 			fi
 			;;
@@ -163,13 +178,13 @@ install_bootstrap_prerequisites() {
 	case $manager in
 	apt)
 		sudo -- /usr/bin/env -i PATH="$SAFE_SYSTEM_PATH" LANG=C.UTF-8 LC_ALL=C.UTF-8 \
-			apt-get update
+			"$manager_path" update
 		sudo -- /usr/bin/env -i PATH="$SAFE_SYSTEM_PATH" LANG=C.UTF-8 LC_ALL=C.UTF-8 \
-			apt-get install -y --no-install-recommends -- "${bootstrap_packages[@]}"
+			"$manager_path" install -y --no-install-recommends -- "${bootstrap_packages[@]}"
 		;;
 	dnf)
 		sudo -- /usr/bin/env -i PATH="$SAFE_SYSTEM_PATH" LANG=C.UTF-8 LC_ALL=C.UTF-8 \
-			dnf install -y --setopt=install_weak_deps=False "${bootstrap_packages[@]}"
+			"$manager_path" install -y --setopt=install_weak_deps=False "${bootstrap_packages[@]}"
 		;;
 	pacman)
 		printf '%s\n' 'Arch requires a complete synchronized transaction; no partial upgrade is used.'
@@ -178,7 +193,7 @@ install_bootstrap_prerequisites() {
 			exit 2
 		fi
 		sudo -- /usr/bin/env -i PATH="$SAFE_SYSTEM_PATH" LANG=C.UTF-8 LC_ALL=C.UTF-8 \
-			pacman -Syu --needed --noconfirm -- "${bootstrap_packages[@]}"
+			"$manager_path" -Syu --needed --noconfirm -- "${bootstrap_packages[@]}"
 		;;
 	esac
 }

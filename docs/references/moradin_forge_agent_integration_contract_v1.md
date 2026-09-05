@@ -14,6 +14,7 @@ related_docs:
   - moradin_forge_installer_bootstrap_contract_v1.md
   - moradin_forge_public_export_contract_v1.md
   - tooling_readiness_install_execution_contract_v2.md
+  - moradin_forge_tooling_suite_contract_v2.md
   - moradin_forge_tooling_suite_contract_v1.md
   - moradin_forge_upgrade_contract_v1.md
   - moradin_agent_efficiency_contract_v1.md
@@ -33,8 +34,12 @@ and repository changes, deterministic verification, and rollback.
 
 1. Read `README.md`, `FORGE.md`, `AGENTS.md`, and
    `Harness/entrypoints/forge.md`, then explain the three-step path.
-2. Ask the user to run `install/tooling-suite.sh`. The agent may explain and
-   verify the receipt, but it may not operate the menu or approve sudo.
+2. Ask the user to run the matching native suite:
+   `install/tooling-suite.sh` on Linux/WSL,
+   `install/tooling-suite-macos.sh` on macOS, or
+   `install/tooling-suite.ps1` on Windows. Begin with `doctor`. The agent may
+   explain and verify the receipt, but it may not operate the menu or approve
+   sudo/elevation.
 3. Ask which workspace roots the user approves and which supported agent
    providers they use.
 4. Run `onboard --workspace <approved-root>` for each root. Onboarding verifies
@@ -118,12 +123,16 @@ modified marker.
 The wrappers prefer `uv` and fall back to Python 3. Forge has no dependency on
 private `.templates` or Harness repositories at runtime.
 
-The separate human-run Linux baseline is `install/tooling-suite.sh`. Agents may
-offer, plan, and verify that flow but may not operate its interactive menu,
-invoke sudo, enter credentials, or confirm its digest. The program may request
-sudo only after the human reviews and approves the exact root transaction.
+The human-run connected baselines are `install/tooling-suite.sh`,
+`install/tooling-suite-macos.sh`, and `install/tooling-suite.ps1`. Agents may
+offer, plan, and verify those flows but may not operate an interactive menu,
+invoke elevation, enter credentials, or confirm a digest. Each exposes the V2
+doctor, status, plan, apply, verify, and rollback contract. Linux may request
+sudo only after the human reviews and approves the exact root transaction;
+Windows emits the exact elevated script for the human to run.
 
-Disconnected Linux onboarding adds `--offline` only after the complete
+Complete air-gap commands remain Linux-only. Disconnected Linux onboarding
+adds `--offline` only after the complete
 target-specific air-gap kit has verified and applied. It performs no metadata
 refresh. The older `bundle` interface is asset-only and may be partial; it is
 not sufficient evidence for complete offline installation.

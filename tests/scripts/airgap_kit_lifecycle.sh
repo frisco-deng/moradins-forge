@@ -20,6 +20,7 @@ forge_root=${FORGE_ROOT:-$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd -P)
 target_image=${TARGET_IMAGE:?TARGET_IMAGE is required}
 target_platform=${TARGET_PLATFORM:?TARGET_PLATFORM is required}
 target_kind=${TARGET_KIND:?TARGET_KIND is required}
+arch_snapshot=2026/07/31
 scratch_root=$(mktemp -d "${RUNNER_TEMP:-/tmp}/moradin-airgap-qualification.XXXXXXXX")
 container_name=moradin-airgap-${target_kind}-${target_platform##*/}-$$
 consumer_home=/var/lib/moradin-consumer
@@ -47,8 +48,8 @@ rocky)
 		'dnf -q install -y --setopt=install_weak_deps=False ca-certificates coreutils-single findutils git gzip python3 shadow-utils sudo tar >/dev/null'
 	;;
 arch)
-	podman exec "$container_name" /bin/sh -eu -c \
-		'pacman -Syu --needed --noconfirm --quiet ca-certificates coreutils curl findutils git gzip python sudo tar >/dev/null'
+	podman exec --env ARCH_SNAPSHOT="$arch_snapshot" "$container_name" /bin/sh -eu -c \
+		'printf "Server = https://archive.archlinux.org/repos/%s/\$repo/os/\$arch\n" "$ARCH_SNAPSHOT" >/etc/pacman.d/mirrorlist; pacman -Syyuu --needed --noconfirm --quiet ca-certificates coreutils curl findutils git gzip python sudo tar >/dev/null'
 	;;
 *)
 	printf 'Unsupported qualification target: %s\n' "$target_kind" >&2
@@ -84,7 +85,7 @@ for tool_id in "${exclusions[@]}"; do
 done
 if [[ $target_kind == arch ]]; then
 	request_arguments+=(
-		--arch-snapshot 2026/07/31
+		--arch-snapshot "$arch_snapshot"
 		--approve-arch-package-inventory
 	)
 fi

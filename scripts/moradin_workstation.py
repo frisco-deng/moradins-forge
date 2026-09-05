@@ -138,10 +138,14 @@ def load_tool_catalog(path: Path = CATALOG_PATH) -> tuple[ToolSpec, ...]:
         document = tomllib.loads(path.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as error:
         raise WorkstationError("workstation catalog is not valid TOML") from error
-    if document.get("schema_version") != 1 or not isinstance(
-        document.get("tools"), list
+    if (
+        document.get("schema_version") != 2
+        or document.get("catalog_version") != "MoradinForgeToolCatalogV2"
+        or not isinstance(document.get("tools"), list)
     ):
-        raise WorkstationError("workstation catalog schema_version must be 1")
+        raise WorkstationError(
+            "workstation catalog must be MoradinForgeToolCatalogV2"
+        )
     known_fields = set(ToolSpec.__dataclass_fields__)
     rows: list[ToolSpec] = []
     seen: set[str] = set()
@@ -598,7 +602,7 @@ def _fetch_json(url: str, timeout: float = 8.0) -> dict[str, Any]:
         url,
         headers={
             "Accept": "application/json",
-            "User-Agent": "moradins-forge-version-resolver/0.2.0-beta.3",
+            "User-Agent": "moradins-forge-version-resolver/0.2.0-beta.4",
         },
     )
     with _open_official_url(request, timeout=timeout) as response:
@@ -2208,7 +2212,7 @@ def render_privileged_bash(plan: dict[str, Any]) -> str:
         )
         for row in plan["tools"]
         if plan_system in {"", "linux"}
-        if not row["present"]
+        if (not row["present"] or row.get("status") == "upgrade")
         and row["install_action"]["kind"] == "privileged-script"
         and row["install_action"]["package"]
     }
@@ -2310,7 +2314,7 @@ def render_privileged_powershell(plan: dict[str, Any]) -> str:
         )
         for row in plan["tools"]
         if plan_system in {"", "windows"}
-        if not row["present"]
+        if (not row["present"] or row.get("status") == "upgrade")
         and row["install_action"]["kind"] == "privileged-script"
         and row["install_action"]["package"]
     )
@@ -2330,7 +2334,7 @@ def render_privileged_powershell(plan: dict[str, Any]) -> str:
             for row in plan["tools"]
             if plan_system in {"", "windows"}
             if str(row.get("id", "")) in catalog
-            if not row["present"]
+            if (not row["present"] or row.get("status") == "upgrade")
             and row["install_action"]["kind"] == "privileged-script"
             and catalog[str(row["id"])].command
         }
@@ -2338,8 +2342,11 @@ def render_privileged_powershell(plan: dict[str, Any]) -> str:
     rendered_commands = ", ".join(
         "'" + item.replace("'", "''") + "'" for item in commands
     )
+    manager = str(plan.get("platform", {}).get("package_manager_path", "winget"))
+    rendered_manager = manager.replace("'", "''")
     return f"""param([switch]$Apply)
 $ErrorActionPreference = 'Stop'
+$manager = '{rendered_manager}'
 $packages = @({rendered})
 $commands = @({rendered_commands})
 if ($packages.Count -eq 0) {{
@@ -2358,7 +2365,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 foreach ($package in $packages) {{
   $versionArgs = @()
   if ($package.Version) {{ $versionArgs = @('--version', $package.Version) }}
-  winget install --exact --id $package.Id @versionArgs --accept-package-agreements --accept-source-agreements
+  & $manager install --exact --id $package.Id @versionArgs --accept-package-agreements --accept-source-agreements
 }}
 foreach ($command in $commands) {{
   if (-not (Get-Command $command -ErrorAction SilentlyContinue)) {{
@@ -2366,7 +2373,7 @@ foreach ($command in $commands) {{
   }}
 }}
 Write-Output 'Moradin privileged tooling verification passed.'
-Write-Output ('reversal: winget uninstall --exact --id ' + (($packages | ForEach-Object {{ $_.Id }}) -join '; winget uninstall --exact --id '))
+Write-Output ('reversal: ' + $manager + ' uninstall --exact --id ' + (($packages | ForEach-Object {{ $_.Id }}) -join ('; ' + $manager + ' uninstall --exact --id ')))
 """
 
 
@@ -2843,7 +2850,7 @@ def _download_asset(url: str, destination: Path) -> None:
     _assert_official_asset(url)
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": "moradins-forge-offline-bundle/0.2.0-beta.3"},
+        headers={"User-Agent": "moradins-forge-offline-bundle/0.2.0-beta.4"},
     )
     with _open_official_url(request, timeout=30) as response:
         destination.write_bytes(response.read())

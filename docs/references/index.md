@@ -18,6 +18,7 @@ related_docs:
   - moradin_forge_agent_integration_contract_v1.md
   - moradin_forge_installer_bootstrap_contract_v1.md
   - moradin_forge_tooling_suite_contract_v1.md
+  - moradin_forge_tooling_suite_contract_v2.md
   - moradin_forge_public_export_contract_v1.md
   - moradin_forge_release_artifact_contract_v1.md
   - moradin_forge_upgrade_contract_v1.md
@@ -55,6 +56,7 @@ Reference assets and external/tooling reference pointers.
 - [Moradin Forge Agent Integration Contract V1](moradin_forge_agent_integration_contract_v1.md)
 - [Moradin Forge Installer Bootstrap Contract V1](moradin_forge_installer_bootstrap_contract_v1.md)
 - [Moradin Forge Linux Tooling Suite Contract V1](moradin_forge_tooling_suite_contract_v1.md)
+- [Moradin Forge Tooling Suite Contract V2](moradin_forge_tooling_suite_contract_v2.md)
 - [Moradin Forge Public Export And Portability Contract V1](moradin_forge_public_export_contract_v1.md)
 - [Moradin Forge Release Artifact Contract V1](moradin_forge_release_artifact_contract_v1.md)
 - [Moradin Forge Upgrade Contract V1](moradin_forge_upgrade_contract_v1.md)

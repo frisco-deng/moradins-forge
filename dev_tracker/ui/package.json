@@ -1,6 +1,6 @@
 {
   "name": "moradin-forge-workbench",
-  "version": "0.2.0-beta.3",
+  "version": "0.2.0-beta.4",
   "private": true,
   "type": "module",
   "engines": {
@@ -51,5 +51,8 @@
     "vite": "^7.3.1",
     "vitest": "^4.1.10",
     "vitest-browser-react": "^2.2.0"
+  },
+  "overrides": {
+    "nanoid": "3.3.18"
   }
 }

@@ -1,20 +1,27 @@
 ---
-title: "Moradin Forge Linux Tooling Suite Contract V1"
-status: approved
+title: "Moradin Forge Linux Tooling Suite Contract V1 Compatibility"
+status: compatibility
 owner: platform-operations
-last_reviewed: 2026-07-31
+last_reviewed: 2026-08-31
 source_refs:
   - ../../install/tooling-suite.sh
   - ../../scripts/moradin_tooling_suite.py
   - ../../catalog/workstation-tools.toml
 related_docs:
+  - moradin_forge_tooling_suite_contract_v2.md
   - tooling_readiness_install_execution_contract_v2.md
   - moradin_forge_installer_bootstrap_contract_v1.md
   - moradin_forge_agent_integration_contract_v1.md
   - ../11_ops/air_gapped_tooling_suite.md
 ---
 
-# Moradin Forge Linux Tooling Suite Contract V1
+# Moradin Forge Linux Tooling Suite Contract V1 Compatibility
+
+New installations use the
+[V2 tooling-suite contract](moradin_forge_tooling_suite_contract_v2.md). This
+document remains the compatibility and rollback reference for existing V1
+plans and receipts. V1 plans expire normally and cannot authorize V2 work;
+V1 receipts remain readable and rollback-capable through their sealed runner.
 
 ## Purpose
 

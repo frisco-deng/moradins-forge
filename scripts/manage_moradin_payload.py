@@ -14,7 +14,7 @@ TEMPLATE_ROOT = REPO_ROOT / ".harness_template"
 MORADIN_PAYLOAD_MANIFEST = REPO_ROOT / "Harness" / "moradin_payload" / "manifest.yaml"
 MIGRATION_REPORTS_ROOT = REPO_ROOT / "public_audit"
 HARNESS_GENERATED_ROOT = REPO_ROOT / "Harness" / "generated"
-EXPECTED_TEMPLATE_VERSION = "0.2.0-beta.3"
+EXPECTED_TEMPLATE_VERSION = "0.2.0-beta.4"
 EXPECTED_RELEASE_STAGE = "beta"
 TEXT_EXTENSIONS = {
     ".md",

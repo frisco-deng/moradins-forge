@@ -69,9 +69,11 @@ usernames, SSH clone URLs, session paths, and target repository content.
 - Generated artifacts are ignored and excluded from public exports and
   sidecar payloads.
 
-## Full Linux Tooling Suite
+## Full Connected Tooling Suite
 
-`install/tooling-suite.sh` is a separate human-run workstation installer, not
-bootstrap. It may request sudo after an exact plan review and digest
-confirmation under the Linux tooling-suite contract. This exception does not
-permit bootstrap or an agent to invoke elevation.
+`install/tooling-suite.sh`, `install/tooling-suite-macos.sh`, and
+`install/tooling-suite.ps1` are separate human-run workstation installers, not
+bootstrap. They use the V2 contract. Linux may request sudo after an exact plan
+review and digest confirmation; Windows emits a reviewable elevated script for
+the human. This exception does not permit bootstrap or an agent to invoke
+elevation. Complete air-gap operations remain Linux-only.

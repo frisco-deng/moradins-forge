@@ -6,8 +6,8 @@ Use this when changing Forge itself.
 - Keep target repo adoption consent-gated.
 - Keep user-level execution bound to an exact approved plan digest.
 - Agents never invoke elevation. Adaptive flows generate privileged scripts;
-  the separate human-run Linux suite may request sudo only after exact plan
-  review and digest confirmation.
+  the human-run Linux/WSL, macOS, or Windows V2 suite acts only after exact
+  plan review and digest confirmation. Complete air-gap support is Linux-only.
 - Preserve independently approved agent blocks and user configuration.
 - Preserve target root files by default.
 - Update contracts before changing payload or sidecar behavior.

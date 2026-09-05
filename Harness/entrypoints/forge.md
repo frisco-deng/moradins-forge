@@ -10,8 +10,11 @@ without breaking that repo's current workflows.
 ## Consent-First Sequence
 
 1. Confirm the public Forge clone and explain the README's three-step path.
-2. Ask the user to run `./install/tooling-suite.sh`; the agent explains and
-   verifies, while the user owns every interactive and sudo approval.
+2. Ask the user to run `./install/tooling-suite.sh` on Linux/WSL,
+   `./install/tooling-suite-macos.sh` on macOS, or
+   `.\install\tooling-suite.ps1` on Windows. Begin with `doctor`; the agent
+   explains and verifies, while the user owns every interactive and elevated
+   approval.
 3. Read `FORGE.md`, `README.md`, and this entrypoint.
 4. Ask the user which workspace roots Forge may inspect and which agent
    providers they use.
@@ -23,8 +26,9 @@ without breaking that repo's current workflows.
 7. Show each fixed-path provider proposal and ask separately before that file
    is created or patched.
 8. Ask for explicit, scoped user consent before applying tools or repository
-   changes. For a complete Linux baseline, offer `install/tooling-suite.sh` and
-   require the human to launch and approve it personally.
+   changes. Offer the native suite for a complete connected baseline and
+   require the human to launch and approve it personally. Complete air-gap
+   operations remain Linux-only.
 9. Run `scripts/moradin_forge.sh plan --target <target-repo>` or the PowerShell
    wrapper to produce a dry-run plan.
 10. Apply only after consent with `scripts/moradin_forge.sh apply --target
@@ -69,7 +73,9 @@ Forge agents must not:
 - Linux/macOS: `scripts/moradin_forge.sh`
 - Windows PowerShell: `scripts/moradin_forge.ps1`
 - Python core: `scripts/moradin_forge.py`
-- Human-run Linux tooling suite: `install/tooling-suite.sh`
+- Human-run Linux/WSL suite: `install/tooling-suite.sh`
+- Human-run macOS suite: `install/tooling-suite-macos.sh`
+- Human-run Windows suite: `install/tooling-suite.ps1`
 - First-use handoff prompt: `Harness/entrypoints/forge_agent_handoff.md`
 - Payload source of truth: `Harness/moradin_payload/manifest.yaml`
 
@@ -78,6 +84,8 @@ Forge agents must not:
 Use the explicit rollback command. It verifies the ownership manifest, refuses
 modified or unowned managed content, removes only the owned sidecar, and
 restores Forge-owned target agent blocks while preserving unrelated guidance.
-Adaptive tooling rollback removes only receipt-owned user-local tools. The
-human-run Linux suite additionally records digest-bound root receipts and can
-roll back only its own package and atomic-shim transactions.
+Adaptive tooling rollback removes only receipt-owned user-local tools. Native
+V2 suites retain digest-bound checkpoints and receipts; the Linux suite also
+records root receipts and can roll back only its own package and atomic-shim
+transactions. V1 Linux receipts remain readable and rollback-capable through
+their sealed runner.
