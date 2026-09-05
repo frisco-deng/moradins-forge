@@ -1,4 +1,4 @@
-.PHONY: lint-py lint-md test test-py ui-test ui-build payload-validate payload-smoke template-validate template-smoke forge-explain forge-readiness forge-brief forge-onboard forge-tooling-suite forge-tooling-suite-plan forge-tooling-suite-apply forge-tooling-suite-bundle forge-tooling-suite-verify forge-tooling-suite-rollback forge-airgap-request forge-airgap-build forge-airgap-verify forge-airgap-apply forge-tooling-plan forge-tooling-update-plan forge-tooling-apply forge-tooling-bundle forge-tooling-rollback forge-plan forge-adopt-dry-run forge-adopt forge-verify forge-upgrade-plan forge-upgrade forge-upgrade-rollback forge-rollback forge-smoke forge-dogfood-smoke forge-release-artifacts generate-readme-figures verify-readme-figures public-export public-portability-check
+.PHONY: lint-py lint-md test test-py ui-test ui-build dependency-readiness payload-validate payload-smoke template-validate template-smoke forge-explain forge-readiness forge-brief forge-onboard forge-tooling-suite forge-tooling-suite-plan forge-tooling-suite-apply forge-tooling-suite-bundle forge-tooling-suite-verify forge-tooling-suite-rollback forge-airgap-request forge-airgap-build forge-airgap-verify forge-airgap-apply forge-tooling-plan forge-tooling-update-plan forge-tooling-apply forge-tooling-bundle forge-tooling-rollback forge-plan forge-adopt-dry-run forge-adopt forge-verify forge-upgrade-plan forge-upgrade forge-upgrade-rollback forge-rollback forge-smoke forge-dogfood-smoke forge-release-artifacts generate-readme-figures verify-readme-figures public-export public-portability-check
 
 PUBLIC_EXPORT_DIR ?= /tmp/moradin-forge-public-export-check
 PUBLIC_SIDECAR_SMOKE_DIR ?= /tmp/moradin-forge-sidecar-smoke-check
@@ -37,6 +37,14 @@ ui-test:
 
 ui-build:
 	npm --prefix dev_tracker/ui run build
+
+dependency-readiness:
+	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/dependency_readiness.py
+	UV_CACHE_DIR=/tmp/uv-cache uv lock --check
+	UV_CACHE_DIR=/tmp/uv-cache uv tree --locked > /dev/null
+	npm --prefix dev_tracker/ui ci --ignore-scripts
+	npm --prefix dev_tracker/ui ls --all > /dev/null
+	npm --prefix dev_tracker/ui audit --audit-level=high
 
 payload-validate:
 	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/manage_moradin_payload.py validate
