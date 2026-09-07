@@ -39,7 +39,7 @@ jobs:
       - name: Setup Node.js
         if: ${{ hashFiles('package.json', 'frontend/package.json', 'ui/package.json', 'ui/frontend/package.json', 'dev_tracker/ui/package.json', 'apps/ui/frontend/package.json') != '' }}
         # v4
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: "24"
       - name: Install Node dependencies
