@@ -45,7 +45,7 @@ jobs:
           python-version: "3.12"
       - name: Install uv
         # v4
-        uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
       - name: Sync locked test environment
         run: uv sync --group dev --frozen
       - name: Run universal-agent platform contract
@@ -196,7 +196,7 @@ jobs:
           python-version: "3.12"
       - name: Install uv
         # v4
-        uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
       - name: Sync locked test environment
         run: uv sync --group dev --frozen
       - name: Provision the rootless qualification engine
