@@ -96,35 +96,60 @@ those as the target repo's source of truth.
 - If a change affects long-lived architecture or path contracts, update the
   appropriate contract before treating the behavior as stable.
 
+<!-- tpl:portable-guidance -->
+
 <!-- tpl:repo-followthrough:start -->
+
 ## Scoped Execution And Completion
 
-Policy version: `astra-repo-followthrough-v2-2026-09-05`. Repository-specific security, data,
+Policy version: `repo-completion-v6-2026-09-23`. Repository-specific security, data,
 integration, and promotion restrictions remain authoritative within the task.
 
-- Preserve every requested outcome across checkpoints. Account for every target
-  as completed, excluded with evidence, or blocked with an exact next action.
-  A pilot, passing tests, or a monitoring cohort is not full rollout completion.
-- Inspect project guidance and commands first, then shared tooling, then suitable
-  installed tools. Reuse or extend a tool for a demonstrated repeatable gap;
-  do not build a framework or run validations merely to collect context.
-- Continue authorized reversible alternatives after reconciling a failed attempt.
-  Name the exact rule or missing dependency when stopping; continue independent
-  authorized work. Development-machine status does not authorize privilege,
-  credential, destructive recovery, upgrade, spending, or signature bypasses.
-- Batch independent reads and coherent edits; use long waits for known processes.
-  Reuse fresh evidence; expand when missing, stale, partial, contradictory,
-  repo-mismatched, visual-insufficient, security-sensitive, or release-critical.
-- Match tests to changed behavior and risk; retain mandatory native security and
-  promotion gates. Passing a safeguard is not proof of the requested capability.
-- Do not spawn subagents or delegate work unless I explicitly request subagents,
-  parallel agents, or delegation in my current prompt.
-- Task size, potential speed improvements, or project/skill guidance alone do
-  not authorize spawning subagents. Keep lifecycle hooks retired.
-- Resume by explicitly rereading the effective policy and checkpoint: retain
-  intent, constraints, authorization, evidence, blockers, and remaining outcomes.
-  File changes alone do not prove an active session loaded the new guidance.
+- Treat action requests as work to finish, not an acknowledgment of capability;
+  honor planning-only requests. Keep every accepted outcome across side questions
+  and checkpoints. An intermediate milestone, tests, or a review packet is not
+  proof of the requested result.
+- For a multi-step task or accepted plan, check the full outcome list before
+  voluntary closeout. Use `tpl session-checkpoint --task-manifest PATH --handoff-check`
+  when installed;
+  otherwise use this file's outcome checklist. Continue authorized work
+  behind scoped blockers and investigate unknown inputs before asking the user.
+- Before promising a live run, identify its exact approvals and their current
+  evidence. Prepare the reviewable decision first. A plan does not itself grant
+  live-action authority; preserve project security and promotion gates.
+- If no authorized useful action remains, report the exact affected outcome,
+  missing input or rule, attempted versus proposed alternatives, owner, next
+  action, and completion proof. Do not invent approvals or retry uncertain
+  mutations. Higher-priority instructions and native rules win over a skill.
+- In a standalone copy, do not depend on a sibling `.templates` checkout.
+  Before handoff, list every accepted outcome, its evidence, remaining
+  authorized work, and any exact operator dependency.
 
-First policy/state route (from the project root): `../../.templates/scripts/tpl context-primer --policy-refresh --repo-root .`.
-Shared policy reference: `../../.templates/docs/observability/astra_execution_policy.md`.
+<!-- tpl:quality-review-v1 -->
+
+- For consequential changes, inspect assumptions and use independent outcome
+  evidence plus one bounded false-pass check. Unknown review coverage is not
+  success; project profiles are review candidates, not automatic gates.
+- Start or resume in the owning project root and reread its effective policy
+  after a policy change. Linked Markdown is not automatically loaded by Codex.
+  Keep hooks retired; do not delegate unless I explicitly request it in the
+  current prompt.
+
+Portable first route: `make forge-explain`.
+Portable policy reference: `AGENTS.md`.
+
 <!-- tpl:repo-followthrough:end -->
+
+<!-- tpl:repo-navigation:start -->
+
+## Files And CLI Progress
+
+Before adding or moving a file, read this project's README and inspect its
+existing layout. Keep file purpose and ownership clear; use a rendered
+folder contract only when one is present in this copy.
+
+For a long-running CLI, reuse the project's own progress convention.
+Keep transient progress on stderr and final results on stdout; do not
+require a sibling workspace checkout.
+
+<!-- tpl:repo-navigation:end -->
