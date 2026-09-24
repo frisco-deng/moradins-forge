@@ -102,18 +102,21 @@ those as the target repo's source of truth.
 
 ## Scoped Execution And Completion
 
-Policy version: `repo-completion-v6-2026-09-23`. Repository-specific security, data,
-integration, and promotion restrictions remain authoritative within the task.
+Policy version: `repo-completion-v8-2026-09-24`.
+Repository-specific security, data, integration, and promotion restrictions
+remain authoritative within the task.
 
 - Treat action requests as work to finish, not an acknowledgment of capability;
-  honor planning-only requests. Keep every accepted outcome across side questions
+  honor planning-only requests. Keep accepted outcomes across side questions
   and checkpoints. An intermediate milestone, tests, or a review packet is not
-  proof of the requested result.
+  proof of a requested practical run; require observed acceptance evidence.
+- Accepted-plan implementation includes reversible gate repair, preservation,
+  and review publication without renewed questions. Native gates still apply.
 - For a multi-step task or accepted plan, check the full outcome list before
-  voluntary closeout. Use `tpl session-checkpoint --task-manifest PATH --handoff-check`
-  when installed;
-  otherwise use this file's outcome checklist. Continue authorized work
-  behind scoped blockers and investigate unknown inputs before asking the user.
+  voluntary closeout. Use the installed deck's completion/handoff check when
+  available; otherwise use this file's outcome checklist.
+  Continue authorized work behind scoped blockers; investigate unknown inputs
+  before asking the user.
 - Before promising a live run, identify its exact approvals and their current
   evidence. Prepare the reviewable decision first. A plan does not itself grant
   live-action authority; preserve project security and promotion gates.
@@ -121,6 +124,8 @@ integration, and promotion restrictions remain authoritative within the task.
   missing input or rule, attempted versus proposed alternatives, owner, next
   action, and completion proof. Do not invent approvals or retry uncertain
   mutations. Higher-priority instructions and native rules win over a skill.
+- Reuse unchanged evidence. Add or repeat a check only for a native gate,
+  changed behavior, or a named uncertainty; do not add generic stopping points.
 - In a standalone copy, do not depend on a sibling `.templates` checkout.
   Before handoff, list every accepted outcome, its evidence, remaining
   authorized work, and any exact operator dependency.
@@ -135,8 +140,8 @@ integration, and promotion restrictions remain authoritative within the task.
   Keep hooks retired; do not delegate unless I explicitly request it in the
   current prompt.
 
-Portable first route: `make forge-explain`.
-Portable policy reference: `AGENTS.md`.
+Portable first route: `make forge-readiness`.
+Portable policy reference: `FORGE.md`.
 
 <!-- tpl:repo-followthrough:end -->
 
