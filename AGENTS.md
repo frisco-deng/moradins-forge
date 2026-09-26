@@ -33,7 +33,10 @@ Profile: local agent-first integration kit.
 - Inspect Forge and the target repo before proposing changes.
 - Explain benefits, risks, proposed writes, rollback, install requests, and
   validation before apply.
-- Ask for explicit user consent before mutating a target repo.
+- Ask for explicit user consent only before adopting or mutating a target repo
+  outside the target scope already accepted in the current task. Once the target
+  and plan are accepted, continue authorized reversible work through validation
+  and review.
 - Keep adoption local unless the user explicitly requests external tooling.
 - Do not run host install commands; write request-only install artifacts instead.
 - Preserve existing target repo workflows and root files by default.
@@ -92,7 +95,9 @@ those as the target repo's source of truth.
 
 ## When Uncertain
 
-- Stop at the dry-run plan and ask the user before applying changes.
+- Stop at the dry-run plan only when cross-repository target adoption remains
+  unapproved. For an accepted target and plan, continue authorized reversible
+  apply, validation, rollback preparation, and review work.
 - If a change affects long-lived architecture or path contracts, update the
   appropriate contract before treating the behavior as stable.
 
@@ -102,41 +107,43 @@ those as the target repo's source of truth.
 
 ## Scoped Execution And Completion
 
-Policy version: `repo-completion-v6-2026-09-23`. Repository-specific security, data,
-integration, and promotion restrictions remain authoritative within the task.
+Policy version: `repo-completion-v9-2026-09-25`.
+Repository-specific security, data, integration, and promotion restrictions
+remain authoritative within the task.
 
-- Treat action requests as work to finish, not an acknowledgment of capability;
-  honor planning-only requests. Keep every accepted outcome across side questions
-  and checkpoints. An intermediate milestone, tests, or a review packet is not
-  proof of the requested result.
-- For a multi-step task or accepted plan, check the full outcome list before
-  voluntary closeout. Use `tpl session-checkpoint --task-manifest PATH --handoff-check`
-  when installed;
-  otherwise use this file's outcome checklist. Continue authorized work
-  behind scoped blockers and investigate unknown inputs before asking the user.
-- Before promising a live run, identify its exact approvals and their current
-  evidence. Prepare the reviewable decision first. A plan does not itself grant
-  live-action authority; preserve project security and promotion gates.
-- If no authorized useful action remains, report the exact affected outcome,
-  missing input or rule, attempted versus proposed alternatives, owner, next
-  action, and completion proof. Do not invent approvals or retry uncertain
-  mutations. Higher-priority instructions and native rules win over a skill.
+- Action requests mean finish, not acknowledgment of capability; honor
+  planning-only requests. Keep accepted outcomes across checkpoints. An
+  intermediate milestone or tests do not prove a requested
+  practical run; require observed acceptance evidence.
+- Accepted plans include reversible gate repair, preservation, and review-branch
+  publication. For multi-step work run the installed completion/handoff check,
+  or use this file's outcome checklist, before voluntary closeout.
+- If effective user policy activates a native Goal, bind its ignored v3 manifest
+  before mutation and keep it active across turns and compaction. Continue
+  independent authorized work behind scoped blockers; investigate unknowns.
+- A plan does not itself grant live-action authority. Prepare exact approvals
+  for live, security, and promotion gates while continuing other work.
+- Whole-task blocked wait requires the same exact blocker across three Goal
+  turns, every remaining outcome affected, and no independent action left.
+  Otherwise continue. A justified wait names the outcome, evidence, owner,
+  alternatives, next action, and completion proof. Do not invent approvals.
+- Reuse unchanged evidence. Add or repeat a check only for a native gate,
+  changed behavior, or a named uncertainty; do not add generic stopping points.
+- Native security and promotion gates bind. Higher-priority instructions beat a
+  skill. Delegation stays off unless I explicitly request it.
 - In a standalone copy, do not depend on a sibling `.templates` checkout.
   Before handoff, list every accepted outcome, its evidence, remaining
   authorized work, and any exact operator dependency.
 
 <!-- tpl:quality-review-v1 -->
 
-- For consequential changes, inspect assumptions and use independent outcome
-  evidence plus one bounded false-pass check. Unknown review coverage is not
-  success; project profiles are review candidates, not automatic gates.
-- Start or resume in the owning project root and reread its effective policy
-  after a policy change. Linked Markdown is not automatically loaded by Codex.
-  Keep hooks retired; do not delegate unless I explicitly request it in the
-  current prompt.
+- Consequential changes need inspected assumptions, independent evidence, and
+  one bounded false-pass check. Profiles are review candidates, not gates.
+- Reread effective policy after a policy change. Compaction is continuity, not
+  completion. Keep hooks retired and delegation request-only.
 
-Portable first route: `make forge-explain`.
-Portable policy reference: `AGENTS.md`.
+Portable first route: `make forge-readiness`.
+Portable policy reference: `FORGE.md`.
 
 <!-- tpl:repo-followthrough:end -->
 

@@ -14,6 +14,8 @@ related_docs:
 1. Read the Forge entrypoints.
 2. Inspect the target repo.
 3. Run explain, readiness, and plan.
-4. Ask for approval.
-5. Apply only after approval.
+4. Ask for approval only when adopting or applying to a target repo outside
+   the scope already accepted in the current task.
+5. For an accepted target and plan, continue reversible apply, validation,
+   rollback preparation, and review without asking again.
 6. Verify and summarize rollback.
