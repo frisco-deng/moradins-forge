@@ -17,7 +17,9 @@ If the user sent you here as Codex, Claude Code, or another coding agent:
    - it will not replace existing repo workflows,
    - it will not patch root workflow files by default,
    - it will not edit outside the approved target repo.
-5. Ask the user for explicit consent before running any apply command.
+5. Ask for explicit consent only before adopting or applying to a target repo
+   outside the scope already accepted in the current task. For an accepted target
+   and plan, continue reversible apply, validation, rollback preparation, and review.
 
 If the user wants a low-token first pass, run the platform bootstrap first:
 
