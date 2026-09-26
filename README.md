@@ -92,7 +92,7 @@ disabled, receipts the result, and onboards offline.
 ![Measured Benefits — Measured](docs/assets/readme/measured-benefits.svg)
 
 <!-- measured-benefits-text:start -->
-Text equivalent — **Measured release-dogfood fixtures:** startup context was 18,242 raw bytes versus 484 primer bytes; repeated output was 1,606 raw bytes versus 136 rerun-advice bytes. These checked-in fixture results are not a universal token-reduction guarantee.
+Text equivalent — **Measured release-dogfood fixtures:** startup context was 21,048 raw bytes versus 484 primer bytes; repeated output was 1,606 raw bytes versus 136 rerun-advice bytes. These checked-in fixture results are not a universal token-reduction guarantee.
 <!-- measured-benefits-text:end -->
 
 The evidence is checked in at
