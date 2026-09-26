@@ -38,7 +38,10 @@ Profile: local agent-first integration kit.
 - Inspect Forge and the target repo before proposing changes.
 - Explain benefits, risks, proposed writes, rollback, install requests, and
   validation before apply.
-- Ask for explicit user consent before mutating a target repo.
+- Ask for explicit user consent only before adopting or mutating a target repo
+  outside the target scope already accepted in the current task. Once the target
+  and plan are accepted, continue authorized reversible work through validation
+  and review.
 - Keep adoption local unless the user explicitly requests external tooling.
 - Run user-level installers only from a digest-bound tooling plan after explicit
   user approval.
@@ -178,39 +181,51 @@ those as the target repo's source of truth.
 
 ## When Uncertain
 
-- Stop at the dry-run plan and ask the user before applying changes.
+- Stop at the dry-run plan only when cross-repository target adoption remains
+  unapproved. For an accepted target and plan, continue authorized reversible
+  apply, validation, rollback preparation, and review work.
 - If a change affects long-lived architecture or path contracts, update the
   appropriate contract before treating the behavior as stable.
 
 <!-- tpl:repo-followthrough:start -->
+
 ## Scoped Execution And Completion
 
-Policy version: `astra-repo-followthrough-v2-2026-09-05`. Repository-specific security, data,
-integration, and promotion restrictions remain authoritative within the task.
+Policy version: `repo-completion-v9-2026-09-25`.
+Repository-specific security, data, integration, and promotion restrictions
+remain authoritative within the task.
 
-- Preserve every requested outcome across checkpoints. Account for every target
-  as completed, excluded with evidence, or blocked with an exact next action.
-  A pilot, passing tests, or a monitoring cohort is not full rollout completion.
-- Inspect project guidance and commands first, then shared tooling, then suitable
-  installed tools. Reuse or extend a tool for a demonstrated repeatable gap;
-  do not build a framework or run validations merely to collect context.
-- Continue authorized reversible alternatives after reconciling a failed attempt.
-  Name the exact rule or missing dependency when stopping; continue independent
-  authorized work. Development-machine status does not authorize privilege,
-  credential, destructive recovery, upgrade, spending, or signature bypasses.
-- Batch independent reads and coherent edits; use long waits for known processes.
-  Reuse fresh evidence; expand when missing, stale, partial, contradictory,
-  repo-mismatched, visual-insufficient, security-sensitive, or release-critical.
-- Match tests to changed behavior and risk; retain mandatory native security and
-  promotion gates. Passing a safeguard is not proof of the requested capability.
-- Do not spawn subagents or delegate work unless I explicitly request subagents,
-  parallel agents, or delegation in my current prompt.
-- Task size, potential speed improvements, or project/skill guidance alone do
-  not authorize spawning subagents. Keep lifecycle hooks retired.
-- Resume by explicitly rereading the effective policy and checkpoint: retain
-  intent, constraints, authorization, evidence, blockers, and remaining outcomes.
-  File changes alone do not prove an active session loaded the new guidance.
+- Action requests mean finish, not acknowledgment of capability; honor
+  planning-only requests. Keep accepted outcomes across checkpoints. An
+  intermediate milestone or tests do not prove a requested
+  practical run; require observed acceptance evidence.
+- Accepted plans include reversible gate repair, preservation, and review-branch
+  publication. For multi-step work run the installed completion/handoff check,
+  or use the linked policy's manual checklist, before voluntary closeout.
+- If effective user policy activates a native Goal, bind its ignored v3 manifest
+  before mutation and keep it active across turns and compaction. Continue
+  independent authorized work behind scoped blockers; investigate unknowns.
+- A plan does not itself grant live-action authority. Prepare exact approvals
+  for live, security, and promotion gates while continuing other work.
+- Whole-task blocked wait requires the same exact blocker across three Goal
+  turns, every remaining outcome affected, and no independent action left.
+  Otherwise continue. A justified wait names the outcome, evidence, owner,
+  alternatives, next action, and completion proof. Do not invent approvals.
+- Reuse unchanged evidence. Add or repeat a check only for a native gate,
+  changed behavior, or a named uncertainty; do not add generic stopping points.
+- Native security and promotion gates bind. Higher-priority instructions beat a
+  skill. Delegation stays off unless I explicitly request it.
 
-First policy/state route (from the project root): `../../.templates/scripts/tpl context-primer --policy-refresh --repo-root .`.
-Shared policy reference: `../../.templates/docs/observability/astra_execution_policy.md`.
+<!-- tpl:quality-review-v1 -->
+
+- Consequential changes need inspected assumptions, independent evidence, and
+  one bounded false-pass check. Profiles are review candidates, not gates.
+- Reread effective policy after a policy change. Compaction is continuity, not
+  completion. Keep hooks retired and delegation request-only.
+
+First policy/state route (from the project root):
+`../../.templates/scripts/tpl context-primer --policy-refresh --repo-root .`.
+Shared policy reference:
+`../../.templates/docs/observability/task_completion_policy.md`.
+
 <!-- tpl:repo-followthrough:end -->
