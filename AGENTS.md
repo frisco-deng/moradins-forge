@@ -170,7 +170,8 @@ remain authoritative within the task.
 - Reuse unchanged evidence. Add or repeat a check only for a native gate,
   changed behavior, or a named uncertainty; do not add generic stopping points.
 - Native security and promotion gates bind. Higher-priority instructions beat a
-  skill. Delegation stays off unless I explicitly request it.
+  skill. Delegation stays off unless I explicitly request it in the
+  current prompt.
 
 <!-- tpl:quality-review-v1 -->
 
