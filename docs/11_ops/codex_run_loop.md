@@ -17,7 +17,9 @@ related_docs:
 3. Run `onboard` and show discovered repositories.
 4. Review the compact primer and repository-native commands.
 5. Present tools, configuration, agent blocks, validation, and rollback.
-6. Ask for each independent approval.
+6. Ask only for unapproved cross-repository target adoption, user-level
+   execution, privileged scripts, root agent-file patching, or live promotion.
+   Continue reversible work within an accepted target and plan.
 7. Execute digest-approved user-level tooling; give privileged scripts to the
    user and verify after they run them.
 8. Apply the sidecar and approved blocks transactionally.

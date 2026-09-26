@@ -4,4 +4,6 @@
 - Escalate when a target repo has conflicting agent or CI instructions.
 - Escalate when readiness detects missing required tools.
 - Escalate when generated sidecar verification fails.
-- Stop and ask before applying if the proposed write set is unclear.
+- Investigate an unclear write set from repository evidence. Pause only the
+  affected apply lane when a material target or write-scope decision cannot be
+  inferred; continue unrelated validation and rollback preparation.
