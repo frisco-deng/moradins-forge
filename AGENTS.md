@@ -119,8 +119,7 @@ those as the target repo's source of truth.
 - Run `scripts/moradin_forge.sh rerun-advice --target . -- <command>` before
   repeating deterministic commands or re-ingesting long logs.
 - Record a compact outcome with
-  `scripts/moradin_forge.sh session-checkpoint --target . --outcome
-  <pass|fail|skipped> -- <command>` before another full rerun of the same
+  `scripts/moradin_forge.sh session-checkpoint --target . --outcome <pass|fail|skipped> -- <command>` before another full rerun of the same
   failure. Use `scripts/moradin_forge.sh diagnostic-brief` to review sanitized
   local counters.
 - Use `make verify-paths` before public docs, generated sidecars, export
