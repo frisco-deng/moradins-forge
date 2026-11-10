@@ -13,10 +13,11 @@ without breaking that repo's current workflows.
 2. Inspect the target repo's `AGENTS.md`, `README.md`, `Makefile`, package files,
    and deterministic validation commands.
 3. Explain the proposed sidecar, adapter edits, readiness gaps, and rollback path.
-4. Ask for explicit user consent before applying changes.
+4. Reuse explicit consent for the target and write scope already accepted in the
+   current task. Ask only for unapproved target adoption or additional writes.
 5. Run `scripts/moradin_forge.sh plan --target <target-repo>` or the PowerShell
    wrapper to produce a dry-run plan.
-6. Apply only after consent with `scripts/moradin_forge.sh apply --target
+6. Apply within that accepted consent with `scripts/moradin_forge.sh apply --target
    <target-repo> --approve`.
    Use `--patch-agents` only when the user separately approves a marked root
    `AGENTS.md` block.

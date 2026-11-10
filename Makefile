@@ -7,7 +7,7 @@ lint-py:
 	UV_CACHE_DIR=/tmp/uv-cache uv run ruff check .
 
 lint-md:
-	UV_CACHE_DIR=/tmp/uv-cache uv run pymarkdownlnt --enable-extensions front-matter --disable-rules "*" --enable-rules md022 scan --recurse --exclude .git --exclude .venv --exclude node_modules --exclude dist .
+	UV_CACHE_DIR=/tmp/uv-cache uv run pymarkdownlnt --enable-extensions front-matter --disable-rules "*" --enable-rules md022 scan --recurse --exclude .git --exclude .venv --exclude node_modules --exclude dist --exclude artifacts .
 
 test-py:
 	PYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run pytest

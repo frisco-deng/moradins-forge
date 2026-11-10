@@ -17,7 +17,9 @@ If the user sent you here as Codex, Claude Code, or another coding agent:
    - it will not replace existing repo workflows,
    - it will not patch root workflow files by default,
    - it will not edit outside the approved target repo.
-5. Ask the user for explicit consent before running any apply command.
+5. Ask for explicit consent only before adopting or applying to a target repo
+   outside the scope already accepted in the current task. For an accepted target
+   and plan, continue reversible apply, validation, rollback preparation, and review.
 
 If the user wants a low-token first pass, run the platform bootstrap first:
 
@@ -55,9 +57,9 @@ make verify-fast
 make review-ready
 ```
 
-Use `tpl context-primer --latest-session --repo moradins-forge` after a new
+Use `tpl context-primer --repo moradins-forge` after a new
 session, compaction, long resume, or repeated broad reads. Use
-`tpl session-supervisor --live --latest-session --repo moradins-forge` when work
+`tpl session-supervisor --mode steering-advisory --live --repo moradins-forge` when work
 starts looping, and `tpl rerun-advice moradins-forge -- <command>` before
 repeating long deterministic commands. Use the Python route reported by
 `make repo-brief`; Forge is a `uv` repo and raw `python` is not the runtime
@@ -84,3 +86,7 @@ evidence must not contain raw home paths, usernames, hostnames, Windows user
 paths, WSL UNC paths, Codex session paths, SSH clone URLs, raw temp paths, or
 machine-origin markers. Use placeholders such as `<forge-root>`,
 `<target-repo>`, `<temp-dir>`, and `<workbench-port>`.
+
+Use [the current execution contract](docs/11_ops/codex_run_loop.md) for stage
+prerequisites, integration and recovery. Optional shared commands require an
+installed deck; the portable first route remains `make repo-brief`.

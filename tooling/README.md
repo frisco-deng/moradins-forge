@@ -31,6 +31,7 @@ Optional readiness entrypoints:
 - `make payload-smoke`
 - `make forge-smoke`
 - `make public-portability-check`
+- `make release-build`
 
 Usage notes:
 
@@ -55,6 +56,7 @@ Usage notes:
 - Treat `make ci-local` as the local workflow truth surface; it runs workflow trigger audits, actionlint/zizmor/conftest/yamllint checks when available, and can execute `act` only when `CI_LOCAL_MODE=run` is set.
 - When generated `tooling-*.yml` workflows exist, the workflow-focused scanners target that managed surface first before falling back to the repo's broader workflow directory.
 - All generated information and verify targets write `summary.json`, `summary.md`, and step logs under `artifacts/tooling/<target>/` unless `TOOLING_LOG_ROOT` overrides the default.
+- Inaccessible historical metadata is recorded as `availability: unreadable`, without a fabricated timestamp or gate result. Use a fresh `TOOLING_LOG_ROOT` when an existing output directory is protected; preserve its permissions and retained evidence.
 - Rendered repos ignore `artifacts/` by default so repeated tooling runs do not create review noise.
 - Activate the generated local pre-push hook with `pre-commit install --hook-type pre-push`; it calls `make push-gate` instead of spending hosted minutes on avoidable failures.
 - From an operator shell, generated shared tool invocations bridge into codex-owned tooling automatically when needed.

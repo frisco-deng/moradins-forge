@@ -11,7 +11,8 @@ repo's own guidance. Explain what Forge will add, what it will not do, the
 files it proposes to write, the request-only install behavior, validation
 commands, and rollback.
 
-Do not apply changes until the user explicitly approves. Keep everything local
+Apply only within explicit user-approved target/write scope; reuse approval
+already supplied in the current task. Keep everything local
 unless the user asks for external tooling. Preserve the target repo's existing
 workflows and root files by default.
 

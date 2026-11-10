@@ -83,3 +83,11 @@ record, refuses modified or unowned sidecar content, and restores a Forge-owned
 `AGENTS.md` change byte-for-byte. It removes only the owned sidecar and optional
 owned adapter block. No host tool install rollback is needed because Forge does
 not run host installs.
+
+## Accepted Scope And Current Execution
+
+Explicit consent already supplied for the target and write scope in the current
+task remains applicable through reversible apply, validation and review. Ask only
+for unapproved target adoption or additional protected writes; retain CLI approval
+flags and separately approved root patches. The current staged execution and
+recovery contract is [Codex run loop](../11_ops/codex_run_loop.md).

@@ -41,7 +41,7 @@ jobs:
         # v4
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: "20"
+          node-version: "24"
       - name: Install Node dependencies
         if: ${{ hashFiles('package.json', 'frontend/package.json', 'ui/package.json', 'ui/frontend/package.json', 'dev_tracker/ui/package.json', 'apps/ui/frontend/package.json') != '' }}
         shell: bash

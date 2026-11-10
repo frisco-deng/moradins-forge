@@ -17,7 +17,18 @@ from typing import Any
 
 sys.dont_write_bytecode = True
 
-from python_runtime import route_advice as python_route_advice, runtime_info as python_runtime_info
+from python_runtime import route_advice as python_route_advice, runtime_info as python_runtime_info  # noqa: E402
+from validation_inputs import input_receipt  # noqa: E402 - local adapter imports follow path setup
+from execution_receipts import workflow_receipt, file_hash  # noqa: E402
+try:
+    from execution_policy import execution_context
+except ModuleNotFoundError:  # Compatibility for adapters rendered before this helper existed.
+    execution_context = None
+
+try:
+    from folder_organization import assess_repo_layout  # noqa: E402
+except ModuleNotFoundError:  # One-cycle compatibility for pre-contract rendered adapters.
+    assess_repo_layout = None
 
 
 SCHEMA_VERSION = 1
@@ -589,10 +600,12 @@ def ui_cli_info(root: Path, repo_cfg: dict[str, Any], targets: dict[str, Any]) -
                 vitest_browser_detected = vitest_browser_detected or "browser" in lowered or "vitest" in lowered
 
     mode = str(repo_cfg.get("ui_cli", {}).get("mode", "")).strip()
+    profile = str(repo_cfg.get("ui_cli", {}).get("profile", "")).strip()
     return {
         "detected": bool(package_jsons or configs or browser_scripts),
         "rendered_target": "verify-ui-cli" in targets,
         "mode": mode,
+        "profile": profile,
         "declared_commands": list(repo_cfg.get("ui_cli", {}).get("commands", [])),
         "package_jsons": package_jsons,
         "configs": sorted(set(configs)),
@@ -605,6 +618,9 @@ def ui_cli_info(root: Path, repo_cfg: dict[str, Any], targets: dict[str, Any]) -
             "npm": shutil.which("npm") is not None,
             "npx": shutil.which("npx") is not None,
             "xvfb-run": resolve_tool("xvfb-run") is not None,
+            "maestro": resolve_tool("maestro") is not None
+            or (Path.home() / ".local" / "bin" / "maestro").is_file()
+            or (Path.home() / ".maestro" / "bin" / "maestro").is_file(),
         },
     }
 
@@ -645,20 +661,37 @@ def ui_review_info(root: Path, repo_cfg: dict[str, Any], targets: dict[str, Any]
 
 
 def last_artifacts(log_root: Path, current_target: str) -> list[dict[str, Any]]:
+    """List historical metadata without requiring access to protected run bundles."""
     if not log_root.exists():
         return []
     results: list[dict[str, Any]] = []
     for child in sorted(log_root.iterdir()):
-        if not child.is_dir() or child.name == current_target:
+        if child.name == current_target:
             continue
         summary_path = child / "summary.json"
-        if not summary_path.exists():
+        try:
+            if not child.is_dir():
+                continue
+            summary_stat = summary_path.stat()
+        except FileNotFoundError:
+            # A concurrent run may remove its temporary history entry.
+            continue
+        except PermissionError:
+            results.append(
+                {
+                    "target": child.name,
+                    "summary": str(summary_path),
+                    "updated_at": "",
+                    "availability": "unreadable",
+                    "reason": "permission_denied",
+                }
+            )
             continue
         results.append(
             {
                 "target": child.name,
                 "summary": str(summary_path),
-                "updated_at": datetime.fromtimestamp(summary_path.stat().st_mtime, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "updated_at": datetime.fromtimestamp(summary_stat.st_mtime, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             }
         )
     return results
@@ -845,6 +878,7 @@ def compact_previous_summary(summary: dict[str, Any] | None) -> dict[str, Any] |
         "summary_json": summary.get("artifacts", {}).get("summary_json", ""),
         "summary_md": summary.get("artifacts", {}).get("summary_md", ""),
         "security_evidence": summary.get("security_evidence", {}),
+        "validation_inputs": summary.get("validation_inputs"),
     }
 
 
@@ -853,6 +887,8 @@ def artifact_freshness(previous_summary: dict[str, Any] | None, summary: dict[st
         return False, ["no previous artifact"]
 
     reasons: list[str] = []
+    if previous_summary.get('validation_inputs') is not None and previous_summary['validation_inputs'] != summary.get('validation_inputs'):
+        reasons.append('validation source/configuration/runtime fingerprints changed')
     comparisons = [
         ("target", previous_summary.get("target"), summary.get("target")),
         ("branch", previous_summary.get("branch"), summary.get("git", {}).get("branch")),
@@ -938,6 +974,7 @@ def _step_cache_metadata(
         "command_scope": _step_scope_tokens(resolved_command),
         "manifests": summary["repo"].get("manifests", {}),
         "repo_state_fingerprint": summary["analysis"].get("repo_state_fingerprint", ""),
+        "validation_inputs": summary.get('validation_inputs'),
     }
     scope_fingerprint = hashlib.sha256(json.dumps(scope_payload, sort_keys=True).encode("utf-8")).hexdigest()[:16]
     key_payload = {
@@ -1141,6 +1178,18 @@ def collect_base_summary(root: Path, config: dict[str, Any], target: str, artifa
     previous_summary = load_latest_summary(log_root, target)
     previous_compact = compact_previous_summary(previous_summary)
     active_lane = load_active_lane(root, repo_cfg, git)
+    folder_contract = repo_cfg.get("folder_organization", {})
+    if isinstance(folder_contract, dict) and folder_contract and assess_repo_layout is not None:
+        folder_assessment = assess_repo_layout(root, folder_contract)
+    elif isinstance(folder_contract, dict) and folder_contract:
+        folder_assessment = {
+            "status": "checker_unavailable",
+            "metrics": {},
+            "findings": [{"code": "folder_checker_missing", "severity": "warn"}],
+            "next_action": "render the current shared adapter, then rerun `make repo-brief`",
+        }
+    else:
+        folder_assessment = {"status": "not_configured", "metrics": {}, "findings": [], "next_action": ""}
     summary = {
         "schema_version": SCHEMA_VERSION,
         "generated_at": utc_now(),
@@ -1155,6 +1204,8 @@ def collect_base_summary(root: Path, config: dict[str, Any], target: str, artifa
             "ui_review": ui_review_info(root, repo_cfg, config["targets"]),
             "repo_local_agents": repo_agents_path.exists(),
             "repo_local_agents_path": str(repo_agents_path) if repo_agents_path.exists() else "",
+            "folder_organization_assessment": folder_assessment,
+            "execution_context": execution_context(root, repo_cfg) if execution_context else {},
         },
         "git": git,
         "targets": {
@@ -1162,6 +1213,7 @@ def collect_base_summary(root: Path, config: dict[str, Any], target: str, artifa
             "tool_readiness": tool_readiness(config["targets"], root),
         },
         "environment": environment_info(),
+        "validation_inputs": input_receipt(root),
         "workflows": workflows,
         "prep_steps": [],
         "steps": [],
@@ -1223,6 +1275,7 @@ def compute_run_signature(summary: dict[str, Any]) -> str:
         "review_ready_scope": summary["environment"].get("review_ready_scope", ""),
         "ci_local_mode": summary["environment"].get("ci_local_mode", ""),
         "watch_mode": summary["environment"].get("watch_mode", ""),
+        "validation_inputs": summary.get('validation_inputs'),
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()[:16]
 
@@ -1301,6 +1354,8 @@ def populate_brief_findings(summary: dict[str, Any]) -> None:
             summary["findings"].append("ui-cli: Playwright detected; install repo-managed browsers with `npx playwright install chromium` when browser binaries are missing")
     if ui_cli.get("mode") == "xvfb" and not ui_cli.get("tools", {}).get("xvfb-run"):
         summary["findings"].append("unavailable: verify-ui-cli requires `xvfb-run`; install the optional UI/browser tooling pack")
+    if ui_cli.get("mode") == "android-device" and not ui_cli.get("tools", {}).get("maestro"):
+        summary["findings"].append("unavailable: Android-device verify-ui-cli requires the pinned optional Maestro CLI")
     ui_review = repo.get("ui_review", {})
     if ui_review.get("enabled"):
         rendered_targets = ui_review.get("rendered_targets", [])
@@ -1364,6 +1419,8 @@ def record_step(
         "summary_path": nested_summary or "",
     }
     step.update(log_stats(log_path))
+    if nested_summary:
+        step['nested_summary_sha256'] = file_hash(nested_summary, summary['repo']['root'])
     if evidence_categories:
         step["evidence_categories"] = evidence_categories
     if gate:
@@ -1518,6 +1575,7 @@ def run_step(
 
 
 def write_summary(summary: dict[str, Any], artifact_dir: Path) -> None:
+    summary['execution_receipt'] = workflow_receipt(summary, summary['repo']['root'])
     summary_json = artifact_dir / "summary.json"
     summary_md = artifact_dir / "summary.md"
     target_latest_dir = artifact_dir / "latest"
@@ -1601,6 +1659,35 @@ def write_summary(summary: dict[str, Any], artifact_dir: Path) -> None:
             f"- python_notebook_command: `{python_runtime.get('notebook_inspection_command') or 'none'}`",
             f"- python_test_command: `{python_runtime.get('test_command') or 'none'}`",
             f"- raw_python_allowed: `{python_runtime.get('raw_python_allowed', False)}`",
+        ]
+    folder_assessment = summary["repo"].get("folder_organization_assessment", {})
+    if folder_assessment:
+        insert_at = md_lines.index("## Git") - 1
+        folder_metrics = folder_assessment.get("metrics", {})
+        md_lines[insert_at:insert_at] = [
+            "## Folder Organization",
+            "",
+            f"- status: `{folder_assessment.get('status', 'not_configured')}`",
+            f"- profile: `{folder_assessment.get('profile', 'none')}`",
+            f"- purpose_coverage: `{folder_metrics.get('top_level_purpose_coverage_pct', 0)}%`",
+            f"- undeclared_top_level_dirs: `{folder_metrics.get('undeclared_top_level_dir_count', 0)}`",
+            f"- file_category_coverage: `{folder_metrics.get('tracked_file_category_coverage_pct')}`",
+            f"- placement_rule: `{summary['repo'].get('folder_organization', {}).get('placement_rule', 'use an existing declared root')}`",
+            f"- sections: `{', '.join(row.get('path', '') for row in folder_assessment.get('file_navigation', {}).get('section_map', [])[:6]) or 'root categories'}`",
+            f"- next_action: `{folder_assessment.get('next_action', 'none')}`",
+            "",
+        ]
+    cli_output = summary["repo"].get("cli_output", {})
+    if cli_output:
+        insert_at = md_lines.index("## Git") - 1
+        md_lines[insert_at:insert_at] = [
+            "## CLI Output",
+            "",
+            f"- progress_profile: `{cli_output.get('profile', 'none')}`",
+            f"- implementation: `{cli_output.get('implementation', 'repo_native_or_tpl_cli_progress')}`",
+            f"- default_mode: `{cli_output.get('default_mode', 'off')}`",
+            "- progress_stream: `stderr`; final_result_stream: `stdout`",
+            "",
         ]
     stale_reasons = summary["analysis"].get("artifact_stale_reasons") or []
     previous_stale_reasons = summary["analysis"].get("previous_artifact_stale_reasons") or []
@@ -1770,6 +1857,8 @@ def print_summary(summary: dict[str, Any], artifact_dir: Path) -> None:
             f"[tooling] branch={git['branch']} upstream={git['upstream']} dirty={git['dirty']} protected={git['protected_branch']}"
         )
     if summary["target"] == "repo-brief":
+        if execution_context:
+            lines.append("[tooling] execution=repo_native_then_shared_then_installed; scoped_reversible; request_only_subagents; outcome_proof_required")
         lines.append(f"[tooling] targets={', '.join(summary['targets']['available']) or 'none'}")
         lines.append(
             f"[tooling] workflows={', '.join(summary['workflows']['tooling_workflows'] or summary['workflows']['all_workflows']) or 'none'}"
@@ -1784,6 +1873,17 @@ def print_summary(summary: dict[str, Any], artifact_dir: Path) -> None:
                 f"{python_runtime.get('manager', 'none')} preferred={python_runtime.get('preferred_python_command') or 'none'} "
                 f"raw_python_allowed={python_runtime.get('raw_python_allowed', False)}"
             )
+        folder_assessment = summary["repo"].get("folder_organization_assessment", {})
+        folder_metrics = folder_assessment.get("metrics", {}) if isinstance(folder_assessment, dict) else {}
+        lines.append(
+            "[tooling] folder_organization="
+            f"{folder_assessment.get('status', 'not_configured')} "
+            f"purpose_coverage={folder_metrics.get('top_level_purpose_coverage_pct', 0)}% "
+            f"undeclared={folder_metrics.get('undeclared_top_level_dir_count', 0)}"
+        )
+        placement_rule = summary["repo"].get("folder_organization", {}).get("placement_rule", "")
+        if placement_rule:
+            lines.append(f"[tooling] folder_placement_rule={placement_rule}")
         github = summary["github"]
         gh_state = "authenticated" if github["authenticated"] else github["error"] or "unavailable"
         lines.append(f"[tooling] gh={gh_state}")
@@ -2283,8 +2383,26 @@ def run_brief_checks(root: Path, summary: dict[str, Any], artifact_dir: Path, ta
 
 
 def run_commands_target(root: Path, summary: dict[str, Any], artifact_dir: Path, target_cfg: dict[str, Any]) -> None:
+    names = [s.get('name') or f'step-{i:02d}' for i, s in enumerate(target_cfg.get('steps', []), 1)]
+    if len(names) != len(set(names)):
+        raise ValueError('duplicate_native_stage_identity')
+    for index, step in enumerate(target_cfg.get('steps', [])):
+        dependencies = step.get('depends_on', [])
+        if not isinstance(dependencies, list) or any(d not in names[:index] for d in dependencies):
+            raise ValueError('native_stage_prerequisite_invalid')
+    observed = {}
     for index, step in enumerate(target_cfg.get("steps", []), start=1):
-        run_step(root, summary, artifact_dir, step, index)
+        name = names[index - 1]
+        dependencies = step.get('depends_on', [])
+        results = {d: observed.get(d, 'pending') for d in dependencies}
+        if any(s != 'pass' for s in results.values()):
+            record_step(summary, name=name, status='blocked', command='', duration_seconds=0,
+                        log_path=None, required=bool(step.get('required', True)), category='prerequisite',
+                        note='declared prerequisite did not pass')
+        else:
+            run_step(root, summary, artifact_dir, step, index)
+        summary['steps'][-1]['prerequisite_results'] = results
+        observed[name] = summary['steps'][-1]['status']
 
 
 def run_composite_target(
@@ -2485,7 +2603,7 @@ def workflow_trigger_text(text: str) -> str:
 
 def run_ci_local(root: Path, summary: dict[str, Any], artifact_dir: Path) -> None:
     mode = os.environ.get("CI_LOCAL_MODE", "lint")
-    workflows = summary["workflows"]["tooling_workflows"] or summary["workflows"]["all_workflows"]
+    workflows = summary["workflows"]["all_workflows"]
     summary["findings"].append(f"ci-local mode: {mode}")
     if not workflows:
         record_step(
@@ -2514,16 +2632,18 @@ def run_ci_local(root: Path, summary: dict[str, Any], artifact_dir: Path) -> Non
                 dispatch_only += 1
             elif has_auto:
                 automatic += 1
+        actions_mode = summary["repo"].get("github_actions_mode", "standard")
+        violates_local_policy = actions_mode in {"local_artifacts", "manual_hosted"} and automatic > 0
         record_step(
             summary,
             name="ci-local-trigger-audit",
-            status="pass",
+            status="fail" if violates_local_policy else "pass",
             command="inspect .github/workflows trigger modes",
             duration_seconds=0.0,
             log_path=None,
             required=True,
             category="ci-local",
-            note=f"workflow_dispatch_only={dispatch_only}; automatic={automatic}; workflows={len(workflow_paths)}",
+            note=f"workflow_dispatch_only={dispatch_only}; automatic={automatic}; workflows={len(workflow_paths)}; github_actions_mode={actions_mode}",
         )
         workflow_args = " ".join(shlex.quote(str(path)) for path in workflow_paths)
         lint_steps = [
@@ -2940,6 +3060,18 @@ def execute_target(root: Path, config: dict[str, Any], target: str, *, nested: b
     summary["analysis"]["artifact_path"] = summary["analysis"].get("artifact_path") or summary["artifacts"]["summary_json"]
     summary["analysis"]["recommended_next_command"] = summary["next_actions"][0] if summary["next_actions"] else ""
     write_summary(summary, artifact_dir)
+    policy_path = root / "tooling/configs/artifact-retention.json"
+    if policy_path.exists() and not nested:
+        try:
+            policy = json.loads(policy_path.read_text(encoding="utf-8"))
+            if policy.get("approved") is True:
+                from artifact_retention import finalize_run
+
+                summary["analysis"]["retention"] = finalize_run(root, artifact_dir, summary, policy_path)
+        except Exception as error:
+            summary["analysis"]["retention"] = {"status": "deferred", "reason": str(error)}
+        # Maintenance failure must not hide or change the primary verification result.
+        write_summary(summary, artifact_dir)
     if not nested:
         print_summary(summary, artifact_dir)
     return summary

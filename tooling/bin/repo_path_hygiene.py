@@ -12,6 +12,8 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
+from folder_organization import assess_repo_layout
+
 
 SCRIPT_PATH = Path(__file__).resolve()
 REPO_ROOT = SCRIPT_PATH.parents[2]
@@ -88,7 +90,10 @@ EXCLUDE_GLOBS = (
     ".turbo/**",
     "coverage/**",
     ".cache/**",
+    "_archive/**",
+    "archive/**",
     "vendor/**",
+    "**/vendor/**",
 )
 LINUX_HOME_PREFIX = "/" + "home" + "/"
 MAC_HOME_PREFIX = "/" + "Users" + "/"
@@ -118,7 +123,10 @@ ORIGIN_PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
     ),
     ("wsl_unc_path", "fail", re.compile(r"\\\\wsl(?:\.localhost)?\\[^\s\"'`<>)\],;:]+")),
 )
-ORIGIN_PATTERN_SOURCE_FILES = {"tooling/bin/repo_path_hygiene.py"}
+ORIGIN_PATTERN_SOURCE_FILES = {
+    "tooling/bin/path-hygiene-adapter.sh",
+    "tooling/bin/repo_path_hygiene.py",
+}
 SAFE_AUTO_FIX_CLASSES = {"docs_or_agents", "generated_report"}
 GENERATOR_FIX_REQUIRED_CLASSES = {"generated_evidence", "shared_control_plane"}
 MANUAL_CODE_FIX_CLASSES = {"source_or_test", "config_or_env_example"}
@@ -142,7 +150,7 @@ def classify(relative_path: Path) -> str:
     parts = set(relative_path.parts)
     suffix = relative_path.suffix.lower()
     name = relative_path.name
-    if relative.startswith("docs/observability/generated/") or relative.startswith("systems_improvements/"):
+    if relative.startswith("artifacts/observability/current/") or relative.startswith("systems_improvements/"):
         return "generated_report"
     if any(part in parts for part in {"artifacts", "reports", "migration_reports", "release"}) and suffix in {
         ".json",
@@ -347,7 +355,50 @@ def artifact_dir(repo_root: Path) -> Path:
     return target_root
 
 
-def write_report(repo_root: Path, findings: list[dict[str, Any]]) -> dict[str, str]:
+def load_folder_assessment(repo_root: Path) -> dict[str, Any] | None:
+    config_path = repo_root / "tooling" / "configs" / "tooling-targets.json"
+    if not config_path.exists():
+        return None
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {
+            "status": "fail",
+            "findings": [
+                {
+                    "code": "folder_contract_unreadable",
+                    "severity": "fail",
+                    "path": "tooling/configs/tooling-targets.json",
+                    "message": "rendered tooling target configuration is unreadable",
+                }
+            ],
+            "metrics": {},
+            "next_action": "render the repo adapter again, then rerun `make verify-paths`",
+        }
+    repo_config = config.get("repo", {}) if isinstance(config, dict) else {}
+    contract = repo_config.get("folder_organization") if isinstance(repo_config, dict) else None
+    if not isinstance(contract, dict):
+        return {
+            "status": "fail",
+            "findings": [
+                {
+                    "code": "folder_contract_missing",
+                    "severity": "fail",
+                    "path": "tooling/configs/tooling-targets.json",
+                    "message": "rendered repo configuration has no folder-organization contract",
+                }
+            ],
+            "metrics": {},
+            "next_action": "render the repo adapter again, then rerun `make verify-paths`",
+        }
+    return assess_repo_layout(repo_root, contract)
+
+
+def write_report(
+    repo_root: Path,
+    findings: list[dict[str, Any]],
+    folder_assessment: dict[str, Any] | None = None,
+) -> dict[str, str]:
     output_dir = artifact_dir(repo_root)
     summary = {
         "total_hits": sum(item["hit_count"] for item in findings),
@@ -365,12 +416,19 @@ def write_report(repo_root: Path, findings: list[dict[str, Any]]) -> dict[str, s
         "origin_failures": sum(1 for item in findings if item.get("origin_severity") == "fail"),
         "origin_warnings": sum(1 for item in findings if item.get("origin_severity") == "warn"),
         "placeholder": PLACEHOLDER,
+        "folder_organization_status": (folder_assessment or {}).get("status", "not_configured"),
+        "folder_organization_metrics": (folder_assessment or {}).get("metrics", {}),
     }
     summary_path = output_dir / "summary.json"
     findings_path = output_dir / "findings.json"
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     findings_path.write_text(json.dumps(findings, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    return {"summary_json": str(summary_path), "findings_json": str(findings_path)}
+    result = {"summary_json": str(summary_path), "findings_json": str(findings_path)}
+    if folder_assessment is not None:
+        folder_path = output_dir / "folder-organization.json"
+        folder_path.write_text(json.dumps(folder_assessment, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        result["folder_organization_json"] = str(folder_path)
+    return result
 
 
 def main() -> None:
@@ -382,14 +440,22 @@ def main() -> None:
     parser.add_argument("--refresh-report", action="store_true")
     args = parser.parse_args()
     findings = collect_findings(REPO_ROOT, strict_mode=args.strict_mode)
+    folder_assessment = load_folder_assessment(REPO_ROOT)
     rewritten: list[str] = []
     if args.rewrite_safe:
         rewritten = rewrite_safe(REPO_ROOT, findings)
         findings = collect_findings(REPO_ROOT, strict_mode=args.strict_mode)
-    report_paths = write_report(REPO_ROOT, findings) if args.refresh_report or args.check or args.rewrite_safe else {}
+    report_paths = (
+        write_report(REPO_ROOT, findings, folder_assessment)
+        if args.refresh_report or args.check or args.rewrite_safe
+        else {}
+    )
+    path_failure = any(item.get("origin_severity") == "fail" or item["hit_count"] for item in findings)
+    folder_failure = bool(folder_assessment and folder_assessment.get("status") == "fail")
     payload = {
-        "status": "pass" if not any(item.get("origin_severity") == "fail" or item["hit_count"] for item in findings) else "fail",
+        "status": "fail" if path_failure or folder_failure else "pass",
         "findings": findings,
+        "folder_organization": folder_assessment or {"status": "not_configured", "findings": [], "metrics": {}},
         "rewritten": rewritten,
         "artifacts": report_paths,
     }
