@@ -35,6 +35,12 @@ Define profile presets for redeployable harness generation from Builder + discov
 
 ## Contract
 
+- Profiles are advisory classifications. Deployment assumptions above are design
+  candidates, not requirements to add services, persistence or orchestration.
+  Ground selected components in the product journey and existing architecture.
+- An agent-platform label grants no delegation, model/provider change or runtime
+  authority. Existing user and repository boundaries remain binding.
 - Profile selection must be explicit during discovery synthesis.
 - Generated docs/plans must include selected profile in frontmatter or metadata.
-- Profile defaults are additive and can be overridden by approved discovery answers.
+- Adopt profile defaults only when supported by accepted discovery facts and
+  native product requirements; preserve supplied constraints and unknowns.

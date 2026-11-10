@@ -22,6 +22,20 @@ related_docs:
 
 ## Current Working-Baseline Contract
 
+Recover the whole-product view from existing product, architecture and plan
+sources before consequential component choices: intended users, primary journey,
+baseline acceptance, broader accepted outcomes, owners, critical dependencies
+and operating constraints. Distinguish facts, assumptions and unknowns; investigate
+what can change the next decision rather than requiring a complete blueprint.
+
+Each slice names its product outcome, consumed/provided interfaces and integrated
+acceptance. A branch/component milestone is not the whole product. Profiles are
+advisory; do not invent services, storage or agent orchestration from a label.
+Probe uncertain data ownership, interfaces, trust, deployment and capacity early.
+On dependency change, identify affected consumers/contracts/plans and validation
+evidence, update the current contract, preserve unaffected work and continue
+independent lanes. Deferred accepted outcomes remain unfinished.
+
 This is the canonical current Forge execution contract. Older process summaries
 are historical where they differ; preserve their receipts and original scope.
 Target-native security, approval and promotion rules remain authoritative.

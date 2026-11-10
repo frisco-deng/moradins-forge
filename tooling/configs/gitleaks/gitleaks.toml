@@ -49,5 +49,5 @@ id = "generic-api-key"
   description = "Reviewed native runner cache identity in current and frozen security summaries"
   condition = "AND"
   regexTarget = "line"
-  paths = ['''^(?:artifacts/moradin-beta3-(?:draft|published)-verify\.[^/]+/extracted(?:-clean)?/moradins-forge-0\.2\.0-beta\.3/)?artifacts/tooling/(?:latest/verify-security\.json|verify-security/(?:latest/)?summary\.json)$''']
+  paths = ['''^(?:artifacts/moradin-beta3-(?:draft|published)-verify\.[^/]+/extracted(?:-clean)?/moradins-forge-0\.2\.0-beta\.3/)?artifacts/tooling/(?:latest/(?:verify(?:-fast|-ci|-security|-container|-ui-cli)?|review-ready|release-gate-local|ci-local|sbom|push-gate)\.json|(?:verify(?:-fast|-ci|-security|-container|-ui-cli)?|review-ready|release-gate-local|ci-local|sbom|push-gate)/(?:latest/)?summary\.json)$''']
   regexes = ['''^\s*"step_cache_key"\s*:\s*"[a-f0-9]{16}",?\s*$''']

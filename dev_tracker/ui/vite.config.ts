@@ -123,7 +123,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./tests/setup.ts"],
-    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
+    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx", "tests/**/*.test.mjs"],
     exclude: ["tests/**/*.browser.test.ts", "tests/**/*.browser.test.tsx"],
     coverage: {
       provider: "v8",

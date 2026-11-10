@@ -15,6 +15,11 @@ root patch.
 
 Canonical references:
 
+- [Current product context and dependency-impact contract](docs/11_ops/codex_run_loop.md#current-working-baseline-contract).
+- Product synthesis, phase planning and follow-on prompts are pure planning
+  responsibilities in `dev_tracker/ui/scripts/product-planning.mjs`; the control
+  API wires these results to existing endpoints and artifacts. Profiles do not
+  require additional services or deployment layers.
 - `docs/00_overview/architecture.md`
 - `docs/03_architecture/index.md`
 - `docs/design_docs/index.md`

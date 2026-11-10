@@ -625,6 +625,10 @@ describe("control-api backend discovery and generate", () => {
       "DiscoveryFollowOnPlanResponseV1",
     );
     expect(followOnPlan.payload.target_repo).toBe("mh-follow-on-target");
+    expect(followOnPlan.payload.phase_plan.phases[0].phase_id).toBe("phase_1");
+    expect(followOnPlan.payload.phase_plan.phases[0].objective).toContain("normal-path journey");
+    expect(followOnPlan.payload.prompts.find((p: { prompt_id: string }) => p.prompt_id === "run_all_phases").prompt)
+      .toContain("Continue authorized reversible work across phases");
     expect(followOnPlan.payload.alignment_state.version).toBe("AlignmentStateV1");
     expect(followOnPlan.payload.phase_plan.phases.length).toBeGreaterThanOrEqual(
       3,
@@ -669,10 +673,10 @@ describe("control-api backend discovery and generate", () => {
     expect(phasePlanPayload.summary).toContain("mh-follow-on-target");
     expect(
       phasePlanPayload.phases[0].deliverables.some((item: string) =>
-        item.includes("Capture extra operator context"),
+        item.includes("legacy monorepo with strict approvals"),
       ),
     ).toBe(true);
-    expect(bootstrapMarkdown).toContain("Fill remaining placeholders");
+    expect(bootstrapMarkdown).toContain("users, journey, baseline acceptance");
     expect(bootstrapMarkdown).toContain("legacy monorepo with strict approvals");
     expect(
       executionPromptsPayload.prompts.some(

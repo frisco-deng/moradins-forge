@@ -21,7 +21,7 @@ Profile: local agent-first integration kit.
   `docs/references/moradin_payload_contract_v1.md`.
 - Bootstrap/export: the matching installer or public-export contract under
   `docs/references/`; run `make public-portability-check`.
-- Resume, stage selection and integration: `docs/11_ops/codex_run_loop.md`.
+- Product framing, resume and integration: `docs/11_ops/codex_run_loop.md`.
 - Public validation: `docs/references/repo_operating_model_v1.md`.
 
 ## Agent Adoption Rules
