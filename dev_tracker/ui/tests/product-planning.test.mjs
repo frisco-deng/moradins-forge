@@ -41,6 +41,15 @@ function grade(input, result) {
 }
 
 describe("product-aware planning", () => {
+  it("keeps whole-product scope in a standalone execution prompt when plan files are absent", () => {
+    const result = run(candidate, cases[0]);
+    const prompt = result.prompts.find((p) => p.prompt_id === "run_all_phases").prompt;
+    expect(prompt).toContain("Later accepted outcome: measured batch capacity; deferred remains unfinished");
+    expect(prompt).toContain("offline only");
+    expect(prompt).toContain("when available");
+    expect(prompt).toContain("recover missing acceptance before claiming completion");
+  });
+
   for (const input of cases) {
     it(`${input.id}: preserves supplied product facts and avoids unrequested architecture`, () => {
       const result = run(candidate, input);

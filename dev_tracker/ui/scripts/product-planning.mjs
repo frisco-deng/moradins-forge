@@ -76,9 +76,9 @@ export function deterministicSynthesis(session) {
     recommended_profile: recommendProfile(intake),
     must_haves: [
       `Prove a normal-path baseline journey for: ${goal || "the accepted product outcome once recovered"}.`,
-      "Connect the selected slice to the full accepted product scope, owning interfaces and integration acceptance.",
-      "Retain essential safeguards and actual adoption/promotion approvals; deferred outcomes remain unfinished.",
-      "Review affected consumers, contracts and evidence when a material dependency or assumption changes; preserve unaffected work.",
+      "Link the slice to full product scope, owners/interfaces and integration acceptance.",
+      "Retain native safeguards/approvals; deferred accepted outcomes remain unfinished.",
+      "On dependency change review affected consumers/contracts/evidence; preserve valid work.",
     ],
     open_questions: questions,
     product_spec: {
@@ -132,15 +132,15 @@ export function deterministicSynthesis(session) {
       ],
       initial_backlog: [
         `Select the smallest integrated acceptance check for: ${goal || "the accepted outcome after recovering it"}.`,
-        "Identify the selected slice's owners, consumed/provided interfaces and material assumptions from current evidence.",
+        "Identify slice owners, interfaces and material assumptions from current evidence.",
         ...(answers.length
           ? [
               "Review relevant recorded answers in the existing discovery session; do not promote unrelated responses to product constraints.",
             ]
           : []),
-        "Run the smallest feasibility or discriminating check before committing uncertain dependent implementation.",
-        "On dependency change, update affected consumers/contracts/plans and invalidate only affected evidence; continue independent lanes.",
-        "Keep deferred accepted outcomes visible; a branch or component milestone cannot close the whole product.",
+        "Probe material uncertainty before dependent implementation.",
+        "Update affected contracts/plans/evidence on dependency change; continue independent lanes.",
+        "Retain deferred outcomes; branch/component completion is not product completion.",
       ],
     },
   };
@@ -299,6 +299,14 @@ export function buildFollowOnPrompts({
   const phaseReference =
     session.artifacts?.phase_plan_markdown ||
     `Harness/artifacts/control/discovery_sessions/${session.session_id}/phase_plan.md`;
+  const supplied = normalizeSynthesis(session.synthesis ?? {});
+  const inlineScope = [...new Set([
+    ...supplied.must_haves,
+    ...supplied.plan.initial_backlog,
+    ...supplied.design.components,
+    ...supplied.design.data_flows,
+    ...supplied.product_spec.constraints,
+  ])].map((item) => `- ${item}`);
   const phaseLines = phasePlan.phases.flatMap((phase) => [
     `- ${phase.phase_id}: ${phase.title}`,
     `  objective: ${phase.objective}`,
@@ -360,7 +368,9 @@ export function buildFollowOnPrompts({
         contextSummary,
         ...(alignmentLines.length > 0 ? ["", ...alignmentLines] : []),
         "",
-        `Read complete deliverables and accepted scope from ${phaseReference}; do not drop deferred outcomes.`,
+        `Plan reference, when available: ${phaseReference}. The recorded scope below remains binding if that artifact is absent; recover missing acceptance before claiming completion.`,
+        "Recorded product scope and constraints:",
+        ...inlineScope,
         "Draft phase structure:",
         ...phaseLines,
       ].join("\n"),
@@ -402,7 +412,9 @@ export function buildFollowOnPrompts({
         contextSummary,
         ...(alignmentLines.length > 0 ? ["", ...alignmentLines] : []),
         "",
-        `Read complete deliverables and accepted scope from ${phaseReference}; do not drop deferred outcomes.`,
+        `Plan reference, when available: ${phaseReference}. The recorded scope below remains binding if that artifact is absent; recover missing acceptance before claiming completion.`,
+        "Recorded product scope and constraints:",
+        ...inlineScope,
         "Phase sequence:",
         ...phaseLines,
       ].join("\n"),
