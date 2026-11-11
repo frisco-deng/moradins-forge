@@ -1,0 +1,17 @@
+<svg width="920" height="350" viewBox="0 0 920 350" role="img" aria-labelledby="title desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="title">Qualitative Moradin Forge air-gap round trip</title>
+  <desc id="desc">A disconnected target creates a sanitized request, a connected rootless builder creates a sealed kit, the kit and separate digest return for offline verification, apply and onboarding.</desc>
+  <rect width="920" height="350" rx="18" fill="#f8fafc"/>
+  <rect x="30" y="28" width="860" height="294" rx="14" fill="#ffffff" stroke="#64748b" stroke-width="2"/>
+  <rect x="54" y="50" width="124" height="34" rx="17" fill="#4c1d95"/>
+  <text x="116" y="73" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#ffffff">Qualitative</text>
+  <text x="198" y="73" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#0f172a">Air-Gap Round Trip</text>
+  <g font-family="Arial, sans-serif" fill="#0f172a">
+    <rect x="56" y="122" width="218" height="118" rx="12" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2"/><text x="165" y="153" text-anchor="middle" font-size="18" font-weight="700">Disconnected target</text><text x="165" y="181" text-anchor="middle" font-size="14">Sanitized request</text><text x="165" y="204" text-anchor="middle" font-size="14">Distro · arch · profile</text>
+    <rect x="351" y="122" width="218" height="118" rx="12" fill="#fef3c7" stroke="#b45309" stroke-width="2"/><text x="460" y="153" text-anchor="middle" font-size="18" font-weight="700">Connected builder</text><text x="460" y="181" text-anchor="middle" font-size="14">Pinned rootless image</text><text x="460" y="204" text-anchor="middle" font-size="14">Complete lock + kit</text>
+    <rect x="646" y="122" width="218" height="118" rx="12" fill="#dcfce7" stroke="#15803d" stroke-width="2"/><text x="755" y="153" text-anchor="middle" font-size="18" font-weight="700">Offline apply</text><text x="755" y="181" text-anchor="middle" font-size="14">Verify separate digest</text><text x="755" y="204" text-anchor="middle" font-size="14">Install · receipt · onboard</text>
+  </g>
+  <g stroke="#475569" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M284 158h55"/><path d="M329 148l12 10-12 10"/><path d="M636 204h-55"/><path d="M591 194l-12 10 12 10"/></g>
+  <text x="307" y="139" font-family="Arial, sans-serif" font-size="13" fill="#334155">request →</text><text x="579" y="227" font-family="Arial, sans-serif" font-size="13" fill="#334155">← kit + separate digest</text>
+  <text x="54" y="292" font-family="Arial, sans-serif" font-size="14" fill="#334155">Architecture explanation; complete kits are target-specific and Linux-only in beta.3.</text>
+</svg>

@@ -2,7 +2,7 @@
 title: "Moradin Forge Docs Index"
 status: approved
 owner: moradin-forge
-last_reviewed: 2026-05-11
+last_reviewed: 2026-07-31
 source_refs:
   - ../README.md
   - ../FORGE.md
@@ -23,6 +23,7 @@ Start here:
 - [Overview](00_overview/index.md)
 - [Architecture](03_architecture/index.md)
 - [Operations](11_ops/index.md)
+- [Air-Gapped Tooling Suite](11_ops/air_gapped_tooling_suite.md)
 - [Product Specs](product_specs/index.md)
 - [Reference Contracts](references/index.md)
 

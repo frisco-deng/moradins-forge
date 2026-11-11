@@ -12,11 +12,71 @@ import os
 import platform
 import re
 import shutil
+import sys
+import tempfile
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+try:
+    from scripts.moradin_workstation import (
+        AGENT_PROVIDER_FILES,
+        ONBOARD_PLAN_VERSION,
+        WORKSTATION_PLAN_VERSION,
+        WorkstationError,
+        agent_file_proposal,
+        apply_tooling_plan,
+        build_agent_adapter_section,
+        build_offline_bundle,
+        build_onboard_plan,
+        build_tooling_plan,
+        compact_repo_state,
+        context_primer,
+        diagnostic_brief,
+        inspect_repository_capabilities,
+        initial_agent_file_content,
+        plan_digest,
+        recommended_tool_specs,
+        repo_brief,
+        rerun_advice,
+        rollback_tooling_receipt,
+        session_checkpoint,
+        tooling_plan_markdown,
+        write_tooling_plan_artifacts,
+    )
+except ModuleNotFoundError:  # pragma: no cover - direct script execution path
+    from moradin_workstation import (  # type: ignore[no-redef]
+        AGENT_PROVIDER_FILES,
+        ONBOARD_PLAN_VERSION,
+        WORKSTATION_PLAN_VERSION,
+        WorkstationError,
+        agent_file_proposal,
+        apply_tooling_plan,
+        build_agent_adapter_section,
+        build_offline_bundle,
+        build_onboard_plan,
+        build_tooling_plan,
+        compact_repo_state,
+        context_primer,
+        diagnostic_brief,
+        inspect_repository_capabilities,
+        initial_agent_file_content,
+        plan_digest,
+        recommended_tool_specs,
+        repo_brief,
+        rerun_advice,
+        rollback_tooling_receipt,
+        session_checkpoint,
+        tooling_plan_markdown,
+        write_tooling_plan_artifacts,
+    )
+
+try:
+    from scripts.moradin_tooling_suite import latest_suite_receipt_status
+except ModuleNotFoundError:  # pragma: no cover - direct script execution path
+    from moradin_tooling_suite import latest_suite_receipt_status  # type: ignore[no-redef]
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +88,14 @@ OWNERSHIP_RECORD_RELATIVE = Path(
 )
 AGENTS_MARKER_BEGIN = "<!-- moradin-forge:start -->"
 AGENTS_MARKER_END = "<!-- moradin-forge:end -->"
+SUPPORTED_AGENT_FILES = tuple(AGENT_PROVIDER_FILES.values())
+ADAPTER_SNIPPETS = {
+    "AGENTS.md": "AGENTS.snippet.md",
+    "CLAUDE.md": "CLAUDE.snippet.md",
+    "GEMINI.md": "GEMINI.snippet.md",
+    ".github/copilot-instructions.md": "copilot-instructions.snippet.md",
+    ".cursor/rules/moradin-forge.mdc": "moradin-forge.cursor-rule.snippet.mdc",
+}
 INTERNAL_USER_TOKEN = "ru" + "ne"
 HOME_PREFIX_TOKEN = "/" + "home" + "/"
 MAC_HOME_PREFIX_TOKEN = "/" + "Users" + "/"
@@ -174,15 +242,30 @@ SIDECAR_ALWAYS_EXCLUDE_EXACT = {
 SIDECAR_ALWAYS_EXCLUDE_PREFIXES.update(
     {
         "Harness/artifacts/control/forge_runs",
+        "Harness/artifacts/control/efficiency",
         "Harness/artifacts/control/install_requests",
         "Harness/artifacts/control/migration_start",
         "Harness/artifacts/control/migration_waves",
+        "Harness/artifacts/control/onboard_runs",
         f"Harness/artifacts/control/{PR_HARDENING_TOKEN}",
         "Harness/artifacts/control/public_export",
         "Harness/artifacts/control/repo_registry",
         "Harness/artifacts/control/discovery_sessions",
+        "Harness/artifacts/control/tooling_plans",
+        "Harness/artifacts/control/tooling_receipts",
+        "Harness/artifacts/control/upgrade_runs",
     }
 )
+RUNTIME_ARTIFACT_PREFIXES = {
+    "Harness/artifacts/control/efficiency",
+    "Harness/artifacts/control/forge_runs",
+    "Harness/artifacts/control/install_requests",
+    "Harness/artifacts/control/onboard_runs",
+    "Harness/artifacts/control/tooling_plans",
+    "Harness/artifacts/control/tooling_receipts",
+    "Harness/artifacts/control/upgrade_runs",
+    "Harness/artifacts/control/forge_integration/upgrade_backups",
+}
 PORTABLE_TEXT_REPLACEMENTS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(re.escape(PRIVATE_FORGE_ROOT_TOKEN)), "<forge-root>"),
     (re.compile(re.escape(PRIVATE_CODE_ROOT_TOKEN)), "<workspace-root>"),
@@ -248,12 +331,30 @@ PORTABLE_TEXT_REPLACEMENTS: list[tuple[re.Pattern[str], str]] = [
 ]
 
 PORTABLE_SIDECAR_MAKEFILE_TEXT = """\
-.PHONY: test payload-validate payload-smoke forge-explain forge-readiness forge-plan forge-adopt forge-verify forge-rollback forge-smoke
+.PHONY: test payload-validate payload-smoke forge-explain forge-readiness forge-onboard forge-tooling-suite forge-tooling-suite-plan forge-tooling-suite-apply forge-tooling-suite-bundle forge-tooling-suite-verify forge-tooling-suite-rollback forge-airgap-request forge-airgap-build forge-airgap-verify forge-airgap-apply forge-tooling-plan forge-tooling-update-plan forge-tooling-apply forge-tooling-bundle forge-tooling-rollback forge-plan forge-adopt forge-verify forge-upgrade-plan forge-upgrade forge-upgrade-rollback forge-rollback forge-smoke
 
 TARGET ?=
 APPROVE ?=
 OVERWRITE ?=
 PATCH_AGENTS ?=
+WORKSPACE ?=
+PLAN ?=
+PLAN_SHA256 ?=
+OUTPUT ?=
+RECEIPT ?=
+APPROVE_RECEIPT_SHA256 ?=
+AGENT_FILES ?=
+CREATE_AGENT_FILES ?=
+UPGRADE_ID ?=
+PROFILE ?=
+SELECT ?=
+EXCLUDE ?=
+CONTAINER_ENGINE ?=
+REQUEST ?=
+LOCK ?=
+BUNDLE ?=
+BUNDLE_SHA256 ?=
+STALE_BUNDLE_SHA256 ?=
 
 test:
 \tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run pytest
@@ -270,17 +371,92 @@ forge-explain:
 forge-readiness:
 \tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py readiness
 
+forge-onboard:
+\t@if [ -z "$(WORKSPACE)" ]; then echo "Usage: make forge-onboard WORKSPACE=<workspace-path>"; exit 1; fi
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py onboard --workspace "$(WORKSPACE)"
+
+forge-tooling-suite:
+\tinstall/tooling-suite.sh
+
+forge-tooling-suite-plan:
+\t@if [ -z "$(OUTPUT)" ]; then echo "Usage: make forge-tooling-suite-plan OUTPUT=<plan.json> [PROFILE=practical|extended] [SELECT='tool ...']"; exit 1; fi
+\t@if [ -z "$(PROFILE)" ] && [ -z "$(SELECT)" ]; then echo "Set PROFILE=practical|extended or SELECT='tool ...'"; exit 1; fi
+\tinstall/tooling-suite.sh plan $(if $(PROFILE),--profile "$(PROFILE)",--custom) $(foreach tool,$(SELECT),--select "$(tool)") $(foreach tool,$(EXCLUDE),--exclude "$(tool)") $(if $(CONTAINER_ENGINE),--container-engine "$(CONTAINER_ENGINE)",) --output "$(OUTPUT)"
+
+forge-tooling-suite-apply:
+\t@if [ -z "$(PLAN)" ] || [ -z "$(PLAN_SHA256)" ]; then echo "Usage: make forge-tooling-suite-apply PLAN=<plan.json> PLAN_SHA256=<digest>"; exit 1; fi
+\tinstall/tooling-suite.sh apply --plan "$(PLAN)" --approve-plan-sha256 "$(PLAN_SHA256)"
+
+forge-tooling-suite-bundle:
+\t@if [ -z "$(PLAN)" ] || [ -z "$(OUTPUT)" ]; then echo "Usage: make forge-tooling-suite-bundle PLAN=<plan.json> OUTPUT=<bundle-path>"; exit 1; fi
+\tinstall/tooling-suite.sh bundle --plan "$(PLAN)" --output "$(OUTPUT)"
+
+forge-tooling-suite-verify:
+\tinstall/tooling-suite.sh verify --receipt "$(if $(RECEIPT),$(RECEIPT),latest)"
+
+forge-tooling-suite-rollback:
+\t@if [ -z "$(RECEIPT)" ] || [ -z "$(APPROVE_RECEIPT_SHA256)" ]; then echo "Usage: make forge-tooling-suite-rollback RECEIPT=<receipt.json> APPROVE_RECEIPT_SHA256=<digest>"; exit 1; fi
+\tinstall/tooling-suite.sh rollback --receipt "$(RECEIPT)" --approve-receipt-sha256 "$(APPROVE_RECEIPT_SHA256)"
+
+forge-airgap-request:
+\t@if [ -z "$(PROFILE)" ] || [ -z "$(OUTPUT)" ]; then echo "Usage: make forge-airgap-request PROFILE=practical|extended OUTPUT=<request.json>"; exit 1; fi
+\tinstall/tooling-suite.sh airgap-request --profile "$(PROFILE)" --output "$(OUTPUT)" $(foreach tool,$(EXCLUDE),--exclude "$(tool)")
+
+forge-airgap-build:
+\t@if [ -z "$(OUTPUT)" ] || { [ -z "$(REQUEST)" ] && [ -z "$(LOCK)" ]; } || { [ -n "$(REQUEST)" ] && [ -n "$(LOCK)" ]; }; then echo "Usage: make forge-airgap-build REQUEST=<request.json>|LOCK=<lock.json> OUTPUT=<kit.tar.gz>"; exit 1; fi
+\tinstall/tooling-suite.sh airgap-build $(if $(REQUEST),--request "$(REQUEST)",--lock "$(LOCK)") --output "$(OUTPUT)"
+
+forge-airgap-verify:
+\t@if [ -z "$(BUNDLE)" ] || [ -z "$(BUNDLE_SHA256)" ]; then echo "Usage: make forge-airgap-verify BUNDLE=<kit.tar.gz> BUNDLE_SHA256=<digest>"; exit 1; fi
+\tinstall/tooling-suite.sh airgap-verify --bundle "$(BUNDLE)" --expected-sha256 "$(BUNDLE_SHA256)"
+
+forge-airgap-apply:
+\t@if [ -z "$(BUNDLE)" ] || [ -z "$(BUNDLE_SHA256)" ] || [ -z "$(PLAN_SHA256)" ]; then echo "Usage: make forge-airgap-apply BUNDLE=<kit.tar.gz> BUNDLE_SHA256=<digest> PLAN_SHA256=<digest>"; exit 1; fi
+\tinstall/tooling-suite.sh airgap-apply --bundle "$(BUNDLE)" --approve-bundle-sha256 "$(BUNDLE_SHA256)" --approve-offline-plan-sha256 "$(PLAN_SHA256)" $(if $(STALE_BUNDLE_SHA256),--approve-stale-bundle-sha256 "$(STALE_BUNDLE_SHA256)",)
+
+forge-tooling-plan:
+\t@if [ -z "$(WORKSPACE)" ]; then echo "Usage: make forge-tooling-plan WORKSPACE=<workspace-path>"; exit 1; fi
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py tooling-plan --workspace "$(WORKSPACE)"
+
+forge-tooling-update-plan:
+\t@if [ -z "$(WORKSPACE)" ]; then echo "Usage: make forge-tooling-update-plan WORKSPACE=<workspace-path>"; exit 1; fi
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py tooling-update-plan --workspace "$(WORKSPACE)"
+
+forge-tooling-apply:
+\t@if [ -z "$(PLAN)" ] || [ -z "$(PLAN_SHA256)" ]; then echo "Usage: make forge-tooling-apply PLAN=<plan.json> PLAN_SHA256=<digest>"; exit 1; fi
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py tooling-apply --plan "$(PLAN)" --approve-plan-sha256 "$(PLAN_SHA256)"
+
+forge-tooling-bundle:
+\t@if [ -z "$(PLAN)" ] || [ -z "$(OUTPUT)" ]; then echo "Usage: make forge-tooling-bundle PLAN=<plan.json> OUTPUT=<bundle-path>"; exit 1; fi
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py tooling-bundle --plan "$(PLAN)" --output "$(OUTPUT)"
+
+forge-tooling-rollback:
+\t@if [ -z "$(RECEIPT)" ] || [ "$(APPROVE)" != "1" ]; then echo "Usage: make forge-tooling-rollback RECEIPT=<receipt.json> APPROVE=1"; exit 1; fi
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py tooling-rollback --receipt "$(RECEIPT)" --approve
+
 forge-plan:
 \t@if [ -z "$(TARGET)" ]; then echo "Usage: make forge-plan TARGET=<repo-path>"; exit 1; fi
 \tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py plan --target "$(TARGET)" --write-install-request
 
 forge-adopt:
 \t@if [ -z "$(TARGET)" ] || [ "$(APPROVE)" != "1" ]; then echo "Usage: make forge-adopt TARGET=<repo-path> APPROVE=1"; exit 1; fi
-\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py apply --target "$(TARGET)" --approve $(if $(OVERWRITE),--overwrite-sidecar,) $(if $(PATCH_AGENTS),--patch-agents,) --write-install-request
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py apply --target "$(TARGET)" --approve $(if $(OVERWRITE),--overwrite-sidecar,) $(if $(PATCH_AGENTS),--patch-agents,) $(foreach file,$(AGENT_FILES),--approve-agent-file $(file)) $(foreach file,$(CREATE_AGENT_FILES),--create-agent-file $(file)) --write-install-request
 
 forge-verify:
 \t@if [ -z "$(TARGET)" ]; then echo "Usage: make forge-verify TARGET=<repo-path>"; exit 1; fi
 \tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py verify --target "$(TARGET)"
+
+forge-upgrade-plan:
+\t@if [ -z "$(TARGET)" ]; then echo "Usage: make forge-upgrade-plan TARGET=<repo-path>"; exit 1; fi
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py upgrade-plan --target "$(TARGET)"
+
+forge-upgrade:
+\t@if [ -z "$(TARGET)" ] || [ -z "$(PLAN)" ] || [ -z "$(PLAN_SHA256)" ]; then echo "Usage: make forge-upgrade TARGET=<repo-path> PLAN=<plan.json> PLAN_SHA256=<digest>"; exit 1; fi
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py upgrade --target "$(TARGET)" --plan "$(PLAN)" --approve-plan-sha256 "$(PLAN_SHA256)"
+
+forge-upgrade-rollback:
+\t@if [ -z "$(TARGET)" ] || [ -z "$(UPGRADE_ID)" ] || [ "$(APPROVE)" != "1" ]; then echo "Usage: make forge-upgrade-rollback TARGET=<repo-path> UPGRADE_ID=<id> APPROVE=1"; exit 1; fi
+\tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/moradin_forge.py upgrade-rollback --target "$(TARGET)" --upgrade-id "$(UPGRADE_ID)" --approve
 
 forge-rollback:
 \t@if [ -z "$(TARGET)" ] || [ "$(APPROVE)" != "1" ]; then echo "Usage: make forge-rollback TARGET=<repo-path> APPROVE=1"; exit 1; fi
@@ -305,11 +481,17 @@ owner: moradin-forge
 | --- | --- | --- | --- | --- |
 | FORGE-001 | inspect Forge and the target repo before proposing changes | FORGE.md | explain the plan before apply | active |
 | FORGE-002 | require explicit user approval before writing target repo files | Harness/entrypoints/forge.md | run apply only with `--approve` | active |
-| FORGE-003 | keep host tool installation request-only | docs/references/tooling_readiness_install_request_contract_v1.md | write install-request artifacts instead of installing tools | active |
+| FORGE-003 | execute only digest-approved, verified user-level tooling actions | docs/references/tooling_readiness_install_execution_contract_v2.md | review the exact plan digest before `tooling-apply` | active |
 | FORGE-004 | preserve root workflows by default | docs/references/moradin_forge_agent_integration_contract_v1.md | write sidecar adapters before root patches | active |
 | FORGE-005 | verify sidecars for portability before handoff | scripts/moradin_forge.py | run `forge verify` or `make forge-verify` | active |
 | FORGE-006 | keep bootstrap separate from adoption | docs/references/moradin_forge_installer_bootstrap_contract_v1.md | run platform bootstrap only to prime Forge and write a start card | active |
 | FORGE-007 | keep beta release visuals portable and local | README.md | scan SVG assets before public release | active |
+| FORGE-008 | inspect only explicitly approved workspace roots | docs/references/tooling_readiness_install_execution_contract_v2.md | show discovered repositories before capability inspection | active |
+| FORGE-009 | require independent approval for each agent file and user configuration change | docs/references/moradin_forge_agent_integration_contract_v1.md | show the owned block and request each consent separately | active |
+| FORGE-010 | agents never invoke elevation or approve a human confirmation | docs/references/moradin_forge_tooling_suite_contract_v1.md | the user launches the suite and approves its sealed sudo phase | active |
+| FORGE-011 | bind upgrades to an exact plan and retain one predecessor | docs/references/moradin_forge_upgrade_contract_v1.md | stage, validate, switch, or restore byte-for-byte | active |
+| FORGE-012 | store sanitized efficiency counters only | docs/references/moradin_agent_efficiency_contract_v1.md | omit prompts, source, commands, paths, and logs | active |
+| FORGE-013 | call an offline installation complete only when its target-specific package, trust, runtime, tool, and rollback closure is sealed | docs/11_ops/air_gapped_tooling_suite.md | use `airgap-build`; label compatibility `bundle` output partial | active |
 """,
     "Harness/artifacts/control/current_features.md": """\
 ---
@@ -325,10 +507,17 @@ owner: moradin-forge
 | FORGE-FEAT-001 | consent-gated local sidecar adoption | implemented | scripts/moradin_forge.py |
 | FORGE-FEAT-002 | payload-manifest-driven copy contract | implemented | Harness/moradin_payload/manifest.yaml |
 | FORGE-FEAT-003 | adaptive adapter snippets for common repo tooling | implemented | .moradins-harness/adapters/ |
-| FORGE-FEAT-004 | request-only tooling readiness artifacts | implemented | docs/references/tooling_readiness_install_request_contract_v1.md |
+| FORGE-FEAT-004 | digest-bound workstation plans and verified user-level execution | implemented | docs/references/tooling_readiness_install_execution_contract_v2.md |
 | FORGE-FEAT-005 | public export and sidecar portability scans | implemented | scripts/public_export.py |
 | FORGE-FEAT-006 | low-token clone-and-prime bootstrap entrypoints | implemented | docs/references/moradin_forge_installer_bootstrap_contract_v1.md |
 | FORGE-FEAT-007 | README visual overview for adoption and safety boundaries | implemented | docs/assets/readme/ |
+| FORGE-FEAT-008 | bounded multi-workspace repository discovery | implemented | scripts/moradin_workstation.py |
+| FORGE-FEAT-009 | independent Codex, Claude, Gemini, Copilot, and Cursor owned blocks | implemented | scripts/moradin_forge.py |
+| FORGE-FEAT-010 | checksummed asset-only compatibility bundles and privileged user-run scripts | implemented | scripts/moradin_workstation.py |
+| FORGE-FEAT-011 | transactional V1/V2 sidecar upgrades and immediate rollback | implemented | docs/references/moradin_forge_upgrade_contract_v1.md |
+| FORGE-FEAT-012 | portable context primer, briefs, rerun advice, and sanitized counters | implemented | docs/references/moradin_agent_efficiency_contract_v1.md |
+| FORGE-FEAT-013 | target-specific complete air-gap kits with signed package trust and rollback closure | implemented | docs/11_ops/air_gapped_tooling_suite.md |
+| FORGE-FEAT-014 | deterministic measured README figures from public release-dogfood fixtures | implemented | scripts/generate_readme_figures.py |
 """,
     "Harness/artifacts/control/compatibility_window_status.md": """\
 ---
@@ -361,6 +550,7 @@ owner: moradin-forge
 | PUBLIC-001 | 2026-05-11 | public-alpha | Published Moradin's Forge as an agent-first local integration kit with consent-gated sidecar adoption. | ready |
 | PUBLIC-002 | 2026-06-09 | tooling-inheritance | Adopted current shared-tooling adapter improvements, hardened portability scans, and added request-only bootstrap entrypoints. | ready |
 | PUBLIC-003 | 2026-06-10 | beta-release | Prepared v0.2.0-beta.1 with version normalization, CI fixes, and README visual overview assets. | ready |
+| PUBLIC-004 | 2026-07-31 | universal-agent-baseline | Prepared v0.2.0-beta.3 with three-step onboarding, a human-run Linux suite, complete target-specific air-gap kits, five independently approved provider blocks, compact context helpers, and transactional upgrades. | candidate |
 """,
 }
 
@@ -375,6 +565,8 @@ class ForgeApplyOptions:
     overwrite_sidecar: bool = False
     patch_agents: bool = False
     create_agents: bool = False
+    agent_files: tuple[str, ...] = ()
+    create_agent_files: tuple[str, ...] = ()
     write_install_request: bool = False
     sidecar_dir: str = DEFAULT_SIDECAR_DIR
 
@@ -482,6 +674,38 @@ def atomic_write_bytes(path: Path, payload: bytes) -> None:
     finally:
         if temporary.exists():
             temporary.unlink()
+
+
+def agent_parent_directories(target_root: Path, agent_file: str) -> list[Path]:
+    """Return allowlisted nested guidance parents from shallow to deep."""
+
+    if agent_file not in SUPPORTED_AGENT_FILES:
+        raise ForgeError(f"unsupported agent guidance file: {agent_file}")
+    relative = Path(agent_file).parent
+    if str(relative) == ".":
+        return []
+    parents: list[Path] = []
+    current = Path()
+    for part in relative.parts:
+        current /= part
+        parents.append(target_root / current)
+    return parents
+
+
+def remove_owned_empty_agent_parents(
+    target_root: Path,
+    agent_file: str,
+    *,
+    parents_present_before: set[str],
+) -> None:
+    for parent in reversed(agent_parent_directories(target_root, agent_file)):
+        relative = parent.relative_to(target_root).as_posix()
+        if relative in parents_present_before:
+            break
+        try:
+            parent.rmdir()
+        except OSError:
+            break
 
 
 def install_directory_no_replace(source: Path, destination: Path) -> None:
@@ -784,6 +1008,8 @@ def scan_local_only_artifact_paths(sidecar_root: Path) -> list[ForgeVerifyIssue]
         for filename in sorted(filenames):
             path = current_path / filename
             relative = relative_to_root(path, sidecar_root)
+            if is_runtime_artifact_path(relative):
+                continue
             if relative in SIDECAR_ALWAYS_EXCLUDE_EXACT:
                 issues.append(
                     ForgeVerifyIssue(
@@ -813,94 +1039,34 @@ def detect_any_tool(commands: list[str]) -> bool:
     return any(detect_tool(command) for command in commands)
 
 
-def detect_readiness() -> dict[str, Any]:
+def detect_readiness(target_root: Path | None = None) -> dict[str, Any]:
+    capabilities = (
+        set(inspect_repository_capabilities(target_root)["capabilities"])
+        if target_root and target_root.is_dir()
+        else set()
+    )
     tool_specs = [
         {
-            "id": "git",
-            "label": "Git",
-            "command": "git",
-            "required": True,
-            "human_run_commands": [
-                "sudo apt-get update && sudo apt-get install -y git",
-                "brew install git",
-                "winget install --id Git.Git -e",
-            ],
-        },
-        {
-            "id": "python",
-            "label": "Python",
-            "command": "python3",
-            "commands": ["python3", "python", "py"],
-            "required": True,
-            "human_run_commands": [
-                "sudo apt-get update && sudo apt-get install -y python3",
-                "brew install python",
-                "winget install --id Python.Python.3.12 -e",
-            ],
-        },
-        {
-            "id": "uv",
-            "label": "uv",
-            "command": "uv",
-            "required": False,
-            "human_run_commands": [
-                "curl -LsSf https://astral.sh/uv/install.sh | sh",
-                "powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\"",
-            ],
-        },
-        {
-            "id": "node",
-            "label": "Node.js",
-            "command": "node",
-            "required": False,
+            "id": catalog_spec.id,
+            "label": catalog_spec.label,
+            "command": catalog_spec.command,
+            "commands": (
+                ["python3", "python", "py"]
+                if catalog_spec.id == "python"
+                else ["fd", "fdfind"]
+                if catalog_spec.id == "fd"
+                else [catalog_spec.command]
+            ),
+            "required": catalog_spec.required,
             "human_run_commands": [],
-        },
-        {
-            "id": "npm",
-            "label": "npm",
-            "command": "npm",
-            "required": False,
-            "human_run_commands": [],
-        },
-        {
-            "id": "codex_cli",
-            "label": "Codex CLI",
-            "command": "codex",
-            "required": False,
-            "human_run_commands": [],
-        },
-        {
-            "id": "claude_code",
-            "label": "Claude Code",
-            "command": "claude",
-            "required": False,
-            "human_run_commands": [],
-        },
-        {
-            "id": "tpldeck",
-            "label": "tpldeck shell helper",
-            "command": "tpldeck",
-            "required": False,
-            "human_run_commands": [],
-        },
-        {
-            "id": "uvbootstrap",
-            "label": "uvbootstrap shell helper",
-            "command": "uvbootstrap",
-            "required": False,
-            "human_run_commands": [],
-        },
-        {
-            "id": "codex_run",
-            "label": "codex-run bridge helper",
-            "command": "codex-run",
-            "required": False,
-            "human_run_commands": [],
-        },
+            "category": catalog_spec.category,
+        }
+        for catalog_spec in recommended_tool_specs(capabilities)
+        if catalog_spec.command
     ]
     checks = []
     for spec in tool_specs:
-        commands = [str(item) for item in spec.get("commands", [spec["command"]])]
+        commands = [str(item) for item in spec["commands"]]
         present = detect_any_tool(commands)
         checks.append(
             {
@@ -937,10 +1103,14 @@ def detect_readiness() -> dict[str, Any]:
             "python": platform.python_version(),
         },
         "checks": checks,
+        "detected_capabilities": sorted(capabilities),
         "missing_required": [check["id"] for check in missing_required],
         "missing_optional": [check["id"] for check in missing_optional],
         "status": "blocked" if missing_required else "ready",
-        "safety": "request_only; no host install commands were executed",
+        "safety": (
+            "readiness did not install tools; user-level installation requires "
+            "a digest-approved tooling plan and privileged actions require a user-run script"
+        ),
     }
 
 
@@ -987,12 +1157,40 @@ def detect_target_tooling(target_root: Path) -> dict[str, Any]:
 
 
 def target_repo_snapshot(target_root: Path, sidecar_dir: str = DEFAULT_SIDECAR_DIR) -> dict[str, Any]:
+    lowercase_agent_files = sorted(
+        name
+        for name in (
+            "agents.md",
+            "agent.md",
+            "claude.md",
+            "claud.md",
+            "gemini.md",
+            ".github/copilot_instructions.md",
+            ".cursor/rules/moradin-forge.md",
+        )
+        if (target_root / name).is_file()
+    )
+    agent_files = {
+        name: {
+            "present": (target_root / name).is_file(),
+            "symlink": (target_root / name).is_symlink(),
+            "provider": next(
+                provider
+                for provider, relative in AGENT_PROVIDER_FILES.items()
+                if relative == name
+            ),
+        }
+        for name in SUPPORTED_AGENT_FILES
+    }
     return {
         "path": target_root.as_posix(),
         "exists": target_root.exists(),
         "is_dir": target_root.is_dir(),
         "git_present": (target_root / ".git").exists(),
         "agents_present": (target_root / "AGENTS.md").is_file(),
+        "claude_present": (target_root / "CLAUDE.md").is_file(),
+        "agent_files": agent_files,
+        "lowercase_agent_file_warnings": lowercase_agent_files,
         "makefile_present": (target_root / "Makefile").is_file(),
         "tooling": detect_target_tooling(target_root),
         "sidecar_dir": sidecar_dir,
@@ -1004,7 +1202,10 @@ def proposed_writes_for_target(target_root: Path, sidecar_dir: str) -> list[str]
     tooling = detect_target_tooling(target_root)
     writes = [
         f"{sidecar_dir}/**",
-        f"{sidecar_dir}/adapters/AGENTS.snippet.md",
+        *[
+            f"{sidecar_dir}/adapters/{snippet}"
+            for snippet in ADAPTER_SNIPPETS.values()
+        ],
         f"{sidecar_dir}/adapters/Makefile.snippet",
         f"{sidecar_dir}/adapters/README.md",
         f"{sidecar_dir}/Harness/artifacts/control/forge_integration/integration.json",
@@ -1026,9 +1227,18 @@ def proposed_writes_for_target(target_root: Path, sidecar_dir: str) -> list[str]
 
 
 def optional_writes_for_target(target_root: Path) -> list[str]:
-    if (target_root / "AGENTS.md").is_file():
-        return ["AGENTS.md when apply is run with --patch-agents"]
-    return ["AGENTS.md when apply is run with --patch-agents --create-agents"]
+    writes = []
+    for agent_file in SUPPORTED_AGENT_FILES:
+        if (target_root / agent_file).is_file():
+            writes.append(
+                f"{agent_file} when apply is run with --approve-agent-file {agent_file}"
+            )
+        else:
+            writes.append(
+                f"{agent_file} when apply is run with --approve-agent-file "
+                f"{agent_file} --create-agent-file {agent_file}"
+            )
+    return writes
 
 
 def build_integration_plan(
@@ -1042,7 +1252,7 @@ def build_integration_plan(
         raise ForgeError(f"target repo must be an existing directory: {target_root}")
     manifest = load_payload_manifest(forge_root)
     snapshot = target_repo_snapshot(target_root, sidecar_dir)
-    readiness = detect_readiness()
+    readiness = detect_readiness(target_root)
     return {
         "version": "MoradinForgePlanV1",
         "generated_at": utc_now(),
@@ -1066,8 +1276,9 @@ def build_integration_plan(
         "safety": [
             "Plan mode does not write to the target repo.",
             "Apply requires --approve.",
-            "Host tool installs are request-only artifacts.",
-            "Existing sidecars are preserved; overwrite is blocked until a transactional upgrade contract exists.",
+            "Tool execution requires a separate digest-approved tooling plan.",
+            "Privileged actions are generated for the user and are never elevated automatically.",
+            "Existing sidecars are preserved; use the transactional upgrade-plan and upgrade commands.",
         ],
         "status": "blocked_existing_sidecar" if snapshot["sidecar_present"] else readiness["status"],
     }
@@ -1163,22 +1374,32 @@ def write_install_request_artifacts(
     }
 
 
-def agents_adapter_section(sidecar_dir: str) -> str:
-    return "\n".join(
-        [
-            AGENTS_MARKER_BEGIN,
-            "## Moradin's Forge",
-            "",
-            f"- Local sidecar: `{sidecar_dir}/`",
-            f"- Agent entrypoint: `{sidecar_dir}/FORGE.md`",
-            f"- Harness entrypoint: `{sidecar_dir}/Harness/entrypoints/forge.md`",
-            "- Keep Moradin local unless the user explicitly requests external tooling.",
-            "- Treat host tool installation as request-only: write install requests, do not run installs.",
-            "- Preserve existing repo workflows and prefer repo-local deterministic commands.",
-            AGENTS_MARKER_END,
-            "",
-        ]
+def write_gap_tooling_plan(
+    forge_root: Path,
+    readiness: dict[str, Any],
+    *,
+    target_root: Path | None,
+) -> dict[str, str]:
+    if not readiness["missing_required"] and not readiness["missing_optional"]:
+        return {}
+    workspace = target_root.resolve() if target_root else forge_root.resolve()
+    plan = build_tooling_plan(
+        [workspace],
+        forge_root=forge_root,
+        profile="practical-full",
     )
+    artifacts = write_tooling_plan_artifacts(forge_root, plan)
+    return {
+        **artifacts,
+        "plan_sha256": str(plan["plan_sha256"]),
+        "status": str(plan["status"]),
+    }
+
+
+def agents_adapter_section(sidecar_dir: str) -> str:
+    """Compatibility wrapper for the original AGENTS.md adapter."""
+
+    return build_agent_adapter_section(sidecar_dir, "AGENTS.md")
 
 
 def write_adapter_snippets(sidecar_root: Path, sidecar_dir: str, target_root: Path) -> list[str]:
@@ -1213,9 +1434,13 @@ def write_adapter_snippets(sidecar_root: Path, sidecar_dir: str, target_root: Pa
         encoding="utf-8",
     )
     written.append(readme.as_posix())
-    agents_snippet = adapters_root / "AGENTS.snippet.md"
-    agents_snippet.write_text(agents_adapter_section(sidecar_dir), encoding="utf-8")
-    written.append(agents_snippet.as_posix())
+    for agent_file, snippet_name in ADAPTER_SNIPPETS.items():
+        snippet = adapters_root / snippet_name
+        snippet.write_text(
+            build_agent_adapter_section(sidecar_dir, agent_file),
+            encoding="utf-8",
+        )
+        written.append(snippet.as_posix())
     makefile_snippet = adapters_root / "Makefile.snippet"
     makefile_snippet.write_text(
         "\n".join(
@@ -1293,26 +1518,60 @@ def write_adapter_snippets(sidecar_root: Path, sidecar_dir: str, target_root: Pa
 
 
 def patch_agents_adapter(target_root: Path, sidecar_dir: str, create_agents: bool) -> str:
-    agents_path = target_root / "AGENTS.md"
-    section = agents_adapter_section(sidecar_dir)
-    if agents_path.is_file():
-        existing = agents_path.read_text(encoding="utf-8")
-        if AGENTS_MARKER_BEGIN in existing:
-            return "already_present"
-        if not existing:
-            separator = ""
-        elif existing.endswith("\n\n"):
-            separator = ""
-        elif existing.endswith("\n"):
-            separator = "\n"
-        else:
-            separator = "\n\n"
-        atomic_write_bytes(agents_path, (existing + separator + section).encode("utf-8"))
-        return "patched"
-    if create_agents:
-        atomic_write_bytes(agents_path, ("# AGENTS.md\n\n" + section).encode("utf-8"))
-        return "created"
-    return "snippet_only"
+    """Compatibility wrapper for the original AGENTS.md-only option."""
+
+    return patch_agent_file_adapter(
+        target_root,
+        sidecar_dir,
+        "AGENTS.md",
+        create_agent_file=create_agents,
+    )
+
+
+def patch_agent_file_adapter(
+    target_root: Path,
+    sidecar_dir: str,
+    agent_file: str,
+    *,
+    create_agent_file: bool,
+) -> str:
+    if agent_file not in SUPPORTED_AGENT_FILES:
+        raise ForgeError(f"unsupported agent guidance file: {agent_file}")
+    path = target_root / agent_file
+    if path.is_symlink():
+        raise ForgeError(f"refusing to patch agent guidance symlink: {agent_file}")
+    if not path.exists() and not create_agent_file:
+        return "snippet_only"
+    try:
+        proposal = agent_file_proposal(
+            target_root,
+            agent_file,
+            sidecar_dir=sidecar_dir,
+        )
+    except WorkstationError as error:
+        raise ForgeError(str(error)) from error
+    if proposal.get("action") == "conflict":
+        raise ForgeError(
+            f"refusing to replace unowned agent guidance: {agent_file}"
+        )
+    existing = path.read_text(encoding="utf-8") if path.is_file() else ""
+    section = str(proposal["owned_block"])
+    if AGENTS_MARKER_BEGIN in existing:
+        start = existing.index(AGENTS_MARKER_BEGIN)
+        end = existing.index(AGENTS_MARKER_END, start) + len(AGENTS_MARKER_END)
+        if end < len(existing) and existing[end] == "\n":
+            end += 1
+        rendered = existing[:start] + section + existing[end:]
+        status = "already_present" if rendered == existing else "updated"
+    elif not existing:
+        rendered = initial_agent_file_content(agent_file, section)
+        status = "created"
+    else:
+        separator = "" if existing.endswith("\n\n") else "\n" if existing.endswith("\n") else "\n\n"
+        rendered = existing + separator + section
+        status = "patched"
+    atomic_write_bytes(path, rendered.encode("utf-8"))
+    return status
 
 
 def agents_ownership_snapshot(
@@ -1321,15 +1580,60 @@ def agents_ownership_snapshot(
     adapter_status: str,
     before_payload: bytes | None,
 ) -> dict[str, Any]:
-    after_payload = agents_path.read_bytes() if agents_path.is_file() else None
+    """Compatibility wrapper for V1 callers and records."""
+
+    return agent_file_ownership_snapshot(
+        agents_path,
+        agent_file="AGENTS.md",
+        adapter_status=adapter_status,
+        before_payload=before_payload,
+    )
+
+
+def extract_agent_marker_block(text: str) -> str:
+    begin_count = text.count(AGENTS_MARKER_BEGIN)
+    end_count = text.count(AGENTS_MARKER_END)
+    if begin_count == 0 and end_count == 0:
+        return ""
+    if begin_count != 1 or end_count != 1:
+        raise ForgeError("agent guidance contains ambiguous Moradin marker blocks")
+    start = text.index(AGENTS_MARKER_BEGIN)
+    end = text.index(AGENTS_MARKER_END, start) + len(AGENTS_MARKER_END)
+    if end < len(text) and text[end] == "\n":
+        end += 1
+    return text[start:end]
+
+
+def agent_file_ownership_snapshot(
+    path: Path,
+    *,
+    agent_file: str,
+    adapter_status: str,
+    before_payload: bytes | None,
+    parent_directories_before: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    after_payload = path.read_bytes() if path.is_file() else None
+    before_text = (before_payload or b"").decode("utf-8", errors="strict")
+    after_text = (after_payload or b"").decode("utf-8", errors="strict")
+    before_block = extract_agent_marker_block(before_text)
+    after_block = extract_agent_marker_block(after_text)
+    owned = adapter_status in {"patched", "created", "updated"}
     return {
-        "path": "AGENTS.md",
+        "path": agent_file,
         "adapter_status": adapter_status,
         "existed_before": before_payload is not None,
         "before_size": len(before_payload or b""),
         "before_sha256": sha256_bytes(before_payload) if before_payload is not None else "",
         "after_sha256": sha256_bytes(after_payload) if after_payload is not None else "",
-        "owned": adapter_status in {"patched", "created"},
+        "before_owned_block": before_block,
+        "before_owned_block_sha256": (
+            sha256_bytes(before_block.encode("utf-8")) if before_block else ""
+        ),
+        "owned_block_sha256": (
+            sha256_bytes(after_block.encode("utf-8")) if after_block else ""
+        ),
+        "owned": owned,
+        "parent_directories_before": sorted(set(parent_directories_before)),
     }
 
 
@@ -1339,22 +1643,53 @@ def write_ownership_record(
     sidecar_dir: str,
     target_root_hash_before: str,
     target_root_hash_after: str,
-    agents: dict[str, Any],
+    agents: dict[str, Any] | None = None,
+    agent_files: dict[str, dict[str, Any]] | None = None,
+    upgrade_history: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     managed_files = file_manifest(
         sidecar_root,
         excluded_relative_paths={OWNERSHIP_RECORD_RELATIVE.as_posix()},
     )
+    managed_files = {
+        path: digest
+        for path, digest in managed_files.items()
+        if not is_runtime_artifact_path(path)
+    }
+    payload_manifest_path = sidecar_root / PAYLOAD_MANIFEST_RELATIVE
+    payload_manifest = (
+        load_payload_manifest(sidecar_root)
+        if payload_manifest_path.is_file()
+        else {"payload_version": ""}
+    )
+    normalized_agent_files = agent_files or (
+        {"AGENTS.md": agents} if isinstance(agents, dict) else {}
+    )
     payload: dict[str, Any] = {
-        "version": "MoradinForgeOwnershipV1",
+        "version": "MoradinForgeOwnershipV2",
         "generated_at": utc_now(),
         "sidecar_dir": sidecar_dir,
+        "payload_version": str(payload_manifest.get("payload_version", "")),
+        "payload_manifest_sha256": (
+            sha256_file(payload_manifest_path)
+            if payload_manifest_path.is_file()
+            else ""
+        ),
+        "compatibility": {
+            "readable_ownership_versions": [
+                "MoradinForgeOwnershipV1",
+                "MoradinForgeOwnershipV2",
+            ],
+            "upgrade_contract": "plan-digest-bound-transactional-v1",
+        },
         "managed_file_count": len(managed_files),
         "managed_files": managed_files,
         "managed_tree_sha256": manifest_digest(managed_files),
         "target_root_hash_before": target_root_hash_before,
         "target_root_hash_after": target_root_hash_after,
-        "agents": agents,
+        "agents": normalized_agent_files.get("AGENTS.md", {}),
+        "agent_files": normalized_agent_files,
+        "upgrade_history": upgrade_history or [],
         "rollback_anchor": "v0.1.0-public-alpha",
     }
     write_json(sidecar_root / OWNERSHIP_RECORD_RELATIVE, payload)
@@ -1369,7 +1704,10 @@ def load_ownership_record(sidecar_root: Path) -> dict[str, Any]:
         payload = json.loads(record_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return {}
-    if not isinstance(payload, dict) or payload.get("version") != "MoradinForgeOwnershipV1":
+    if not isinstance(payload, dict) or payload.get("version") not in {
+        "MoradinForgeOwnershipV1",
+        "MoradinForgeOwnershipV2",
+    }:
         return {}
     return payload
 
@@ -1408,6 +1746,11 @@ def ownership_issues(sidecar_root: Path) -> list[ForgeVerifyIssue]:
                 message=str(error),
             )
         ]
+    actual = {
+        path: digest
+        for path, digest in actual.items()
+        if not is_runtime_artifact_path(path)
+    }
     issues: list[ForgeVerifyIssue] = []
     for relative in sorted(set(expected) - set(actual)):
         issues.append(
@@ -1445,30 +1788,41 @@ def ownership_issues(sidecar_root: Path) -> list[ForgeVerifyIssue]:
     return issues
 
 
+def is_runtime_artifact_path(relative: str) -> bool:
+    normalized = normalize_payload_relative_path(relative)
+    return any(
+        normalized == prefix or normalized.startswith(f"{prefix}/")
+        for prefix in RUNTIME_ARTIFACT_PREFIXES
+    )
+
+
 def write_integration_record(
     sidecar_root: Path,
     plan: dict[str, Any],
     copied_files: list[str],
     adapter_status: str,
     install_request: dict[str, str] | None,
+    agent_file_statuses: dict[str, str] | None = None,
 ) -> dict[str, str]:
     output_root = sidecar_root / "Harness" / "artifacts" / "control" / "forge_integration"
     portable_plan = sanitize_portable_payload(plan)
+    agent_file_statuses = agent_file_statuses or {}
     payload = {
-        "version": "MoradinForgeIntegrationV1",
+        "version": "MoradinForgeIntegrationV2",
         "generated_at": utc_now(),
         "plan": portable_plan,
         "copied_file_count": len(copied_files),
         "copied_files": copied_files,
         "changed_paths": [
             f"{portable_plan['target_repo']['sidecar_dir']}/",
-            *(
-                ["AGENTS.md"]
-                if adapter_status in {"patched", "created"}
-                else []
+            *sorted(
+                path
+                for path, status in agent_file_statuses.items()
+                if status in {"patched", "created", "updated"}
             ),
         ],
         "adapter_status": adapter_status,
+        "agent_file_statuses": agent_file_statuses,
         "install_request": install_request or {},
         "validation_commands": [
             (
@@ -1495,7 +1849,7 @@ def write_integration_record(
         f"- target_repo: `{portable_plan['target_repo']['path']}`",
         f"- copied_file_count: `{len(copied_files)}`",
         f"- adapter_status: `{adapter_status}`",
-        f"- install_request: `{(install_request or {}).get('markdown', 'none')}`",
+        f"- install_request: `{portable_payload['install_request'].get('markdown', 'none')}`",
         "",
         "## Changed Paths",
         "",
@@ -1546,7 +1900,7 @@ def verify_integration(
         "Harness/entrypoints/forge.md",
         "scripts/moradin_forge.py",
         "adapters/README.md",
-        "adapters/AGENTS.snippet.md",
+        *[f"adapters/{snippet}" for snippet in ADAPTER_SNIPPETS.values()],
         "adapters/Makefile.snippet",
         "Harness/artifacts/control/forge_integration/integration.json",
         "Harness/artifacts/control/forge_integration/integration.md",
@@ -1583,26 +1937,42 @@ def verify_integration(
 
     integration_record = load_integration_record(sidecar_root)
     adapter_status = str(integration_record.get("adapter_status", "unknown"))
-    agents_text = ""
-    agents_path = target_root / "AGENTS.md"
-    if agents_path.is_file():
-        agents_text = agents_path.read_text(encoding="utf-8", errors="replace")
-    if adapter_status in {"patched", "created", "already_present"} and AGENTS_MARKER_BEGIN not in agents_text:
-        issues.append(
-            ForgeVerifyIssue(
-                code="agents_marker_missing",
-                path="AGENTS.md",
-                message="integration record says AGENTS.md was patched, but marker is absent",
-            )
+    agent_file_statuses = integration_record.get("agent_file_statuses", {})
+    if not isinstance(agent_file_statuses, dict):
+        agent_file_statuses = {}
+    if not agent_file_statuses and adapter_status not in {"disabled", "unknown"}:
+        agent_file_statuses = {"AGENTS.md": adapter_status}
+    for agent_file in SUPPORTED_AGENT_FILES:
+        path = target_root / agent_file
+        text = (
+            path.read_text(encoding="utf-8", errors="replace")
+            if path.is_file()
+            else ""
         )
-    if adapter_status in {"disabled", "snippet_only"} and AGENTS_MARKER_BEGIN in agents_text:
-        issues.append(
-            ForgeVerifyIssue(
-                code="unexpected_agents_marker",
-                path="AGENTS.md",
-                message="AGENTS.md contains a Forge marker although default apply should preserve root files",
+        status = str(agent_file_statuses.get(agent_file, "disabled"))
+        if status in {"patched", "created", "updated", "already_present"}:
+            if AGENTS_MARKER_BEGIN not in text:
+                issues.append(
+                    ForgeVerifyIssue(
+                        code="agent_marker_missing",
+                        path=agent_file,
+                        message=(
+                            f"integration record says {agent_file} was managed, "
+                            "but its marker is absent"
+                        ),
+                    )
+                )
+        elif status in {"disabled", "snippet_only"} and AGENTS_MARKER_BEGIN in text:
+            issues.append(
+                ForgeVerifyIssue(
+                    code="unexpected_agent_marker",
+                    path=agent_file,
+                    message=(
+                        f"{agent_file} contains a Forge marker although the "
+                        "integration record does not own it"
+                    ),
+                )
             )
-        )
 
     return {
         "version": "MoradinForgeVerifyResultV1",
@@ -1646,48 +2016,101 @@ def rollback_integration(
         summary = "; ".join(f"{issue.code}:{issue.path}" for issue in issues[:5])
         raise ForgeError(f"rollback refused because managed content changed: {summary}")
     ownership = load_ownership_record(sidecar_root)
-    agents = ownership.get("agents", {})
-    if not isinstance(agents, dict):
-        raise ForgeError("rollback refused because AGENTS.md ownership metadata is invalid")
-    agents_path = target_root / "AGENTS.md"
-    agents_before_rollback = agents_path.read_bytes() if agents_path.is_file() else None
-    restored_agents: bytes | None = agents_before_rollback
-    owned_agents = bool(agents.get("owned"))
-    if owned_agents:
-        if agents_before_rollback is None:
-            raise ForgeError("rollback refused because managed AGENTS.md is missing")
-        if sha256_bytes(agents_before_rollback) != str(agents.get("after_sha256", "")):
-            raise ForgeError("rollback refused because managed AGENTS.md was modified")
-        status = str(agents.get("adapter_status", ""))
-        if status == "created":
-            restored_agents = None
-        elif status == "patched":
-            before_size = agents.get("before_size")
-            if not isinstance(before_size, int) or before_size < 0:
-                raise ForgeError("rollback refused because AGENTS.md size metadata is invalid")
-            restored_agents = agents_before_rollback[:before_size]
-            if sha256_bytes(restored_agents) != str(agents.get("before_sha256", "")):
-                raise ForgeError("rollback refused because AGENTS.md cannot be restored exactly")
+    ownership_version = str(ownership.get("version", ""))
+    raw_agent_files = ownership.get("agent_files")
+    if ownership_version == "MoradinForgeOwnershipV2":
+        if not isinstance(raw_agent_files, dict):
+            raise ForgeError("rollback refused because agent-file ownership metadata is invalid")
+        agent_files = {
+            str(path): metadata
+            for path, metadata in raw_agent_files.items()
+            if isinstance(path, str) and isinstance(metadata, dict)
+        }
+    else:
+        agents = ownership.get("agents", {})
+        if not isinstance(agents, dict):
+            raise ForgeError("rollback refused because AGENTS.md ownership metadata is invalid")
+        agent_files = {"AGENTS.md": agents}
+
+    agent_bytes_before: dict[str, bytes | None] = {}
+    agent_bytes_restored: dict[str, bytes | None] = {}
+    owned_agent_files: list[str] = []
+    for agent_file, metadata in sorted(agent_files.items()):
+        if agent_file not in SUPPORTED_AGENT_FILES or not metadata.get("owned"):
+            continue
+        path = target_root / agent_file
+        before = path.read_bytes() if path.is_file() else None
+        if before is None:
+            raise ForgeError(
+                f"rollback refused because managed {agent_file} is missing"
+            )
+        agent_bytes_before[agent_file] = before
+        if ownership_version == "MoradinForgeOwnershipV1":
+            if sha256_bytes(before) != str(metadata.get("after_sha256", "")):
+                raise ForgeError(
+                    f"rollback refused because managed {agent_file} was modified"
+                )
+            status = str(metadata.get("adapter_status", ""))
+            if status == "created":
+                restored = None
+            elif status == "patched":
+                before_size = metadata.get("before_size")
+                if not isinstance(before_size, int) or before_size < 0:
+                    raise ForgeError(
+                        f"rollback refused because {agent_file} size metadata is invalid"
+                    )
+                restored = before[:before_size]
+                if sha256_bytes(restored) != str(metadata.get("before_sha256", "")):
+                    raise ForgeError(
+                        f"rollback refused because {agent_file} cannot be restored exactly"
+                    )
+            else:
+                raise ForgeError(
+                    f"rollback refused because {agent_file} ownership state is invalid"
+                )
         else:
-            raise ForgeError("rollback refused because AGENTS.md ownership state is invalid")
+            restored = restore_agent_file_from_ownership(
+                before,
+                metadata,
+                agent_file=agent_file,
+            )
+        agent_bytes_restored[agent_file] = restored
+        owned_agent_files.append(agent_file)
 
     root_hash_before_rollback = target_root_digest(target_root, sidecar_dir)
     quarantine = target_root / f".{sidecar_dir.lstrip('.')}.rollback-{uuid.uuid4().hex}"
     os.replace(sidecar_root, quarantine)
     try:
-        if owned_agents:
-            if restored_agents is None:
-                agents_path.unlink()
+        for agent_file in owned_agent_files:
+            path = target_root / agent_file
+            restored = agent_bytes_restored[agent_file]
+            if restored is None:
+                path.unlink()
+                metadata = agent_files[agent_file]
+                parents_before = metadata.get("parent_directories_before", [])
+                if not isinstance(parents_before, list) or not all(
+                    isinstance(item, str) for item in parents_before
+                ):
+                    raise ForgeError(
+                        f"rollback refused because {agent_file} parent metadata is invalid"
+                    )
+                remove_owned_empty_agent_parents(
+                    target_root,
+                    agent_file,
+                    parents_present_before=set(parents_before),
+                )
             else:
-                atomic_write_bytes(agents_path, restored_agents)
+                atomic_write_bytes(path, restored)
         shutil.rmtree(quarantine)
     except Exception:
-        if owned_agents:
-            if agents_before_rollback is None:
-                if agents_path.exists():
-                    agents_path.unlink()
+        for agent_file in owned_agent_files:
+            path = target_root / agent_file
+            before = agent_bytes_before[agent_file]
+            if before is None:
+                if path.exists():
+                    path.unlink()
             else:
-                atomic_write_bytes(agents_path, agents_before_rollback)
+                atomic_write_bytes(path, before)
         if quarantine.exists() and not sidecar_root.exists():
             os.replace(quarantine, sidecar_root)
         raise
@@ -1699,13 +2122,67 @@ def rollback_integration(
         "target_repo": target_root.as_posix(),
         "sidecar_dir": sidecar_dir,
         "removed": True,
-        "agents_restored": owned_agents,
+        "agents_restored": "AGENTS.md" in owned_agent_files,
+        "agent_files_restored": owned_agent_files,
         "target_root_hash_before_rollback": root_hash_before_rollback,
         "target_root_hash_after_rollback": root_hash_after_rollback,
         "target_root_hash_expected": expected_root_hash,
         "target_root_hash_restored": root_hash_after_rollback == expected_root_hash,
         "status": "pass",
     }
+
+
+def restore_agent_file_from_ownership(
+    current_payload: bytes,
+    metadata: dict[str, Any],
+    *,
+    agent_file: str,
+) -> bytes | None:
+    try:
+        current = current_payload.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ForgeError(
+            f"rollback refused because managed {agent_file} is not UTF-8"
+        ) from error
+    current_block = extract_agent_marker_block(current)
+    expected_block_sha = str(metadata.get("owned_block_sha256", ""))
+    if (
+        not current_block
+        or not expected_block_sha
+        or sha256_bytes(current_block.encode("utf-8")) != expected_block_sha
+    ):
+        raise ForgeError(
+            f"rollback refused because managed {agent_file} marker was modified"
+        )
+    start = current.index(AGENTS_MARKER_BEGIN)
+    end = start + len(current_block)
+    before_block = str(metadata.get("before_owned_block", ""))
+    if before_block:
+        restored_text = current[:start] + before_block + current[end:]
+    else:
+        prefix = current[:start]
+        suffix = current[end:]
+        candidates = [prefix + suffix]
+        if prefix.endswith("\n"):
+            candidates.append(prefix[:-1] + suffix)
+        if prefix.endswith("\n\n"):
+            candidates.append(prefix[:-2] + suffix)
+        expected_before = str(metadata.get("before_sha256", ""))
+        exact = next(
+            (
+                candidate
+                for candidate in candidates
+                if expected_before
+                and sha256_bytes(candidate.encode("utf-8")) == expected_before
+            ),
+            None,
+        )
+        restored_text = exact if exact is not None else candidates[0]
+    if str(metadata.get("adapter_status", "")) == "created" and not metadata.get(
+        "existed_before", False
+    ):
+        return None
+    return restored_text.encode("utf-8")
 
 
 def apply_integration(
@@ -1723,15 +2200,84 @@ def apply_integration(
     if sidecar_root.exists():
         if options.overwrite_sidecar:
             raise ForgeError(
-                "existing sidecar preserved: --overwrite-sidecar is disabled until a transactional upgrade contract is implemented"
+                "existing sidecar preserved: --overwrite-sidecar is disabled; "
+                "use upgrade-plan and upgrade with an exact approved digest"
             )
         raise ForgeError(f"sidecar already exists: {sidecar_root}")
     plan = build_integration_plan(forge_root, target_root, sidecar_dir)
+    if plan["readiness"]["missing_required"]:
+        write_install_request_artifacts(
+            forge_root,
+            plan["readiness"],
+            target_root=target_root,
+        )
+        raise ForgeError(
+            "apply blocked because required tooling is missing: "
+            + ", ".join(plan["readiness"]["missing_required"])
+        )
     target_root_hash_before = target_root_digest(target_root, sidecar_dir)
-    agents_path = target_root / "AGENTS.md"
-    agents_before = agents_path.read_bytes() if agents_path.is_file() else None
+    approved_agent_files = set(options.agent_files)
+    if options.patch_agents:
+        approved_agent_files.add("AGENTS.md")
+    invalid_agent_files = sorted(approved_agent_files - set(SUPPORTED_AGENT_FILES))
+    if invalid_agent_files:
+        raise ForgeError(
+            "unsupported approved agent guidance files: "
+            + ", ".join(invalid_agent_files)
+        )
+    create_agent_files = set(options.create_agent_files)
+    if options.create_agents:
+        create_agent_files.add("AGENTS.md")
+    if not create_agent_files.issubset(approved_agent_files):
+        raise ForgeError("--create-agent-file also requires --approve-agent-file")
+    agent_paths = {
+        name: target_root / name
+        for name in sorted(approved_agent_files)
+    }
+    agent_parent_dirs_before = {
+        name: tuple(
+            parent.relative_to(target_root).as_posix()
+            for parent in agent_parent_directories(target_root, name)
+            if parent.is_dir() and not parent.is_symlink()
+        )
+        for name in sorted(approved_agent_files)
+    }
+    for name, path in agent_paths.items():
+        unsafe_parent = next(
+            (
+                parent
+                for parent in agent_parent_directories(target_root, name)
+                if parent.is_symlink()
+                or (parent.exists() and not parent.is_dir())
+            ),
+            None,
+        )
+        if unsafe_parent is not None:
+            raise ForgeError(
+                f"approved agent guidance has an unsafe parent: {name}"
+            )
+        if path.is_symlink() or (path.exists() and not path.is_file()):
+            raise ForgeError(
+                f"approved agent guidance must be a regular root file or "
+                f"allowlisted provider file: {name}"
+            )
+        try:
+            proposal = agent_file_proposal(
+                target_root,
+                name,
+                sidecar_dir=sidecar_dir,
+            )
+        except WorkstationError as error:
+            raise ForgeError(str(error)) from error
+        if proposal.get("action") == "conflict":
+            raise ForgeError(f"refusing to replace unowned agent guidance: {name}")
+    agent_files_before = {
+        name: path.read_bytes() if path.is_file() else None
+        for name, path in agent_paths.items()
+    }
     staging_root = target_root / f".{sidecar_dir.lstrip('.')}.staging-{uuid.uuid4().hex}"
     adapter_status = "disabled"
+    agent_file_statuses: dict[str, str] = {}
     install_request = None
     copied_files: list[str] = []
     snippet_paths: list[str] = []
@@ -1739,7 +2285,7 @@ def apply_integration(
         staging_root.mkdir(parents=False)
         copied_files = copy_payload_to_sidecar(forge_root, staging_root)
         snippet_paths = write_adapter_snippets(staging_root, sidecar_dir, target_root)
-        if options.write_install_request:
+        if options.write_install_request or plan["readiness"]["missing_optional"]:
             install_request = write_install_request_artifacts(
                 forge_root,
                 plan["readiness"],
@@ -1749,41 +2295,67 @@ def apply_integration(
             staging_root,
             plan,
             copied_files,
-            "pending" if options.patch_agents else adapter_status,
+            "pending" if approved_agent_files else adapter_status,
             install_request,
+            {
+                name: "pending"
+                for name in sorted(approved_agent_files)
+            },
         )
         install_directory_no_replace(staging_root, sidecar_root)
-        if options.patch_agents:
-            adapter_status = patch_agents_adapter(target_root, sidecar_dir, options.create_agents)
+        for agent_file in sorted(approved_agent_files):
+            agent_file_statuses[agent_file] = patch_agent_file_adapter(
+                target_root,
+                sidecar_dir,
+                agent_file,
+                create_agent_file=agent_file in create_agent_files,
+            )
+        if agent_file_statuses:
+            statuses = sorted(set(agent_file_statuses.values()))
+            adapter_status = statuses[0] if len(statuses) == 1 else "multiple"
             write_integration_record(
                 sidecar_root,
                 plan,
                 copied_files,
                 adapter_status,
                 install_request,
+                agent_file_statuses,
             )
         target_root_hash_after = target_root_digest(target_root, sidecar_dir)
+        ownership_agent_files = {
+            name: agent_file_ownership_snapshot(
+                agent_paths[name],
+                agent_file=name,
+                adapter_status=agent_file_statuses.get(name, "snippet_only"),
+                before_payload=agent_files_before[name],
+                parent_directories_before=agent_parent_dirs_before[name],
+            )
+            for name in sorted(approved_agent_files)
+        }
         ownership = write_ownership_record(
             sidecar_root,
             sidecar_dir=sidecar_dir,
             target_root_hash_before=target_root_hash_before,
             target_root_hash_after=target_root_hash_after,
-            agents=agents_ownership_snapshot(
-                agents_path,
-                adapter_status=adapter_status,
-                before_payload=agents_before,
-            ),
+            agent_files=ownership_agent_files,
         )
     except Exception:
         if staging_root.exists():
             shutil.rmtree(staging_root)
         if sidecar_root.exists():
             shutil.rmtree(sidecar_root)
-        if agents_before is None:
-            if agents_path.exists() and adapter_status == "created":
-                agents_path.unlink()
-        elif agents_path.is_file() and agents_path.read_bytes() != agents_before:
-            atomic_write_bytes(agents_path, agents_before)
+        for name, path in agent_paths.items():
+            before = agent_files_before[name]
+            if before is None:
+                if path.exists():
+                    path.unlink()
+                remove_owned_empty_agent_parents(
+                    target_root,
+                    name,
+                    parents_present_before=set(agent_parent_dirs_before[name]),
+                )
+            elif not path.is_file() or path.read_bytes() != before:
+                atomic_write_bytes(path, before)
         raise
     integration_record = {
         "json": (sidecar_root / "Harness/artifacts/control/forge_integration/integration.json").as_posix(),
@@ -1796,6 +2368,7 @@ def apply_integration(
         "sidecar_path": sidecar_root.as_posix(),
         "copied_file_count": len(copied_files),
         "adapter_status": adapter_status,
+        "agent_file_statuses": agent_file_statuses,
         "adapter_snippets": [
             (sidecar_root / Path(path).relative_to(staging_root)).as_posix()
             if Path(path).is_relative_to(staging_root)
@@ -1811,19 +2384,666 @@ def apply_integration(
     }
 
 
+UPGRADE_PLAN_VERSION = "MoradinForgeUpgradePlanV1"
+UPGRADE_RESULT_VERSION = "MoradinForgeUpgradeResultV1"
+UPGRADE_ROLLBACK_RESULT_VERSION = "MoradinForgeUpgradeRollbackResultV1"
+UPGRADE_BACKUPS_RELATIVE = Path(
+    "Harness/artifacts/control/forge_integration/upgrade_backups"
+)
+
+
+def candidate_sidecar_manifest(
+    forge_root: Path,
+    target_root: Path,
+    sidecar_dir: str,
+) -> tuple[dict[str, str], str]:
+    with tempfile.TemporaryDirectory(prefix="moradin-upgrade-plan-") as temporary:
+        candidate = Path(temporary) / "candidate"
+        copy_payload_to_sidecar(forge_root, candidate)
+        write_adapter_snippets(candidate, sidecar_dir, target_root)
+        manifest = file_manifest(candidate)
+        return manifest, manifest_digest(manifest)
+
+
+def build_upgrade_plan(
+    forge_root: Path,
+    target_root: Path,
+    sidecar_dir: str = DEFAULT_SIDECAR_DIR,
+) -> dict[str, Any]:
+    sidecar_dir = normalize_sidecar_dir(sidecar_dir)
+    target_root = target_root.resolve()
+    sidecar_root = target_root / sidecar_dir
+    if not target_root.is_dir():
+        raise ForgeError(f"target repo must be an existing directory: {target_root}")
+    if not sidecar_root.is_dir() or sidecar_root.is_symlink():
+        raise ForgeError(f"managed sidecar does not exist: {sidecar_root}")
+    issues = ownership_issues(sidecar_root)
+    if issues:
+        summary = "; ".join(f"{item.code}:{item.path}" for item in issues[:5])
+        raise ForgeError(
+            "upgrade plan refused because managed content changed: " + summary
+        )
+    ownership = load_ownership_record(sidecar_root)
+    source_manifest = load_payload_manifest(forge_root)
+    candidate_files, candidate_digest = candidate_sidecar_manifest(
+        forge_root,
+        target_root,
+        sidecar_dir,
+    )
+    current_files = ownership.get("managed_files", {})
+    if not isinstance(current_files, dict):
+        raise ForgeError("installed ownership record has invalid managed files")
+    ignored_dynamic = {
+        "Harness/artifacts/control/forge_integration/integration.json",
+        "Harness/artifacts/control/forge_integration/integration.md",
+    }
+    current_comparable = {
+        path: digest
+        for path, digest in current_files.items()
+        if path not in ignored_dynamic
+        and not path.startswith(f"{UPGRADE_BACKUPS_RELATIVE.as_posix()}/")
+    }
+    candidate_comparable = {
+        path: digest
+        for path, digest in candidate_files.items()
+        if path not in ignored_dynamic
+    }
+    added = sorted(set(candidate_comparable) - set(current_comparable))
+    removed = sorted(set(current_comparable) - set(candidate_comparable))
+    modified = sorted(
+        path
+        for path in set(current_comparable) & set(candidate_comparable)
+        if current_comparable[path] != candidate_comparable[path]
+    )
+    raw_agent_files = ownership.get("agent_files")
+    if not isinstance(raw_agent_files, dict):
+        raw_agents = ownership.get("agents")
+        raw_agent_files = (
+            {"AGENTS.md": raw_agents} if isinstance(raw_agents, dict) else {}
+        )
+    agent_proposals = []
+    for agent_file, metadata in sorted(raw_agent_files.items()):
+        if (
+            agent_file in SUPPORTED_AGENT_FILES
+            and isinstance(metadata, dict)
+            and metadata.get("owned")
+        ):
+            try:
+                proposal = agent_file_proposal(
+                    target_root,
+                    agent_file,
+                    sidecar_dir=sidecar_dir,
+                )
+            except WorkstationError as error:
+                raise ForgeError(str(error)) from error
+            agent_proposals.append(proposal)
+    payload: dict[str, Any] = {
+        "version": UPGRADE_PLAN_VERSION,
+        "generated_at": utc_now(),
+        "forge_root": forge_root.resolve().as_posix(),
+        "target_repo": target_root.as_posix(),
+        "sidecar_dir": sidecar_dir,
+        "current": {
+            "ownership_version": ownership.get("version", ""),
+            "payload_version": ownership.get("payload_version", ""),
+            "managed_tree_sha256": ownership.get("managed_tree_sha256", ""),
+        },
+        "proposed": {
+            "payload_version": source_manifest.get("payload_version", ""),
+            "payload_manifest_sha256": sha256_file(
+                forge_root / PAYLOAD_MANIFEST_RELATIVE
+            ),
+            "candidate_tree_sha256": candidate_digest,
+            "candidate_file_count": len(candidate_files),
+        },
+        "changes": {
+            "added": added,
+            "modified": modified,
+            "removed": removed,
+        },
+        "agent_file_proposals": agent_proposals,
+        "preconditions": [
+            "The installed ownership record remains unchanged.",
+            "All managed sidecar files remain owned and unmodified.",
+            "Every managed agent marker remains byte-identical.",
+            "The source payload manifest remains unchanged.",
+            "The approved plan digest matches this document.",
+        ],
+        "rollback": (
+            "The upgrade retains one Forge-owned prior sidecar and supports "
+            "upgrade-rollback for the immediate predecessor."
+        ),
+        "status": "ready",
+    }
+    payload["plan_sha256"] = plan_digest(payload)
+    return payload
+
+
+def upgrade_plan_markdown(plan: dict[str, Any]) -> str:
+    return "\n".join(
+        [
+            "# Moradin Forge Upgrade Plan",
+            "",
+            f"- generated_at: `{plan['generated_at']}`",
+            f"- target_repo: `{plan['target_repo']}`",
+            f"- sidecar_dir: `{plan['sidecar_dir']}`",
+            f"- current_payload: `{plan['current']['payload_version'] or 'legacy-v1'}`",
+            f"- proposed_payload: `{plan['proposed']['payload_version']}`",
+            f"- added_paths: `{len(plan['changes']['added'])}`",
+            f"- modified_paths: `{len(plan['changes']['modified'])}`",
+            f"- removed_paths: `{len(plan['changes']['removed'])}`",
+            f"- agent_file_proposals: `{len(plan['agent_file_proposals'])}`",
+            f"- plan_sha256: `{plan['plan_sha256']}`",
+            "",
+            "## Preconditions",
+            "",
+            *[f"- {item}" for item in plan["preconditions"]],
+            "",
+            "## Rollback",
+            "",
+            f"- {plan['rollback']}",
+            "",
+        ]
+    )
+
+
+def write_upgrade_plan_artifacts(
+    forge_root: Path,
+    plan: dict[str, Any],
+) -> dict[str, str]:
+    run_id = datetime.now(tz=UTC).strftime("upgrade_%Y%m%dT%H%M%S%fZ")
+    root = forge_root / CONTROL_ROOT_RELATIVE / "upgrade_runs" / run_id
+    json_path = root / "upgrade_plan.json"
+    markdown_path = root / "upgrade_plan.md"
+    write_json(json_path, plan)
+    markdown_path.parent.mkdir(parents=True, exist_ok=True)
+    markdown_path.write_text(upgrade_plan_markdown(plan), encoding="utf-8")
+    return {
+        "run_id": run_id,
+        "json": json_path.as_posix(),
+        "markdown": markdown_path.as_posix(),
+    }
+
+
+def load_upgrade_plan(path: Path) -> dict[str, Any]:
+    if path.is_symlink() or not path.is_file():
+        raise ForgeError(f"upgrade plan must be a regular file: {path}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ForgeError(f"upgrade plan is not valid JSON: {path}") from error
+    if not isinstance(payload, dict) or payload.get("version") != UPGRADE_PLAN_VERSION:
+        raise ForgeError(f"upgrade plan version must be {UPGRADE_PLAN_VERSION}")
+    if payload.get("plan_sha256") != plan_digest(payload):
+        raise ForgeError("upgrade plan digest is missing or does not match its contents")
+    return payload
+
+
+def _copy_sidecar_without_prior_backups(source: Path, destination: Path) -> None:
+    def ignore(path: str, names: list[str]) -> set[str]:
+        current = Path(path)
+        if current.name == "forge_integration" and "upgrade_backups" in names:
+            return {"upgrade_backups"}
+        return set()
+
+    shutil.copytree(source, destination, symlinks=False, ignore=ignore)
+
+
+def _copy_runtime_artifacts(source: Path, destination: Path) -> None:
+    for relative in sorted(RUNTIME_ARTIFACT_PREFIXES):
+        if relative == UPGRADE_BACKUPS_RELATIVE.as_posix():
+            continue
+        source_path = source / relative
+        if not source_path.exists():
+            continue
+        destination_path = destination / relative
+        if source_path.is_dir() and not source_path.is_symlink():
+            shutil.copytree(
+                source_path,
+                destination_path,
+                dirs_exist_ok=True,
+                symlinks=False,
+            )
+        elif source_path.is_file() and not source_path.is_symlink():
+            destination_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_path, destination_path)
+
+
+def _agent_metadata_map(ownership: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    raw = ownership.get("agent_files")
+    if isinstance(raw, dict):
+        return {
+            str(path): metadata
+            for path, metadata in raw.items()
+            if isinstance(path, str) and isinstance(metadata, dict)
+        }
+    agents = ownership.get("agents")
+    return {"AGENTS.md": agents} if isinstance(agents, dict) else {}
+
+
+def _agent_block_for_upgrade(path: Path, metadata: dict[str, Any]) -> str:
+    if not metadata.get("owned"):
+        return ""
+    if not path.is_file() or path.is_symlink():
+        raise ForgeError(f"managed agent guidance is missing or unsafe: {path.name}")
+    text = path.read_text(encoding="utf-8")
+    block = extract_agent_marker_block(text)
+    expected = str(metadata.get("owned_block_sha256", ""))
+    if expected:
+        if not block or sha256_bytes(block.encode("utf-8")) != expected:
+            raise ForgeError(f"managed {path.name} marker was modified")
+    else:
+        after_sha = str(metadata.get("after_sha256", ""))
+        if not after_sha or sha256_file(path) != after_sha:
+            raise ForgeError(f"legacy managed {path.name} was modified")
+    return block
+
+
+def _carry_agent_origin(
+    snapshot: dict[str, Any],
+    previous: dict[str, Any],
+) -> dict[str, Any]:
+    carried = dict(snapshot)
+    for key in (
+        "adapter_status",
+        "existed_before",
+        "before_size",
+        "before_sha256",
+        "before_owned_block",
+        "before_owned_block_sha256",
+        "parent_directories_before",
+    ):
+        if key in previous:
+            carried[key] = previous[key]
+    if "before_owned_block" not in previous and previous.get("adapter_status") in {
+        "patched",
+        "created",
+    }:
+        carried["before_owned_block"] = ""
+        carried["before_owned_block_sha256"] = ""
+    carried["owned"] = bool(previous.get("owned", snapshot.get("owned")))
+    return carried
+
+
+def upgrade_integration(
+    forge_root: Path,
+    target_root: Path,
+    *,
+    plan_path: Path,
+    approved_sha256: str,
+    sidecar_dir: str = DEFAULT_SIDECAR_DIR,
+) -> dict[str, Any]:
+    plan = load_upgrade_plan(plan_path)
+    if approved_sha256 != plan["plan_sha256"]:
+        raise ForgeError("approved plan digest does not match the upgrade plan")
+    sidecar_dir = normalize_sidecar_dir(sidecar_dir)
+    target_root = target_root.resolve()
+    if plan["target_repo"] != target_root.as_posix() or plan["sidecar_dir"] != sidecar_dir:
+        raise ForgeError("upgrade plan target does not match the requested target")
+    sidecar_root = target_root / sidecar_dir
+    issues = ownership_issues(sidecar_root)
+    if issues:
+        summary = "; ".join(f"{item.code}:{item.path}" for item in issues[:5])
+        raise ForgeError("upgrade refused because managed content changed: " + summary)
+    ownership = load_ownership_record(sidecar_root)
+    if ownership.get("managed_tree_sha256") != plan["current"]["managed_tree_sha256"]:
+        raise ForgeError("upgrade plan is stale: installed managed tree changed")
+    source_manifest_sha = sha256_file(forge_root / PAYLOAD_MANIFEST_RELATIVE)
+    if source_manifest_sha != plan["proposed"]["payload_manifest_sha256"]:
+        raise ForgeError("upgrade plan is stale: source payload manifest changed")
+    _candidate, candidate_digest = candidate_sidecar_manifest(
+        forge_root,
+        target_root,
+        sidecar_dir,
+    )
+    if candidate_digest != plan["proposed"]["candidate_tree_sha256"]:
+        raise ForgeError("upgrade plan is stale: source payload contents changed")
+
+    previous_agent_metadata = _agent_metadata_map(ownership)
+    agent_bytes_before: dict[str, bytes] = {}
+    previous_agent_blocks: dict[str, dict[str, str]] = {}
+    for agent_file, metadata in sorted(previous_agent_metadata.items()):
+        if agent_file not in SUPPORTED_AGENT_FILES or not metadata.get("owned"):
+            continue
+        path = target_root / agent_file
+        block = _agent_block_for_upgrade(path, metadata)
+        agent_bytes_before[agent_file] = path.read_bytes()
+        previous_agent_blocks[agent_file] = {
+            "owned_block": block,
+            "owned_block_sha256": (
+                sha256_bytes(block.encode("utf-8")) if block else ""
+            ),
+        }
+
+    upgrade_id = datetime.now(tz=UTC).strftime("upgrade_%Y%m%dT%H%M%S%fZ")
+    staging_root = target_root / f".{sidecar_dir.lstrip('.')}.upgrade-{uuid.uuid4().hex}"
+    quarantine = target_root / f".{sidecar_dir.lstrip('.')}.previous-{uuid.uuid4().hex}"
+    copied_files: list[str] = []
+    quarantined = False
+    swapped = False
+    try:
+        staging_root.mkdir()
+        copied_files = copy_payload_to_sidecar(forge_root, staging_root)
+        write_adapter_snippets(staging_root, sidecar_dir, target_root)
+        staged_manifest = file_manifest(staging_root)
+        staged_digest = manifest_digest(staged_manifest)
+        if staged_digest != plan["proposed"]["candidate_tree_sha256"]:
+            raise ForgeError(
+                "staged upgrade payload does not match the approved candidate"
+            )
+        staged_issues = scan_forbidden_sidecar_references(staging_root)
+        if staged_issues:
+            raise ForgeError(
+                "staged upgrade payload failed portability validation: "
+                + "; ".join(
+                    f"{item.code}:{item.path}" for item in staged_issues[:5]
+                )
+            )
+        _copy_runtime_artifacts(sidecar_root, staging_root)
+        backup_root = staging_root / UPGRADE_BACKUPS_RELATIVE / upgrade_id
+        _copy_sidecar_without_prior_backups(sidecar_root, backup_root / "sidecar")
+        write_json(
+            backup_root / "upgrade_backup.json",
+            {
+                "version": "MoradinForgeUpgradeBackupV1",
+                "upgrade_id": upgrade_id,
+                "created_at": utc_now(),
+                "previous_payload_version": ownership.get("payload_version", ""),
+                "previous_managed_tree_sha256": ownership.get(
+                    "managed_tree_sha256",
+                    "",
+                ),
+                "agent_files": previous_agent_blocks,
+            },
+        )
+        write_integration_record(
+            staging_root,
+            {
+                "target_repo": {
+                    "path": target_root.as_posix(),
+                    "sidecar_dir": sidecar_dir,
+                },
+                "upgrade_plan": plan,
+            },
+            copied_files,
+            "pending",
+            None,
+            {path: "pending" for path in previous_agent_blocks},
+        )
+        os.replace(sidecar_root, quarantine)
+        quarantined = True
+        os.replace(staging_root, sidecar_root)
+        swapped = True
+
+        statuses: dict[str, str] = {}
+        new_agent_metadata: dict[str, dict[str, Any]] = {}
+        for agent_file, previous in sorted(previous_agent_metadata.items()):
+            if agent_file not in previous_agent_blocks:
+                continue
+            path = target_root / agent_file
+            statuses[agent_file] = patch_agent_file_adapter(
+                target_root,
+                sidecar_dir,
+                agent_file,
+                create_agent_file=False,
+            )
+            snapshot = agent_file_ownership_snapshot(
+                path,
+                agent_file=agent_file,
+                adapter_status=statuses[agent_file],
+                before_payload=agent_bytes_before[agent_file],
+            )
+            new_agent_metadata[agent_file] = _carry_agent_origin(snapshot, previous)
+        adapter_status = (
+            next(iter(statuses.values()))
+            if len(statuses) == 1
+            else "multiple" if statuses else "disabled"
+        )
+        write_integration_record(
+            sidecar_root,
+            {
+                "target_repo": {
+                    "path": target_root.as_posix(),
+                    "sidecar_dir": sidecar_dir,
+                },
+                "upgrade_plan": plan,
+            },
+            copied_files,
+            adapter_status,
+            None,
+            statuses,
+        )
+        history = ownership.get("upgrade_history", [])
+        if not isinstance(history, list):
+            history = []
+        history = [
+            *history,
+            {
+                "upgrade_id": upgrade_id,
+                "from_payload_version": ownership.get("payload_version", ""),
+                "to_payload_version": plan["proposed"]["payload_version"],
+                "plan_sha256": plan["plan_sha256"],
+                "completed_at": utc_now(),
+            },
+        ][-20:]
+        target_hash = target_root_digest(target_root, sidecar_dir)
+        new_ownership = write_ownership_record(
+            sidecar_root,
+            sidecar_dir=sidecar_dir,
+            target_root_hash_before=str(
+                ownership.get("target_root_hash_before", target_hash)
+            ),
+            target_root_hash_after=target_hash,
+            agent_files=new_agent_metadata,
+            upgrade_history=history,
+        )
+        verification = verify_integration(target_root, sidecar_dir)
+        if verification["status"] != "pass":
+            raise ForgeError(
+                "upgraded sidecar failed verification: "
+                + "; ".join(
+                    f"{item['code']}:{item['path']}"
+                    for item in verification["issues"][:5]
+                )
+            )
+        shutil.rmtree(quarantine)
+    except Exception:
+        if swapped:
+            if sidecar_root.exists():
+                shutil.rmtree(sidecar_root)
+        if quarantined and quarantine.exists() and not sidecar_root.exists():
+            os.replace(quarantine, sidecar_root)
+        if staging_root.exists():
+            shutil.rmtree(staging_root)
+        for agent_file, before in agent_bytes_before.items():
+            atomic_write_bytes(target_root / agent_file, before)
+        raise
+    return {
+        "version": UPGRADE_RESULT_VERSION,
+        "generated_at": utc_now(),
+        "status": "pass",
+        "upgrade_id": upgrade_id,
+        "target_repo": target_root.as_posix(),
+        "sidecar_dir": sidecar_dir,
+        "payload_version": plan["proposed"]["payload_version"],
+        "plan_sha256": plan["plan_sha256"],
+        "managed_tree_sha256": new_ownership["managed_tree_sha256"],
+        "rollback_command": (
+            f"{sidecar_dir}/scripts/moradin_forge.sh upgrade-rollback "
+            f"--target . --upgrade-id {upgrade_id} --approve"
+        ),
+    }
+
+
+def _replace_current_agent_block(
+    current_payload: bytes,
+    *,
+    current_metadata: dict[str, Any],
+    previous_block: str,
+    agent_file: str,
+) -> bytes:
+    current = current_payload.decode("utf-8")
+    current_block = extract_agent_marker_block(current)
+    expected = str(current_metadata.get("owned_block_sha256", ""))
+    if not current_block or sha256_bytes(current_block.encode("utf-8")) != expected:
+        raise ForgeError(
+            f"upgrade rollback refused because managed {agent_file} marker changed"
+        )
+    start = current.index(AGENTS_MARKER_BEGIN)
+    end = start + len(current_block)
+    return (current[:start] + previous_block + current[end:]).encode("utf-8")
+
+
+def rollback_upgrade(
+    target_root: Path,
+    *,
+    upgrade_id: str,
+    approve: bool,
+    sidecar_dir: str = DEFAULT_SIDECAR_DIR,
+) -> dict[str, Any]:
+    if not approve:
+        raise ForgeError("upgrade rollback requires --approve")
+    if not re.fullmatch(r"upgrade_[0-9]{8}T[0-9]{12}Z", upgrade_id):
+        raise ForgeError("upgrade_id has an invalid format")
+    sidecar_dir = normalize_sidecar_dir(sidecar_dir)
+    target_root = target_root.resolve()
+    sidecar_root = target_root / sidecar_dir
+    issues = ownership_issues(sidecar_root)
+    if issues:
+        summary = "; ".join(f"{item.code}:{item.path}" for item in issues[:5])
+        raise ForgeError(
+            "upgrade rollback refused because managed content changed: " + summary
+        )
+    current_ownership = load_ownership_record(sidecar_root)
+    backup_root = sidecar_root / UPGRADE_BACKUPS_RELATIVE / upgrade_id
+    backup_sidecar = backup_root / "sidecar"
+    backup_metadata_path = backup_root / "upgrade_backup.json"
+    if (
+        not backup_sidecar.is_dir()
+        or backup_sidecar.is_symlink()
+        or not backup_metadata_path.is_file()
+        or backup_metadata_path.is_symlink()
+    ):
+        raise ForgeError(f"upgrade backup does not exist: {upgrade_id}")
+    try:
+        backup_metadata = json.loads(
+            backup_metadata_path.read_text(encoding="utf-8")
+        )
+    except (OSError, json.JSONDecodeError) as error:
+        raise ForgeError("upgrade backup metadata is invalid") from error
+    if (
+        not isinstance(backup_metadata, dict)
+        or backup_metadata.get("version") != "MoradinForgeUpgradeBackupV1"
+        or backup_metadata.get("upgrade_id") != upgrade_id
+        or not isinstance(backup_metadata.get("agent_files"), dict)
+    ):
+        raise ForgeError("upgrade backup metadata does not match the requested id")
+    backup_issues = ownership_issues(backup_sidecar)
+    if backup_issues:
+        summary = "; ".join(
+            f"{item.code}:{item.path}" for item in backup_issues[:5]
+        )
+        raise ForgeError(
+            "upgrade backup failed ownership verification: " + summary
+        )
+
+    current_agent_metadata = _agent_metadata_map(current_ownership)
+    agent_bytes_before: dict[str, bytes] = {}
+    agent_bytes_restored: dict[str, bytes] = {}
+    for agent_file, previous in backup_metadata["agent_files"].items():
+        if (
+            agent_file not in SUPPORTED_AGENT_FILES
+            or not isinstance(previous, dict)
+            or agent_file not in current_agent_metadata
+        ):
+            continue
+        previous_block = str(previous.get("owned_block", ""))
+        previous_block_sha = str(previous.get("owned_block_sha256", ""))
+        if (
+            not previous_block
+            or not previous_block_sha
+            or sha256_bytes(previous_block.encode("utf-8"))
+            != previous_block_sha
+        ):
+            raise ForgeError(
+                f"upgrade backup marker metadata is invalid for {agent_file}"
+            )
+        path = target_root / agent_file
+        before = path.read_bytes()
+        agent_bytes_before[agent_file] = before
+        agent_bytes_restored[agent_file] = _replace_current_agent_block(
+            before,
+            current_metadata=current_agent_metadata[agent_file],
+            previous_block=previous_block,
+            agent_file=agent_file,
+        )
+
+    staging = target_root / f".{sidecar_dir.lstrip('.')}.restore-{uuid.uuid4().hex}"
+    quarantine = target_root / f".{sidecar_dir.lstrip('.')}.failed-{uuid.uuid4().hex}"
+    _copy_sidecar_without_prior_backups(backup_sidecar, staging)
+    quarantined = False
+    swapped = False
+    try:
+        os.replace(sidecar_root, quarantine)
+        quarantined = True
+        os.replace(staging, sidecar_root)
+        swapped = True
+        for agent_file, restored in agent_bytes_restored.items():
+            atomic_write_bytes(target_root / agent_file, restored)
+        verification = verify_integration(target_root, sidecar_dir)
+        if verification["status"] != "pass":
+            raise ForgeError(
+                "restored sidecar failed verification: "
+                + "; ".join(
+                    f"{item['code']}:{item['path']}"
+                    for item in verification["issues"][:5]
+                )
+            )
+        shutil.rmtree(quarantine)
+    except Exception:
+        if swapped:
+            if sidecar_root.exists():
+                shutil.rmtree(sidecar_root)
+        if quarantined and quarantine.exists() and not sidecar_root.exists():
+            os.replace(quarantine, sidecar_root)
+        if staging.exists():
+            shutil.rmtree(staging)
+        for agent_file, before in agent_bytes_before.items():
+            atomic_write_bytes(target_root / agent_file, before)
+        raise
+    restored_ownership = load_ownership_record(sidecar_root)
+    return {
+        "version": UPGRADE_ROLLBACK_RESULT_VERSION,
+        "generated_at": utc_now(),
+        "status": "pass",
+        "upgrade_id": upgrade_id,
+        "target_repo": target_root.as_posix(),
+        "sidecar_dir": sidecar_dir,
+        "payload_version": restored_ownership.get("payload_version", ""),
+        "managed_tree_sha256": restored_ownership.get("managed_tree_sha256", ""),
+    }
+
+
 def forge_explainer() -> str:
     return """Moradin's Forge is an agent-first local integration kit.
 
-When a user sends an agent here, the agent should inspect this repo and the
-target repo, explain the proposed local sidecar and thin adapters, then ask for
-explicit consent before changing the target. Forge keeps host tooling installs
-request-only and preserves the user's existing repo workflows.
+When a user sends an agent here, first ask which workspace roots may be
+inspected. Discover repositories only below those roots and show the list
+before reading standard guidance, manifests, CI, container, and deployment
+configuration. Explain the proposed tooling, local sidecar, independently
+owned AGENTS.md or CLAUDE.md blocks, validation, and rollback.
+
+Verified user-level installers may run only after the user approves the exact
+tooling-plan digest. Forge never elevates itself: it generates reviewable Bash
+or PowerShell scripts for the user to run. Existing repo workflows and
+unrelated agent guidance remain untouched.
 
 The deterministic path is:
 1. `scripts/moradin_forge.sh explain`
-2. `scripts/moradin_forge.sh plan --target <repo>`
-3. review proposed writes and readiness gaps
-4. `scripts/moradin_forge.sh apply --target <repo> --approve`
+2. `scripts/moradin_forge.sh onboard --workspace <approved-workspace>`
+3. review workspace scope, tools, configuration, agent blocks, and scripts
+4. apply only the separately approved tooling and repository actions
+5. `scripts/moradin_forge.sh verify --target <repo>`
 """
 
 
@@ -1853,6 +3073,15 @@ def print_payload(payload: dict[str, Any], as_json: bool) -> None:
         print(f"target_repo: {payload['target_repo']}")
         print(f"agents_restored: {payload['agents_restored']}")
         return
+    if payload.get("version") in {
+        ONBOARD_PLAN_VERSION,
+        WORKSTATION_PLAN_VERSION,
+        UPGRADE_PLAN_VERSION,
+        UPGRADE_RESULT_VERSION,
+        UPGRADE_ROLLBACK_RESULT_VERSION,
+    }:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return
     print(json.dumps(payload, indent=2, sort_keys=True))
 
 
@@ -1863,6 +3092,70 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("explain", help="Print the agent-first Forge explainer.")
+
+    onboard = subparsers.add_parser(
+        "onboard",
+        help="Discover repositories below approved workspaces and produce a consent plan.",
+    )
+    onboard.add_argument("--json", action="store_true", help="Print JSON output.")
+    onboard.add_argument("--workspace", type=Path, action="append", required=True)
+    onboard.add_argument("--profile", default="practical-full")
+    onboard.add_argument("--refresh-versions", action="store_true")
+    onboard.add_argument("--include-tool", action="append", default=[])
+    onboard.add_argument("--exclude-tool", action="append", default=[])
+    onboard.add_argument(
+        "--agent-provider",
+        action="append",
+        choices=tuple(AGENT_PROVIDER_FILES),
+        default=[],
+    )
+    onboard.add_argument("--offline", action="store_true")
+
+    tooling_plan = subparsers.add_parser(
+        "tooling-plan",
+        help="Build an adaptive practical-full workstation plan.",
+    )
+    tooling_plan.add_argument("--json", action="store_true", help="Print JSON output.")
+    tooling_plan.add_argument("--workspace", type=Path, action="append", required=True)
+    tooling_plan.add_argument("--profile", default="practical-full")
+    tooling_plan.add_argument("--refresh-versions", action="store_true")
+    tooling_plan.add_argument("--include-tool", action="append", default=[])
+    tooling_plan.add_argument("--exclude-tool", action="append", default=[])
+
+    tooling_update = subparsers.add_parser(
+        "tooling-update-plan",
+        help="Refresh latest stable metadata and build a tooling update plan.",
+    )
+    tooling_update.add_argument("--json", action="store_true", help="Print JSON output.")
+    tooling_update.add_argument("--workspace", type=Path, action="append", required=True)
+    tooling_update.add_argument("--profile", default="practical-full")
+    tooling_update.add_argument("--include-tool", action="append", default=[])
+    tooling_update.add_argument("--exclude-tool", action="append", default=[])
+
+    tooling_apply = subparsers.add_parser(
+        "tooling-apply",
+        help="Execute digest-approved user-level tooling actions.",
+    )
+    tooling_apply.add_argument("--json", action="store_true", help="Print JSON output.")
+    tooling_apply.add_argument("--plan", type=Path, required=True)
+    tooling_apply.add_argument("--approve-plan-sha256", required=True)
+    tooling_apply.add_argument("--approve-user-config", action="store_true")
+
+    tooling_bundle = subparsers.add_parser(
+        "tooling-bundle",
+        help="Build a checksummed offline tooling bundle from an approved plan.",
+    )
+    tooling_bundle.add_argument("--json", action="store_true", help="Print JSON output.")
+    tooling_bundle.add_argument("--plan", type=Path, required=True)
+    tooling_bundle.add_argument("--output", type=Path, required=True)
+
+    tooling_rollback = subparsers.add_parser(
+        "tooling-rollback",
+        help="Remove Forge-recorded user-local tools from a receipt.",
+    )
+    tooling_rollback.add_argument("--json", action="store_true", help="Print JSON output.")
+    tooling_rollback.add_argument("--receipt", type=Path, required=True)
+    tooling_rollback.add_argument("--approve", action="store_true")
 
     readiness = subparsers.add_parser("readiness", help="Check local Forge readiness.")
     readiness.add_argument("--json", action="store_true", help="Print JSON output.")
@@ -1883,6 +3176,18 @@ def build_parser() -> argparse.ArgumentParser:
     apply.add_argument("--patch-agents", action="store_true")
     apply.add_argument("--create-agents", action="store_true")
     apply.add_argument("--no-patch-agents", action="store_true")
+    apply.add_argument(
+        "--approve-agent-file",
+        action="append",
+        choices=SUPPORTED_AGENT_FILES,
+        default=[],
+    )
+    apply.add_argument(
+        "--create-agent-file",
+        action="append",
+        choices=SUPPORTED_AGENT_FILES,
+        default=[],
+    )
     apply.add_argument("--write-install-request", action="store_true")
     apply.add_argument("--sidecar-dir", default=DEFAULT_SIDECAR_DIR)
 
@@ -1899,6 +3204,71 @@ def build_parser() -> argparse.ArgumentParser:
     rollback.add_argument("--target", type=Path, required=True)
     rollback.add_argument("--approve", action="store_true")
     rollback.add_argument("--sidecar-dir", default=DEFAULT_SIDECAR_DIR)
+
+    upgrade_plan_parser = subparsers.add_parser(
+        "upgrade-plan",
+        help="Build a read-only transactional sidecar upgrade plan.",
+    )
+    upgrade_plan_parser.add_argument("--json", action="store_true", help="Print JSON output.")
+    upgrade_plan_parser.add_argument("--target", type=Path, required=True)
+    upgrade_plan_parser.add_argument("--sidecar-dir", default=DEFAULT_SIDECAR_DIR)
+
+    upgrade_parser = subparsers.add_parser(
+        "upgrade",
+        help="Apply a digest-approved transactional sidecar upgrade.",
+    )
+    upgrade_parser.add_argument("--json", action="store_true", help="Print JSON output.")
+    upgrade_parser.add_argument("--target", type=Path, required=True)
+    upgrade_parser.add_argument("--plan", type=Path, required=True)
+    upgrade_parser.add_argument("--approve-plan-sha256", required=True)
+    upgrade_parser.add_argument("--sidecar-dir", default=DEFAULT_SIDECAR_DIR)
+
+    upgrade_rollback = subparsers.add_parser(
+        "upgrade-rollback",
+        help="Restore the immediate Forge sidecar predecessor.",
+    )
+    upgrade_rollback.add_argument("--json", action="store_true", help="Print JSON output.")
+    upgrade_rollback.add_argument("--target", type=Path, required=True)
+    upgrade_rollback.add_argument("--upgrade-id", required=True)
+    upgrade_rollback.add_argument("--approve", action="store_true")
+    upgrade_rollback.add_argument("--sidecar-dir", default=DEFAULT_SIDECAR_DIR)
+
+    context = subparsers.add_parser(
+        "context-primer",
+        help="Print a compact public context primer capped at 6 KiB.",
+    )
+    context.add_argument("--target", type=Path, required=True)
+
+    state = subparsers.add_parser("state", help="Print compact repository state.")
+    state.add_argument("--json", action="store_true", help="Print JSON output.")
+    state.add_argument("--target", type=Path, required=True)
+
+    brief = subparsers.add_parser("repo-brief", help="Print compact repository guidance.")
+    brief.add_argument("--json", action="store_true", help="Print JSON output.")
+    brief.add_argument("--target", type=Path, required=True)
+
+    rerun = subparsers.add_parser(
+        "rerun-advice",
+        help="Advise whether to run, reuse, or investigate a command.",
+    )
+    rerun.add_argument("--json", action="store_true", help="Print JSON output.")
+    rerun.add_argument("--target", type=Path, required=True)
+    rerun.add_argument("command_argv", nargs=argparse.REMAINDER)
+
+    checkpoint = subparsers.add_parser(
+        "session-checkpoint",
+        help="Record a sanitized local command outcome fingerprint.",
+    )
+    checkpoint.add_argument("--json", action="store_true", help="Print JSON output.")
+    checkpoint.add_argument("--target", type=Path, required=True)
+    checkpoint.add_argument("--outcome", choices=("pass", "fail", "skipped"), required=True)
+    checkpoint.add_argument("command_argv", nargs=argparse.REMAINDER)
+
+    diagnostic = subparsers.add_parser(
+        "diagnostic-brief",
+        help="Summarize local efficiency counters without raw session data.",
+    )
+    diagnostic.add_argument("--json", action="store_true", help="Print JSON output.")
     return parser
 
 
@@ -1909,11 +3279,115 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "explain":
             print(forge_explainer())
             return 0
+        if args.command == "onboard":
+            def show_discovered_repositories(repositories: list[Path]) -> None:
+                print(
+                    "Discovered repositories within approved workspaces:",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                if not repositories:
+                    print("- none", file=sys.stderr, flush=True)
+                for repository in repositories:
+                    print(f"- {repository}", file=sys.stderr, flush=True)
+
+            payload = build_onboard_plan(
+                args.workspace,
+                forge_root=forge_root,
+                profile=args.profile,
+                refresh_versions=args.refresh_versions,
+                include_tools=args.include_tool,
+                exclude_tools=args.exclude_tool,
+                agent_providers=args.agent_provider,
+                offline=args.offline,
+                tooling_receipt=latest_suite_receipt_status(),
+                discovery_callback=show_discovered_repositories,
+            )
+            tooling_artifacts = write_tooling_plan_artifacts(
+                forge_root,
+                payload["tooling_plan"],
+            )
+            run_id = datetime.now(tz=UTC).strftime("onboard_%Y%m%dT%H%M%S%fZ")
+            output_root = forge_root / CONTROL_ROOT_RELATIVE / "onboard_runs" / run_id
+            write_json(output_root / "onboard_plan.json", payload)
+            (output_root / "onboard_plan.md").write_text(
+                tooling_plan_markdown(payload["tooling_plan"]),
+                encoding="utf-8",
+            )
+            payload["artifacts"] = {
+                "json": (output_root / "onboard_plan.json").as_posix(),
+                "markdown": (output_root / "onboard_plan.md").as_posix(),
+                "tooling_json": tooling_artifacts["json"],
+                "tooling_markdown": tooling_artifacts["markdown"],
+                "privileged_bash": tooling_artifacts["privileged_bash"],
+                "privileged_bash_sha256": tooling_artifacts[
+                    "privileged_bash_sha256"
+                ],
+                "privileged_powershell": tooling_artifacts[
+                    "privileged_powershell"
+                ],
+                "privileged_powershell_sha256": tooling_artifacts[
+                    "privileged_powershell_sha256"
+                ],
+            }
+            print_payload(payload, args.json)
+            return 0
+        if args.command in {"tooling-plan", "tooling-update-plan"}:
+            payload = build_tooling_plan(
+                args.workspace,
+                forge_root=forge_root,
+                profile=args.profile,
+                refresh_versions=(
+                    args.refresh_versions
+                    if args.command == "tooling-plan"
+                    else True
+                ),
+                include_tools=args.include_tool,
+                exclude_tools=args.exclude_tool,
+            )
+            payload["artifacts"] = write_tooling_plan_artifacts(
+                forge_root,
+                payload,
+            )
+            if args.json:
+                print_payload(payload, True)
+            else:
+                print(tooling_plan_markdown(payload).rstrip())
+                print(f"plan_artifact: {payload['artifacts']['markdown']}")
+            return 0 if payload["status"] == "ready" else 1
+        if args.command == "tooling-apply":
+            payload = apply_tooling_plan(
+                args.plan,
+                approved_sha256=args.approve_plan_sha256,
+                forge_root=forge_root,
+                user_config_approved=args.approve_user_config,
+            )
+            print_payload(payload, args.json)
+            return 0
+        if args.command == "tooling-bundle":
+            payload = build_offline_bundle(
+                args.plan,
+                output=args.output.resolve(),
+            )
+            print_payload(payload, args.json)
+            return 0 if payload["status"] == "pass" else 1
+        if args.command == "tooling-rollback":
+            payload = rollback_tooling_receipt(
+                args.receipt,
+                approve=args.approve,
+            )
+            print_payload(payload, args.json)
+            return 0 if payload["status"] == "pass" else 1
         if args.command == "readiness":
-            readiness = detect_readiness()
-            if args.write_install_request:
-                target_root = args.target.resolve() if args.target else None
+            target_root = args.target.resolve() if args.target else None
+            readiness = detect_readiness(target_root)
+            if args.write_install_request or readiness["missing_required"] or readiness["missing_optional"]:
                 readiness["install_request"] = write_install_request_artifacts(
+                    forge_root,
+                    readiness,
+                    target_root=target_root,
+                )
+                readiness["tooling_plan"] = write_gap_tooling_plan(
                     forge_root,
                     readiness,
                     target_root=target_root,
@@ -1927,7 +3401,11 @@ def main(argv: list[str] | None = None) -> int:
                 plan,
                 markdown_plan(plan),
             )
-            if args.write_install_request:
+            if (
+                args.write_install_request
+                or plan["readiness"]["missing_required"]
+                or plan["readiness"]["missing_optional"]
+            ):
                 plan["install_request"] = write_install_request_artifacts(
                     forge_root,
                     plan["readiness"],
@@ -1948,6 +3426,8 @@ def main(argv: list[str] | None = None) -> int:
                     overwrite_sidecar=args.overwrite_sidecar,
                     patch_agents=args.patch_agents and not args.no_patch_agents,
                     create_agents=args.create_agents,
+                    agent_files=tuple(args.approve_agent_file),
+                    create_agent_files=tuple(args.create_agent_file),
                     write_install_request=args.write_install_request,
                     sidecar_dir=args.sidecar_dir,
                 ),
@@ -1966,7 +3446,79 @@ def main(argv: list[str] | None = None) -> int:
             )
             print_payload(result, args.json)
             return 0
-    except ForgeError as error:
+        if args.command == "upgrade-plan":
+            payload = build_upgrade_plan(
+                forge_root,
+                args.target,
+                args.sidecar_dir,
+            )
+            payload["artifacts"] = write_upgrade_plan_artifacts(forge_root, payload)
+            if args.json:
+                print_payload(payload, True)
+            else:
+                print(upgrade_plan_markdown(payload).rstrip())
+                print(f"plan_artifact: {payload['artifacts']['markdown']}")
+            return 0
+        if args.command == "upgrade":
+            payload = upgrade_integration(
+                forge_root,
+                args.target,
+                plan_path=args.plan,
+                approved_sha256=args.approve_plan_sha256,
+                sidecar_dir=args.sidecar_dir,
+            )
+            print_payload(payload, args.json)
+            return 0
+        if args.command == "upgrade-rollback":
+            payload = rollback_upgrade(
+                args.target,
+                upgrade_id=args.upgrade_id,
+                approve=args.approve,
+                sidecar_dir=args.sidecar_dir,
+            )
+            print_payload(payload, args.json)
+            return 0
+        if args.command == "context-primer":
+            print(
+                context_primer(
+                    args.target.resolve(),
+                    runtime_root=forge_root,
+                ).rstrip()
+            )
+            return 0
+        if args.command == "state":
+            print_payload(compact_repo_state(args.target), args.json)
+            return 0
+        if args.command == "repo-brief":
+            print_payload(repo_brief(args.target), args.json)
+            return 0
+        if args.command == "rerun-advice":
+            command_argv = list(args.command_argv)
+            if command_argv[:1] == ["--"]:
+                command_argv = command_argv[1:]
+            payload = rerun_advice(
+                args.target.resolve(),
+                command_argv,
+                runtime_root=forge_root,
+            )
+            print_payload(payload, args.json)
+            return 0
+        if args.command == "session-checkpoint":
+            command_argv = list(args.command_argv)
+            if command_argv[:1] == ["--"]:
+                command_argv = command_argv[1:]
+            payload = session_checkpoint(
+                args.target.resolve(),
+                command_argv,
+                args.outcome,
+                runtime_root=forge_root,
+            )
+            print_payload(payload, args.json)
+            return 0
+        if args.command == "diagnostic-brief":
+            print_payload(diagnostic_brief(runtime_root=forge_root), args.json)
+            return 0
+    except (ForgeError, WorkstationError) as error:
         print(f"moradin-forge: {error}")
         return 2
     return 1

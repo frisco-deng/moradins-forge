@@ -27,5 +27,5 @@ if ($Py) {
     exit $LASTEXITCODE
 }
 
-Write-Error "moradin-forge: Python 3 is required; write an install request from another host or install Python manually."
+Write-Error "moradin-forge: Python 3 is required; run the platform bootstrap to generate a reviewable prerequisite script."
 exit 127

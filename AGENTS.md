@@ -21,6 +21,8 @@ Profile: local agent-first integration kit.
   `docs/references/moradin_payload_contract_v1.md`.
 - Bootstrap/export: the matching installer or public-export contract under
   `docs/references/`; run `make public-portability-check`.
+- Tooling, onboarding and offline installation: the matching tooling execution,
+  upgrade or air-gap contract under `docs/references/` and `docs/11_ops/`.
 - Product framing, resume and integration: `docs/11_ops/codex_run_loop.md`.
 - Public validation: `docs/references/repo_operating_model_v1.md`.
 
@@ -34,12 +36,19 @@ Profile: local agent-first integration kit.
   and plan are accepted, continue authorized reversible work through validation
   and review.
 - Keep adoption local unless the user explicitly requests external tooling.
-- Do not run host install commands; write request-only install artifacts instead.
+- Run user-level installers only from a digest-bound tooling plan after explicit
+  user approval.
+- Agents never invoke elevation or launch the interactive host installer for
+  the user. The human-run Linux suite may request sudo only after showing and
+  digest-binding its exact root transaction. Adaptive agent flows continue to
+  generate a reviewable privileged script for the user.
 - Treat installer bootstrap as repo priming only; it must not run Forge `apply`
   or mutate a target repo.
 - Preserve existing target repo workflows and root files by default.
 - Generate adaptive snippets under `.moradins-harness/adapters/`.
-- Patch a target root `AGENTS.md` only when the user approves `--patch-agents`.
+- Patch only the fixed Codex, Claude, Gemini, Copilot, and Cursor provider
+  paths, and only when the user approves each file independently. Creating an
+  absent file requires separate creation consent.
 
 ## Deterministic Commands
 
@@ -51,13 +60,35 @@ Profile: local agent-first integration kit.
 - `make push-gate`
 - `make forge-explain`
 - `make forge-readiness`
+- `make forge-onboard WORKSPACE=<workspace-path>`
+- `make forge-tooling-plan WORKSPACE=<workspace-path>`
+- `make forge-tooling-suite`
+- `make forge-tooling-suite-plan OUTPUT=<plan.json> PROFILE=practical`
+- `make forge-tooling-suite-apply PLAN=<plan.json> PLAN_SHA256=<digest>`
+- `make forge-tooling-suite-bundle PLAN=<plan.json> OUTPUT=<directory>`
+- `make forge-airgap-request PROFILE=practical OUTPUT=<request.json>`
+- `make forge-airgap-build REQUEST=<request.json> OUTPUT=<kit.tar.gz>`
+- `make forge-airgap-verify BUNDLE=<kit.tar.gz> BUNDLE_SHA256=<digest>`
+- `make forge-airgap-apply BUNDLE=<kit.tar.gz> BUNDLE_SHA256=<digest> PLAN_SHA256=<digest>`
+- `make forge-tooling-suite-verify RECEIPT=<receipt.json>`
+- `make forge-tooling-suite-rollback RECEIPT=<receipt.json> APPROVE_RECEIPT_SHA256=<digest>`
+- `make forge-tooling-update-plan WORKSPACE=<workspace-path>`
+- `make forge-tooling-apply PLAN=<plan.json> PLAN_SHA256=<digest>`
+- `make forge-tooling-rollback RECEIPT=<receipt.json> APPROVE=1`
 - `make forge-plan TARGET=<target-repo>`
-- `make forge-adopt TARGET=<target-repo> APPROVE=1`
+- `make forge-adopt TARGET=<target-repo> APPROVE=1 AGENT_FILES="AGENTS.md CLAUDE.md"`
 - `make forge-verify TARGET=<target-repo>`
+- `make forge-upgrade-plan TARGET=<target-repo>`
+- `make forge-upgrade TARGET=<target-repo> PLAN=<plan.json> PLAN_SHA256=<digest>`
+- `make forge-upgrade-rollback TARGET=<target-repo> UPGRADE_ID=<id> APPROVE=1`
+- `make forge-rollback TARGET=<target-repo> APPROVE=1`
 - `make forge-smoke`
+- `make forge-dogfood-smoke`
+- `make release-build`
 - `make payload-validate`
 - `make payload-smoke`
 - `make public-portability-check`
+- `make verify-readme-figures`
 - `make test`
 - `install/bootstrap-linux.sh --dry-run --json`
 
@@ -67,23 +98,28 @@ those as the target repo's source of truth.
 
 ## Baseline Workflow
 
-- Start Forge maintenance with `make repo-brief` before broad exploration.
-- Run `tpl context-primer --repo moradins-forge` after session
-  start, compaction, long resume, or repeated broad reads.
+- Start Forge maintenance with
+  `scripts/moradin_forge.sh context-primer --target .` and
+  `scripts/moradin_forge.sh repo-brief --target .` before broad exploration.
+- Run `scripts/moradin_forge.sh state --target .` after session start,
+  compaction, long resume, or repeated broad reads.
+- Read current summaries and named artifacts before reopening source or long
+  logs; expand only when evidence is stale, partial, contradictory, or
+  release-critical.
 - Use the Python runtime route reported by `make repo-brief`; this repo is a
   `uv` project and raw `python` is not the runtime contract.
-- Run `tpl session-supervisor --mode steering-advisory --live --repo moradins-forge`
-  when a session starts polling, rereading the same evidence, or patching
-  through the same failure.
-- Use `tpl session-checkpoint` and `tpl investigation-ledger` before another
-  patch/full rerun when the same failure repeats.
-- Run `tpl rerun-advice moradins-forge -- <command>` before repeating
-  deterministic commands or re-ingesting long logs.
-- Run `tpl-ui-review-brief --repo moradins-forge --mode auto --prompt <prompt>`
-  before UI page creation, component additions, existing-surface refinements,
-  screenshot critiques, or formatting/readability fixes.
+- Run `scripts/moradin_forge.sh rerun-advice --target . -- <command>` before
+  repeating deterministic commands or re-ingesting long logs.
+- Record a compact outcome with
+  `scripts/moradin_forge.sh session-checkpoint --target . --outcome
+  <pass|fail|skipped> -- <command>` before another full rerun of the same
+  failure. Use `scripts/moradin_forge.sh diagnostic-brief` to review sanitized
+  local counters.
 - Use `make verify-paths` before public docs, generated sidecars, export
   outputs, or release-facing evidence leave the repo.
+- These Forge commands are standalone. If a separately installed shared
+  `tpl` deck is available, its summaries and UI review helpers may supplement
+  them, but Forge must never require that private deck at runtime.
 
 ## Operating Rules
 
@@ -98,12 +134,9 @@ those as the target repo's source of truth.
 - The browser UI is optional diagnostics, not the primary install path.
 - Keep UI visual measurement opt-in until Forge has a repo-local screenshot and
   DOM-box capture wrapper.
-- Keep release candidate, Windows Sandbox/native readiness, macOS signing, WSL
-  smoke, and GPU helper lanes documented but not rendered as default Forge
-  targets until Forge has real release artifacts and evidence contracts.
-- Do not add release-platform readiness until Forge has a stable release
-  artifact path, build summary, SBOM/security evidence, signing or smoke
-  evidence, and release-candidate manifest.
+- Keep signing, UI visual, CAD, GPU, and specialized sandbox lanes opt-in until
+  target evidence selects them. Linux, macOS, Windows, and WSL tooling-plan
+  parity is part of the beta.3 baseline.
 - Before public PRs or releases, run `make public-portability-check` and the
   deterministic gates listed in `docs/references/repo_operating_model_v1.md`.
 
@@ -129,6 +162,14 @@ those as the target repo's source of truth.
   redaction tests.
 - Use descriptive commit messages and ISO 8601 dates (`YYYY-MM-DD`) when dates
   matter.
+- Delegate only bounded, independent read-only concerns. The root agent owns
+  edits, integration, validation, and the final repository state.
+- Do not leave source changes local-only. Finish managed Forge work with a
+  pushed commit and PR, or an explicit blocked handoff.
+- Run `tpl scratch-guard PATH` before destructive or local-only scratch work;
+  scratch must be disposable, ignored, and non-git.
+- In the shared workspace, keep privileged host changes explicit and routed
+  through its bridge runbooks; public Forge must not assume those bridges.
 - Do not merge or promote protected branches without the required human gate.
 
 ## When Uncertain

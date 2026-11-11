@@ -1,0 +1,212 @@
+name: Forge / Universal Agent Platform
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  platform-contract:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+          - name: Linux arm64
+            os: ubuntu-24.04-arm
+          - name: macOS
+            os: macos-latest
+          - name: Windows
+            os: windows-latest
+    steps:
+      - name: Checkout
+        # v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Setup Python
+        # v5.6.0
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        # v4
+        uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a
+      - name: Sync locked test environment
+        run: uv sync --group dev --frozen
+      - name: Run universal-agent platform contract
+        run: >-
+          uv run pytest -q
+          tests/scripts/test_universal_agent_platform.py
+          tests/scripts/test_agent_handoffs.py
+      - name: Run Linux native bootstrap
+        if: runner.os == 'Linux'
+        shell: bash
+        run: install/bootstrap-linux.sh --deps none --dry-run --json
+      - name: Run Linux tooling-suite contract
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n install/tooling-suite.sh
+          bash -n install/airgap-container-build.sh
+          shellcheck install/tooling-suite.sh install/airgap-container-build.sh
+          uv run pytest -q \
+            tests/scripts/test_moradin_tooling_suite.py \
+            tests/scripts/test_moradin_airgap.py \
+            tests/scripts/test_moradin_airgap_bootstrap.py \
+            tests/scripts/test_readme_figures.py
+          make verify-readme-figures
+          install/tooling-suite.sh plan --custom --select git \
+            --output "${RUNNER_TEMP}/moradin-tooling-suite-plan.json"
+      - name: Run macOS native bootstrap
+        if: runner.os == 'macOS'
+        shell: bash
+        run: install/bootstrap-macos.sh --deps none --dry-run --json
+      - name: Run Windows native bootstrap
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\install\bootstrap-windows.ps1 -Deps none -DryRun -Json
+
+  linux-distro-lifecycle:
+    name: Linux tooling suite / ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - name: Ubuntu 24.04
+            image: ubuntu@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
+          - name: Debian 12
+            image: debian@sha256:9344f8b8992482f80cba753f323adeaf17690076c095ccff6cc9536be98185dc
+          - name: Fedora 44
+            image: registry.fedoraproject.org/fedora@sha256:fdee7e40c851a11048f2e908d3ccea1d2f4f8923c2ced45623e9c67970f5ef27
+          - name: Rocky Linux 9
+            image: rockylinux/rockylinux@sha256:8101994123cf3d0a8fee517bee7f39e555c7d92bd2d9eb3303cc988a0eeed00f
+          - name: Arch Linux
+            image: archlinux/archlinux@sha256:a1416966c943087a2339f1d6d6119a591e7e9a2daa2c2f310b6ad84a6042b2ca
+    steps:
+      - name: Checkout
+        # v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Plan, apply, verify, and roll back in a disposable distro
+        env:
+          DISTRO_IMAGE: ${{ matrix.image }}
+        run: >-
+          docker run --rm
+          --volume "${GITHUB_WORKSPACE}:/forge:ro"
+          "${DISTRO_IMAGE}"
+          /forge/tests/scripts/tooling_suite_distro_smoke.sh
+
+  airgap-qualification:
+    name: Air gap / ${{ matrix.name }} / ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - name: Ubuntu 24.04
+            kind: ubuntu
+            arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+            image: ubuntu@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
+          - name: Ubuntu 24.04
+            kind: ubuntu
+            arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            image: ubuntu@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
+          - name: Debian 12
+            kind: debian
+            arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+            image: debian@sha256:9344f8b8992482f80cba753f323adeaf17690076c095ccff6cc9536be98185dc
+          - name: Debian 12
+            kind: debian
+            arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            image: debian@sha256:9344f8b8992482f80cba753f323adeaf17690076c095ccff6cc9536be98185dc
+          - name: Fedora 44
+            kind: fedora
+            arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+            image: registry.fedoraproject.org/fedora@sha256:fdee7e40c851a11048f2e908d3ccea1d2f4f8923c2ced45623e9c67970f5ef27
+          - name: Fedora 44
+            kind: fedora
+            arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            image: registry.fedoraproject.org/fedora@sha256:fdee7e40c851a11048f2e908d3ccea1d2f4f8923c2ced45623e9c67970f5ef27
+          - name: Rocky Linux 9
+            kind: rocky
+            arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+            image: rockylinux/rockylinux@sha256:8101994123cf3d0a8fee517bee7f39e555c7d92bd2d9eb3303cc988a0eeed00f
+          - name: Rocky Linux 9
+            kind: rocky
+            arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            image: rockylinux/rockylinux@sha256:8101994123cf3d0a8fee517bee7f39e555c7d92bd2d9eb3303cc988a0eeed00f
+          - name: Arch Linux
+            kind: arch
+            arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+            image: archlinux/archlinux@sha256:a1416966c943087a2339f1d6d6119a591e7e9a2daa2c2f310b6ad84a6042b2ca
+    steps:
+      - name: Checkout
+        # v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Setup Python
+        # v5.6.0
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        # v4
+        uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a
+      - name: Sync locked test environment
+        run: uv sync --group dev --frozen
+      - name: Provision the rootless qualification engine
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends podman
+          podman info --format '{{.Host.Security.Rootless}}' | grep -Fx true
+      - name: Build, disconnect, apply, verify, and roll back the kit
+        env:
+          TARGET_IMAGE: ${{ matrix.image }}
+          TARGET_KIND: ${{ matrix.kind }}
+          TARGET_PLATFORM: ${{ matrix.platform }}
+        run: tests/scripts/airgap_kit_lifecycle.sh

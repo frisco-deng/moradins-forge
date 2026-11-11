@@ -2,7 +2,7 @@
 title: "11 Ops Index"
 status: approved
 owner: platform-architecture
-last_reviewed: 2026-03-07
+last_reviewed: 2026-07-31
 source_refs:
   - https://openai.com/index/harness-engineering/
   - https://openai.com/index/unlocking-the-codex-harness/
@@ -27,6 +27,7 @@ related_docs:
 - [Documentation Review Loop](documentation_review_loop.md)
 - [Engineer Entry Authoring Runbook](engineer_entry_authoring_runbook.md)
 - [Quick Start](quick_start.md)
+- [Air-Gapped Tooling Suite](air_gapped_tooling_suite.md)
 - [Day 0 Onboarding Runbook](day0_onboarding_runbook.md)
 - [Day 1 Onboarding Runbook](day1_onboarding_runbook.md)
 - [Change Tracking System](change_tracking_system.md)
@@ -51,22 +52,23 @@ related_docs:
 4. [Manager Domain Lanes And Local Worker Follow-On](domain_lane_follow_on.md)
 5. [Documentation Review Loop](documentation_review_loop.md)
 6. [Quick Start](quick_start.md)
-7. [Engineer Entry Authoring Runbook](engineer_entry_authoring_runbook.md)
-8. [Day 0 Onboarding Runbook](day0_onboarding_runbook.md)
-9. [Day 1 Onboarding Runbook](day1_onboarding_runbook.md)
-10. [Change Tracking System](change_tracking_system.md)
-11. [Archive Process](archive_process.md)
-12. [Git Workflow Gitlab](git_workflow_gitlab.md)
-13. [Deployment Environments](deployment_environments.md)
-14. [Docker Compose](docker_compose.md)
-15. [Local Dev](local_dev.md)
-16. [Project Builder Runbook](project_builder_runbook.md)
-17. [Project Builder SSH Operator Guide](project_builder_ssh_operator_guide.md)
-18. [Configuration](configuration.md)
-19. [Capacity Planning](capacity_planning.md)
-20. [Reprocessing And Backfills](reprocessing_and_backfills.md)
-21. [Upgrades](upgrades.md)
-22. [Disaster Recovery](disaster_recovery.md)
+7. [Air-Gapped Tooling Suite](air_gapped_tooling_suite.md)
+8. [Engineer Entry Authoring Runbook](engineer_entry_authoring_runbook.md)
+9. [Day 0 Onboarding Runbook](day0_onboarding_runbook.md)
+10. [Day 1 Onboarding Runbook](day1_onboarding_runbook.md)
+11. [Change Tracking System](change_tracking_system.md)
+12. [Archive Process](archive_process.md)
+13. [Git Workflow Gitlab](git_workflow_gitlab.md)
+14. [Deployment Environments](deployment_environments.md)
+15. [Docker Compose](docker_compose.md)
+16. [Local Dev](local_dev.md)
+17. [Project Builder Runbook](project_builder_runbook.md)
+18. [Project Builder SSH Operator Guide](project_builder_ssh_operator_guide.md)
+19. [Configuration](configuration.md)
+20. [Capacity Planning](capacity_planning.md)
+21. [Reprocessing And Backfills](reprocessing_and_backfills.md)
+22. [Upgrades](upgrades.md)
+23. [Disaster Recovery](disaster_recovery.md)
 
 ## Operating Notes
 

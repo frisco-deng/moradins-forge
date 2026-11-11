@@ -2,23 +2,25 @@
 title: "Codex Run Loop"
 status: approved
 owner: moradin-forge
-last_reviewed: 2026-05-11
+last_reviewed: 2026-07-28
 source_refs:
   - ../../Harness/entrypoints/codex.md
 related_docs:
   - ../references/moradin_forge_agent_integration_contract_v1.md
+  - ../references/moradin_agent_efficiency_contract_v1.md
 ---
 
 # Codex Run Loop
 
 1. Read the Forge entrypoints.
-2. Inspect the target repo.
+2. Recover approved workspace roots, onboard and inspect the target repo.
 3. Run explain, readiness, and plan.
 4. Ask for approval only when adopting or applying to a target repo outside
    the scope already accepted in the current task.
 5. For an accepted target and plan, continue reversible apply, validation,
    rollback preparation, and review without asking again.
-6. Verify and summarize rollback.
+6. Execute only digest-approved user-level tooling; leave privileged scripts
+   and interactive suite approvals with the user. Verify and summarize rollback.
 
 ## Current Working-Baseline Contract
 

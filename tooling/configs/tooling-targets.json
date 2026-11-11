@@ -165,7 +165,6 @@
       "manager": "uv",
       "source": "repo_files_or_commands",
       "markers": [
-        ".venv/bin/python",
         "pyproject.toml",
         "uv.lock"
       ],
@@ -267,6 +266,21 @@
           "canonical_target": "",
           "generator": "",
           "allow_shared_responsibility": false
+        },
+        {
+          "path": "catalog",
+          "purpose": "Public workstation tool registry consumed by native onboarding and suite planning",
+          "class": "configuration",
+          "owner": "moradin-forge",
+          "lifecycle": "durable",
+          "tracking": "tracked",
+          "responsibility": "workstation_tool_registry",
+          "allow_shared_responsibility": true,
+          "legacy_exception": {},
+          "qualified": true,
+          "required": false,
+          "canonical_target": "",
+          "generator": ""
         },
         {
           "path": "dev_tracker",
@@ -572,7 +586,7 @@
       ],
       "sections": [],
       "file_routes": [],
-      "contract_fingerprint": "65b0df1a8d7a1407608175865f9f571f830812ceaac9516d64790deb3a6f3115",
+      "contract_fingerprint": "964c8f6f6e504fa92bfa2a15a4d44cc785b4de8dd928e160e3d44e05489060b5",
       "placement_rule": "use the matching section and declared root, or update the folder contract before adding a new category"
     },
     "cli_output": {

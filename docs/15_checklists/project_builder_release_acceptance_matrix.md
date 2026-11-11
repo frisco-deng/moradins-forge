@@ -18,4 +18,4 @@ related_docs:
 | REL-003 | Portability | Repo and generated sidecar pass portability checks. |
 | REL-004 | Workbench | Optional UI tests and build pass when included in the release. |
 | REL-005 | Release proof | Archive, checksum, SPDX SBOM, manifest, and current-SHA evidence exist. |
-| REL-006 | Rollback | `v0.1.0-public-alpha` is recorded and the disposable-target rollback passes. |
+| REL-006 | Rollback | `v0.2.0-beta.1` is recorded and the disposable-target rollback passes. |

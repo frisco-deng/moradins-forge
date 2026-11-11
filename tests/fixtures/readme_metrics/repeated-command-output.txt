@@ -1,0 +1,42 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.8, pytest-8.4.1
+rootdir: <fixture-repository>
+collected 12 items
+
+tests/test_api.py::test_health PASSED
+tests/test_api.py::test_readiness PASSED
+tests/test_api.py::test_create PASSED
+tests/test_api.py::test_update PASSED
+tests/test_api.py::test_delete PASSED
+tests/test_security.py::test_no_secrets PASSED
+tests/test_security.py::test_safe_paths PASSED
+tests/test_security.py::test_dependency_policy PASSED
+tests/test_release.py::test_manifest PASSED
+tests/test_release.py::test_sbom PASSED
+tests/test_release.py::test_portability PASSED
+tests/test_release.py::test_rollback PASSED
+
+============================== 12 passed in 4.20s ==============================
+
+Repeated invocation with unchanged repository state:
+
+============================= test session starts ==============================
+platform linux -- Python 3.12.8, pytest-8.4.1
+rootdir: <fixture-repository>
+collected 12 items
+
+tests/test_api.py::test_health PASSED
+tests/test_api.py::test_readiness PASSED
+tests/test_api.py::test_create PASSED
+tests/test_api.py::test_update PASSED
+tests/test_api.py::test_delete PASSED
+tests/test_security.py::test_no_secrets PASSED
+tests/test_security.py::test_safe_paths PASSED
+tests/test_security.py::test_dependency_policy PASSED
+tests/test_release.py::test_manifest PASSED
+tests/test_release.py::test_sbom PASSED
+tests/test_release.py::test_portability PASSED
+tests/test_release.py::test_rollback PASSED
+
+============================== 12 passed in 4.20s ==============================
+
