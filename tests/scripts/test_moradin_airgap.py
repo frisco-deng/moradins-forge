@@ -216,8 +216,8 @@ def test_pacman_rollback_closure_uses_the_sandbox_cache(
 
     def runner(argv: list[str], **_kwargs: object) -> SimpleNamespace:
         nonlocal cache_path
-        if argv[:2] == ["curl", "--head"]:
-            return completed(stdout="200" if "-x86_64.pkg" in argv[-1] else "404")
+        if argv[0] == "curl":
+            return completed(stdout='<a href="make-4.4.1-3-x86_64.pkg.tar.zst">package</a>\n200')
         if argv == ["id", "-u", "alpm"] or argv == ["id", "-g", "alpm"]:
             return completed(stdout="979\n")
         if argv[:2] == ["pacman", "-Uw"]:
@@ -258,8 +258,8 @@ def test_pacman_exact_rollback_archive_preserves_version_and_epoch(tmp_path, mon
     seen = []
     def runner(argv, **kwargs):
         seen.append(argv)
-        if argv[:2] == ["curl", "--head"]:
-            return completed(stdout="200" if "-x86_64.pkg" in argv[-1] else "404")
+        if argv[0] == "curl":
+            return completed(stdout='<a href="gcc-libs-16.2.1%2Br23%2Bgd564253eb6c8-1-x86_64.pkg.tar.zst">package</a>\n200')
         if argv[:2] == ["id", "-u"] or argv[:2] == ["id", "-g"]:
             return completed(stdout="979\n")
         if argv[:2] == ["pacman", "-Uw"]:
@@ -286,8 +286,8 @@ def test_pacman_exact_rollback_archive_preserves_version_and_epoch(tmp_path, mon
                                             ("missing_signature", "signature is missing"), ("bad_signature", "signature failed")])
 def test_pacman_rollback_rejects_wrong_identity_and_missing_or_bad_signature(tmp_path, monkeypatch, mode, expected):
     def runner(argv, **kwargs):
-        if argv[:2] == ["curl", "--head"]:
-            return completed(stdout="200" if "-x86_64.pkg" in argv[-1] else "404")
+        if argv[0] == "curl":
+            return completed(stdout='<a href="make-4.4.1-3-x86_64.pkg.tar.zst">package</a>\n200')
         if argv[:2] == ["id", "-u"] or argv[:2] == ["id", "-g"]:
             return completed(stdout="979\n")
         if argv[:2] == ["pacman", "-Uw"]:
@@ -315,9 +315,10 @@ def test_pacman_rollback_resolves_exact_version_architecture_transition(tmp_path
     calls = []
     def runner(argv, **kwargs):
         calls.append(argv)
-        if argv[:2] == ["curl", "--head"]:
+        if argv[0] == "curl":
             assert "--retry" not in argv and "--location" not in argv
-            return completed(stdout="200" if f"-{previous_arch}.pkg" in argv[-1] else "404")
+            assert argv[-1] == "https://archive.archlinux.org/packages/t/tzdata/"
+            return completed(stdout=f'<a href="tzdata-2026f-1-{previous_arch}.pkg.tar.zst">package</a>\n200')
         if argv[:2] in (["id", "-u"], ["id", "-g"]):
             return completed(stdout="979\n")
         if argv[:2] == ["pacman", "-Uw"]:
@@ -335,7 +336,7 @@ def test_pacman_rollback_resolves_exact_version_architecture_transition(tmp_path
     package, signature = airgap._download_previous_package(manager="pacman", package="tzdata", version="2026f-1",
         package_arch=current_arch, output=tmp_path / "rollback", runner=runner)
     assert package.is_file() and signature.is_file()
-    assert sum(argv[:2] == ["curl", "--head"] for argv in calls) == 2
+    assert sum(argv[0] == "curl" for argv in calls) == 1
     assert sum(argv[:2] == ["pacman", "-Uw"] for argv in calls) == 1
 
 
@@ -344,13 +345,25 @@ def test_pacman_rollback_rejects_ambiguous_absent_redirected_or_failed_discovery
     calls = []
     def runner(argv, **kwargs):
         calls.append(argv)
-        assert argv[:2] == ["curl", "--head"]
-        return completed(returncode=code, stdout=status)
+        assert argv[0] == "curl"
+        body = '<a href="tzdata-2026f-1-x86_64.pkg.tar.zst">native</a><a href="tzdata-2026f-1-any.pkg.tar.zst">any</a>'
+        return completed(returncode=code, stdout=body + "\n" + status)
     with pytest.raises(airgap.AirgapError, match="archive identity"):
         airgap._download_previous_package(manager="pacman", package="tzdata", version="2026f-1",
             package_arch="any", output=tmp_path / "rollback", runner=runner)
     assert not list((tmp_path / "rollback").glob("*.pkg.tar.zst"))
-    assert len(calls) <= 2
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("body", ["", '<a href="tzdata-9999f-1-x86_64.pkg.tar.zst">wrong version</a>',
+    '<a href="https://untrusted.invalid/tzdata-2026f-1-x86_64.pkg.tar.zst">external</a>', "x" * 1048577])
+def test_pacman_archive_index_rejects_missing_inexact_external_or_oversized_evidence(tmp_path, body):
+    def runner(argv, **kwargs):
+        assert argv[0] == "curl"
+        return completed(stdout=body + "\n200")
+    with pytest.raises(airgap.AirgapError, match="archive identity"):
+        airgap._download_previous_package(manager="pacman", package="tzdata", version="2026f-1",
+            package_arch="any", output=tmp_path / "rollback", runner=runner)
 
 
 def test_pacman_closure_fails_closed_without_sandbox_account(

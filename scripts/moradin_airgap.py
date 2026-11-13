@@ -25,6 +25,7 @@ from typing import Any, Callable, Iterable, Iterator, Sequence
 
 try:
     from scripts import public_export
+    from scripts.moradin_airgap_archive import resolve_pacman_archive
     from scripts.moradin_airgap_evidence import create_failure, finish_cleanup, build_workspace
     from scripts.moradin_tooling_suite import (
         BOOTSTRAP_UV_BINARY_SHA256,
@@ -65,6 +66,7 @@ try:
     )
 except ModuleNotFoundError:  # pragma: no cover - direct script execution
     import public_export  # type: ignore[no-redef]
+    from moradin_airgap_archive import resolve_pacman_archive
     from moradin_airgap_evidence import create_failure, finish_cleanup, build_workspace
     from moradin_tooling_suite import (  # type: ignore[no-redef]
         BOOTSTRAP_UV_BINARY_SHA256,
@@ -1372,25 +1374,13 @@ def _download_previous_pacman_package(
     # Frozen Arch requests currently support amd64 only; retain the private
     # helper's explicit aarch64 identity without selecting a different native ISA.
     native_arch = "aarch64" if package_arch == "aarch64" else "x86_64"
-    available: list[tuple[str, str]] = []
-    for archive_arch in (native_arch, "any"):
-        filename = f"{package}-{filename_version}-{archive_arch}.pkg.tar.zst"
-        url = "https://archive.archlinux.org/packages/" + urllib.parse.quote(package[0], safe="") + "/" + urllib.parse.quote(package, safe="") + "/" + urllib.parse.quote(filename, safe="")
-        probe = _run(
-            ["curl", "--head", "--silent", "--show-error", "--proto", "=https",
-             "--max-redirs", "0", "--max-time", "30", "--output", os.devnull,
-             "--write-out", "%{http_code}", "--", url],
-            runner=runner,
-            timeout=40,
+    try:
+        url, archive_arch = resolve_pacman_archive(
+            package, filename_version, native_arch,
+            run=lambda argv, **kwargs: _run(argv, runner=runner, **kwargs),
         )
-        status = probe.stdout.strip()
-        if probe.returncode != 0 or status not in {"200", "404"}:
-            raise AirgapError(f"rollback archive identity discovery failed: {package} at {version}")
-        if status == "200":
-            available.append((url, archive_arch))
-    if len(available) != 1:
-        raise AirgapError(f"rollback archive identity is unavailable or ambiguous: {package} at {version}")
-    url, archive_arch = available[0]
+    except ValueError as error:
+        raise AirgapError(str(error)) from error
     with _pacman_download_cache(runner=runner) as cache:
         result = _run(
             [

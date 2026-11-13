@@ -52,6 +52,7 @@ include_paths:
   - scripts/moradin_workstation.py
   - scripts/moradin_tooling_suite.py
   - scripts/moradin_airgap.py
+  - scripts/moradin_airgap_archive.py
   - scripts/moradin_airgap_evidence.py
   - scripts/moradin_airgap_request.py
   - scripts/moradin_airgap_bootstrap.py

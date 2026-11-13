@@ -199,8 +199,9 @@ sync version. Epochs remain part of the verified version identity; archive
 filenames omit the epoch. Package name, full version, architecture and detached
 signature must all verify before copying a rollback asset into the kit.
 Current package architecture does not establish an older version's architecture.
-Preparation probes the two exact compatible archive names (native and `any`)
-once, requires one unambiguous identity, then downloads and verifies that identity.
+Preparation reads the bounded official package index, requires one exact compatible
+archive name (native or `any`), then downloads and verifies that identity. Redirects
+from missing package URLs do not establish existence or authorize fallback hosts.
 Missing, conflicting or unavailable discovery fails without an installation retry.
 The existing private `alpm` cache and download sandbox remain enabled. No package
 is installed by this preparation step. See the
