@@ -185,6 +185,14 @@ instruction surfaces: [GitHub Copilot repository instructions](https://docs.gith
 
 ## Failure and Recovery
 
+Native qualification calls `airgap-build --preflight --target-image <exact-pin>
+--target-platform <platform> --output <receipt.json>` before provisioning the
+disposable consumer. It checks the canonical clean public source and existing
+rootless Podman, preserves exact registered digests and returns a fully qualified
+image name. A missing local image is named as an authorised qualification pull,
+not permission to alter registry configuration or install a runtime. Readiness
+is not qualification acceptance; the disconnected lifecycle must still pass.
+
 Failed rootless builds retain private diagnostic receipts under
 `artifacts/airgap-failures/<attempt-id>/` outside the disposable build tree.
 Receipts bind the request, target, pinned image and available engine identity;

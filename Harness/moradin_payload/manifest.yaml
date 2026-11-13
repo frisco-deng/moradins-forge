@@ -53,6 +53,7 @@ include_paths:
   - scripts/moradin_tooling_suite.py
   - scripts/moradin_airgap.py
   - scripts/moradin_airgap_archive.py
+  - scripts/moradin_airgap_preflight.py
   - scripts/moradin_airgap_evidence.py
   - scripts/moradin_airgap_request.py
   - scripts/moradin_airgap_bootstrap.py
@@ -83,6 +84,7 @@ include_paths:
   - tests/scripts/test_moradin_workstation.py
   - tests/scripts/test_moradin_tooling_suite.py
   - tests/scripts/test_moradin_airgap.py
+  - tests/scripts/test_moradin_airgap_preflight.py
   - tests/scripts/test_moradin_airgap_evidence.py
   - tests/scripts/test_moradin_airgap_bootstrap.py
   - tests/scripts/airgap_kit_lifecycle.sh

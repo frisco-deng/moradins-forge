@@ -5383,7 +5383,10 @@ def build_parser() -> argparse.ArgumentParser:
         "airgap-build",
         help="Build a complete target-specific kit with a rootless builder.",
     )
+    airgap_build.add_argument("--target-image", default="", help="Exact registered qualification image digest for --preflight.")
+    airgap_build.add_argument("--target-platform", default="", help="Native qualification platform for --preflight.")
     build_source = airgap_build.add_mutually_exclusive_group(required=True)
+    build_source.add_argument("--preflight", action="store_true", help="Check source, exact image and rootless Podman before native qualification; no build or install.")
     build_source.add_argument("--request", type=Path)
     build_source.add_argument("--lock", type=Path)
     airgap_build.add_argument("--output", type=Path, required=True)
@@ -5504,6 +5507,22 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "airgap-build":
             assert airgap is not None
+            if args.preflight:
+                if args.request or args.lock or not args.target_image or not args.target_platform:
+                    raise ToolingSuiteError("--preflight requires target image/platform and no request/lock")
+                try:
+                    payload = airgap.qualification_preflight(forge_root, args.target_image, args.target_platform,
+                        images=airgap.TARGET_IMAGES, source_check=airgap.assert_clean_public_forge,
+                        engine_check=airgap._rootless_engine, run=airgap._run)
+                except (airgap.AirgapError, ValueError) as error:
+                    raise ToolingSuiteError(str(error)) from error
+                write_json(args.output.resolve(), payload)
+                print(json.dumps(payload, indent=2, sort_keys=True))
+                return 0
+            if not args.request and not args.lock:
+                raise ToolingSuiteError("airgap-build requires --request or --lock")
+            if args.target_image or args.target_platform:
+                raise ToolingSuiteError("target image/platform options require --preflight")
             try:
                 if args.request:
                     payload = airgap.build_airgap_bundle_from_request(

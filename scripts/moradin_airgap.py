@@ -26,6 +26,7 @@ from typing import Any, Callable, Iterable, Iterator, Sequence
 try:
     from scripts import public_export
     from scripts.moradin_airgap_archive import resolve_pacman_archive
+    from scripts.moradin_airgap_preflight import qualification_preflight as qualification_preflight
     from scripts.moradin_airgap_evidence import create_failure, finish_cleanup, build_workspace
     from scripts.moradin_tooling_suite import (
         BOOTSTRAP_UV_BINARY_SHA256,
@@ -67,6 +68,7 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - direct script execution
     import public_export  # type: ignore[no-redef]
     from moradin_airgap_archive import resolve_pacman_archive
+    from moradin_airgap_preflight import qualification_preflight as qualification_preflight
     from moradin_airgap_evidence import create_failure, finish_cleanup, build_workspace
     from moradin_tooling_suite import (  # type: ignore[no-redef]
         BOOTSTRAP_UV_BINARY_SHA256,
@@ -3435,6 +3437,8 @@ def _git_output(
 
 
 def assert_clean_public_forge(forge_root: Path) -> str:
+    if Path(_git_output(forge_root, ["rev-parse", "--show-toplevel"])).resolve() != forge_root.resolve():
+        raise AirgapError("air-gap source must be the canonical repository root")
     head = _git_output(forge_root, ["rev-parse", "HEAD"])
     if not re.fullmatch(r"[0-9a-f]{40}", head):
         raise AirgapError("Forge source commit is malformed")
