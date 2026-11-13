@@ -1350,21 +1350,36 @@ def _download_previous_pacman_package(
     *,
     package: str,
     version: str,
+    package_arch: str,
     output: Path,
     runner: Callable[..., subprocess.CompletedProcess[str]],
 ) -> tuple[Path, Path]:
+    if package_arch not in {"x86_64", "aarch64", "any"}:
+        raise AirgapError("rollback Pacman package architecture is unavailable")
+    # -Sw resolves the current sync version, not the target's installed version.
+    # Bind the remote archive filename exactly; metadata and signatures still
+    # have to prove the requested identity before anything enters the kit.
+    filename_version = version
+    if ":" in version:
+        epoch, filename_version = version.split(":", 1)
+        if not epoch.isdecimal() or ":" in filename_version:
+            raise AirgapError("rollback Pacman version epoch is malformed")
+    if not re.fullmatch(r"[A-Za-z0-9@._+-]+", package) or not filename_version or any(c in filename_version for c in "/\\"):
+        raise AirgapError("rollback Pacman archive identity is malformed")
+    filename = f"{package}-{filename_version}-{package_arch}.pkg.tar.zst"
+    url = "https://archive.archlinux.org/packages/" + urllib.parse.quote(package[0], safe="") + "/" + urllib.parse.quote(package, safe="") + "/" + urllib.parse.quote(filename, safe="")
     with _pacman_download_cache(runner=runner) as cache:
         result = _run(
             [
                 "pacman",
-                "-Sw",
+                "-Uw",
                 "--nodeps",
                 "--nodeps",
                 "--cachedir",
                 cache.as_posix(),
                 "--noconfirm",
                 "--",
-                package,
+                url,
             ],
             runner=runner,
             timeout=900,
@@ -1384,14 +1399,14 @@ def _download_previous_pacman_package(
         source_signature = source.with_name(source.name + ".sig")
         if not source_signature.is_file() or source_signature.is_symlink():
             raise AirgapError(
-                f"rollback package does not match {package} at {version}"
+                f"rollback Pacman signature is missing: {package} at {version}"
             )
         fields = _pacman_package_fields(
             source,
-            ["pkgname", "pkgver"],
+            ["pkgname", "pkgver", "arch"],
             runner=runner,
         )
-        if fields != [package, version]:
+        if fields != [package, version, package_arch]:
             raise AirgapError(
                 f"rollback package does not match {package} at {version}"
             )
@@ -1421,6 +1436,7 @@ def _download_previous_package(
     package: str,
     version: str,
     output: Path,
+    package_arch: str = "",
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> tuple[Path, Path | None]:
     output.mkdir(parents=True, exist_ok=False)
@@ -1449,6 +1465,7 @@ def _download_previous_package(
         return _download_previous_pacman_package(
             package=package,
             version=version,
+            package_arch=package_arch,
             output=output,
             runner=runner,
         )
@@ -1535,6 +1552,7 @@ def _attach_rollback_closure(
                 manager=manager,
                 package=str(record["package"]),
                 version=previous,
+                package_arch=str(record["arch"]),
                 output=Path(temporary) / "download",
                 runner=runner,
             )

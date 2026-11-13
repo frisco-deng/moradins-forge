@@ -218,14 +218,16 @@ def test_pacman_rollback_closure_uses_the_sandbox_cache(
         nonlocal cache_path
         if argv == ["id", "-u", "alpm"] or argv == ["id", "-g", "alpm"]:
             return completed(stdout="979\n")
-        if argv[:2] == ["pacman", "-Sw"]:
+        if argv[:2] == ["pacman", "-Uw"]:
             cache_path = Path(argv[argv.index("--cachedir") + 1])
             assert argv.count("--nodeps") == 2
+            assert argv[-1] == "https://archive.archlinux.org/packages/m/make/make-4.4.1-3-x86_64.pkg.tar.zst"
+            assert "--disable-sandbox" not in argv
             (cache_path / "make.pkg.tar.zst").write_bytes(b"previous")
             (cache_path / "make.pkg.tar.zst.sig").write_bytes(b"signature")
             return completed()
         if argv[:2] == ["bsdtar", "-xOf"]:
-            return completed(stdout="pkgname = make\npkgver = 4.4.1-3\n")
+            return completed(stdout="pkgname = make\npkgver = 4.4.1-3\narch = x86_64\n")
         if argv[:2] == ["pacman-key", "--verify"]:
             return completed()
         raise AssertionError(argv)
@@ -236,6 +238,7 @@ def test_pacman_rollback_closure_uses_the_sandbox_cache(
         manager="pacman",
         package="make",
         version="4.4.1-3",
+        package_arch="x86_64",
         output=tmp_path / "rollback",
         runner=runner,
     )
@@ -246,6 +249,59 @@ def test_pacman_rollback_closure_uses_the_sandbox_cache(
     assert package == tmp_path / "rollback/make.pkg.tar.zst"
     assert signature == tmp_path / "rollback/make.pkg.tar.zst.sig"
     assert package.read_bytes() == b"previous"
+
+
+@pytest.mark.parametrize("version", ["16.2.1+r23+gd564253eb6c8-1", "2:16.2.1+r23+gd564253eb6c8-1"])
+def test_pacman_exact_rollback_archive_preserves_version_and_epoch(tmp_path, monkeypatch, version):
+    seen = []
+    def runner(argv, **kwargs):
+        seen.append(argv)
+        if argv[:2] == ["id", "-u"] or argv[:2] == ["id", "-g"]:
+            return completed(stdout="979\n")
+        if argv[:2] == ["pacman", "-Uw"]:
+            cache = Path(argv[argv.index("--cachedir") + 1])
+            assert argv[-1] == "https://archive.archlinux.org/packages/g/gcc-libs/gcc-libs-16.2.1%2Br23%2Bgd564253eb6c8-1-x86_64.pkg.tar.zst"
+            assert "--disable-sandbox" not in argv
+            (cache / "gcc-libs.pkg.tar.zst").write_bytes(b"exact previous version")
+            (cache / "gcc-libs.pkg.tar.zst.sig").write_bytes(b"signature")
+            return completed()
+        if argv[:2] == ["bsdtar", "-xOf"]:
+            return completed(stdout=f"pkgname = gcc-libs\npkgver = {version}\narch = x86_64\n")
+        if argv[:2] == ["pacman-key", "--verify"]:
+            return completed()
+        raise AssertionError(argv)
+    monkeypatch.setattr(airgap.os, "chown", lambda *args: None)
+    package, signature = airgap._download_previous_package(manager="pacman", package="gcc-libs", version=version,
+                                                          package_arch="x86_64", output=tmp_path / "rollback", runner=runner)
+    assert package.read_bytes() == b"exact previous version"
+    assert signature.is_file()
+    assert any(argv[:2] == ["pacman-key", "--verify"] for argv in seen)
+
+
+@pytest.mark.parametrize("mode,expected", [("newer", "does not match"), ("wrong_arch", "does not match"),
+                                            ("missing_signature", "signature is missing"), ("bad_signature", "signature failed")])
+def test_pacman_rollback_rejects_wrong_identity_and_missing_or_bad_signature(tmp_path, monkeypatch, mode, expected):
+    def runner(argv, **kwargs):
+        if argv[:2] == ["id", "-u"] or argv[:2] == ["id", "-g"]:
+            return completed(stdout="979\n")
+        if argv[:2] == ["pacman", "-Uw"]:
+            cache = Path(argv[argv.index("--cachedir") + 1])
+            (cache / "package.pkg.tar.zst").write_bytes(b"unaccepted")
+            if mode != "missing_signature":
+                (cache / "package.pkg.tar.zst.sig").write_bytes(b"signature")
+            return completed()
+        if argv[:2] == ["bsdtar", "-xOf"]:
+            version = "99.0-1" if mode == "newer" else "4.4.1-3"
+            arch = "aarch64" if mode == "wrong_arch" else "x86_64"
+            return completed(stdout=f"pkgname = make\npkgver = {version}\narch = {arch}\n")
+        if argv[:2] == ["pacman-key", "--verify"]:
+            return completed(returncode=1 if mode == "bad_signature" else 0)
+        raise AssertionError(argv)
+    monkeypatch.setattr(airgap.os, "chown", lambda *args: None)
+    with pytest.raises(airgap.AirgapError, match=expected):
+        airgap._download_previous_package(manager="pacman", package="make", version="4.4.1-3", package_arch="x86_64",
+                                         output=tmp_path / "rollback", runner=runner)
+    assert not list((tmp_path / "rollback").glob("*.pkg.tar.zst"))
 
 
 def test_pacman_closure_fails_closed_without_sandbox_account(

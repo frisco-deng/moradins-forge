@@ -193,6 +193,14 @@ Build failure and cleanup failure have separate statuses. Partial output never
 becomes an accepted payload. An uncertain timeout retains its output for
 reconciliation rather than treating cleanup as proof of execution failure.
 The hosted qualification job emits these redacted diagnostics on failure.
+Pacman rollback preparation retrieves the exact installed version from the
+official archive using download-only URL mode, rather than selecting the current
+sync version. Epochs remain part of the verified version identity; archive
+filenames omit the epoch. Package name, full version, architecture and detached
+signature must all verify before copying a rollback asset into the kit.
+The existing private `alpm` cache and download sandbox remain enabled. No package
+is installed by this preparation step. See the
+[Pacman upgrade/download-only contract](https://man.archlinux.org/man/pacman.8.en).
 No complete build status is written on failure. If target validation fails
 before sudo, no installation occurs. A
 partial apply automatically rolls back safely reversible root, user, uv, and
