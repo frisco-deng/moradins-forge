@@ -74,3 +74,16 @@ def test_public_cli_source_failure_creates_no_payload(tmp_path):
         cwd=repo,capture_output=True,text=True)
     assert result.returncode == 2 and "canonical public Forge HTTPS origin" in result.stderr
     assert not output.exists()
+
+
+@pytest.mark.parametrize("image", sorted(set(airgap.TARGET_IMAGES.values())))
+def test_every_registered_image_has_exact_canonical_registry_alias(tmp_path, image):
+    if image.startswith(("ubuntu@", "debian@")):
+        expected = "docker.io/library/" + image
+    elif image.startswith(("archlinux/", "rockylinux/")):
+        expected = "docker.io/" + image
+    else:
+        expected = image
+    root = source(tmp_path)
+    assert assess(root, image=image)["target_image"] == expected
+    assert assess(root, image=expected)["target_image"] == expected

@@ -5,21 +5,24 @@ def qualification_preflight(root, image, platform, *, images, source_check, engi
     source = source_check(root)
     aliases = {}
     for pinned in images.values():
-        aliases[pinned] = pinned
-        first = pinned.partition("/")[0]
-        if "." not in first and ":" not in first:
-            aliases["docker.io/" + pinned] = pinned
+        name = pinned.partition("@")[0]
+        first, slash, _ = name.partition("/")
+        qualified = bool(slash) and ("." in first or ":" in first or first == "localhost")
+        canonical = pinned if qualified else "docker.io/" + (pinned if slash else "library/" + pinned)
+        aliases[pinned] = canonical
+        aliases[canonical] = canonical
+        if not qualified:
+            aliases["docker.io/" + pinned] = canonical
     if image not in aliases:
         raise ValueError("qualification image must match an exact registered digest")
     if platform not in {"linux/amd64", "linux/arm64"}:
         raise ValueError("qualification platform is unsupported")
     selected = aliases[image]
-    if selected.startswith("archlinux/") and platform != "linux/amd64":
+    if selected.startswith("docker.io/archlinux/") and platform != "linux/amd64":
         raise ValueError("official Arch qualification supports amd64 only")
     if engine_check() != "podman":
         raise ValueError("native qualification requires existing rootless Podman")
-    first = selected.partition("/")[0]
-    canonical = "docker.io/" + selected if "." not in first and ":" not in first else selected
+    canonical = selected
     check = run(["podman", "image", "exists", canonical])
     if check.returncode not in {0, 1}:
         raise ValueError("qualification image-store inspection failed; reconcile the existing runtime")
