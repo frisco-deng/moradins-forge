@@ -1366,8 +1366,31 @@ def _download_previous_pacman_package(
             raise AirgapError("rollback Pacman version epoch is malformed")
     if not re.fullmatch(r"[A-Za-z0-9@._+-]+", package) or not filename_version or any(c in filename_version for c in "/\\"):
         raise AirgapError("rollback Pacman archive identity is malformed")
-    filename = f"{package}-{filename_version}-{package_arch}.pkg.tar.zst"
-    url = "https://archive.archlinux.org/packages/" + urllib.parse.quote(package[0], safe="") + "/" + urllib.parse.quote(package, safe="") + "/" + urllib.parse.quote(filename, safe="")
+    # Current package architecture does not establish the installed version's
+    # architecture (tzdata moved from x86_64 to any). Resolve the finite compatible
+    # archive identities before downloading; never retry a failed installation.
+    # Frozen Arch requests currently support amd64 only; retain the private
+    # helper's explicit aarch64 identity without selecting a different native ISA.
+    native_arch = "aarch64" if package_arch == "aarch64" else "x86_64"
+    available: list[tuple[str, str]] = []
+    for archive_arch in (native_arch, "any"):
+        filename = f"{package}-{filename_version}-{archive_arch}.pkg.tar.zst"
+        url = "https://archive.archlinux.org/packages/" + urllib.parse.quote(package[0], safe="") + "/" + urllib.parse.quote(package, safe="") + "/" + urllib.parse.quote(filename, safe="")
+        probe = _run(
+            ["curl", "--head", "--silent", "--show-error", "--proto", "=https",
+             "--max-redirs", "0", "--max-time", "30", "--output", os.devnull,
+             "--write-out", "%{http_code}", "--", url],
+            runner=runner,
+            timeout=40,
+        )
+        status = probe.stdout.strip()
+        if probe.returncode != 0 or status not in {"200", "404"}:
+            raise AirgapError(f"rollback archive identity discovery failed: {package} at {version}")
+        if status == "200":
+            available.append((url, archive_arch))
+    if len(available) != 1:
+        raise AirgapError(f"rollback archive identity is unavailable or ambiguous: {package} at {version}")
+    url, archive_arch = available[0]
     with _pacman_download_cache(runner=runner) as cache:
         result = _run(
             [
@@ -1406,7 +1429,7 @@ def _download_previous_pacman_package(
             ["pkgname", "pkgver", "arch"],
             runner=runner,
         )
-        if fields != [package, version, package_arch]:
+        if fields != [package, version, archive_arch]:
             raise AirgapError(
                 f"rollback package does not match {package} at {version}"
             )

@@ -198,6 +198,10 @@ official archive using download-only URL mode, rather than selecting the current
 sync version. Epochs remain part of the verified version identity; archive
 filenames omit the epoch. Package name, full version, architecture and detached
 signature must all verify before copying a rollback asset into the kit.
+Current package architecture does not establish an older version's architecture.
+Preparation probes the two exact compatible archive names (native and `any`)
+once, requires one unambiguous identity, then downloads and verifies that identity.
+Missing, conflicting or unavailable discovery fails without an installation retry.
 The existing private `alpm` cache and download sandbox remain enabled. No package
 is installed by this preparation step. See the
 [Pacman upgrade/download-only contract](https://man.archlinux.org/man/pacman.8.en).
