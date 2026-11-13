@@ -25,6 +25,7 @@ from typing import Any, Callable, Iterable, Iterator, Sequence
 
 try:
     from scripts import public_export
+    from scripts.moradin_airgap_evidence import create_failure, finish_cleanup, build_workspace
     from scripts.moradin_tooling_suite import (
         BOOTSTRAP_UV_BINARY_SHA256,
         BOOTSTRAP_UV_VERSION,
@@ -64,6 +65,7 @@ try:
     )
 except ModuleNotFoundError:  # pragma: no cover - direct script execution
     import public_export  # type: ignore[no-redef]
+    from moradin_airgap_evidence import create_failure, finish_cleanup, build_workspace
     from moradin_tooling_suite import (  # type: ignore[no-redef]
         BOOTSTRAP_UV_BINARY_SHA256,
         BOOTSTRAP_UV_VERSION,
@@ -2009,12 +2011,29 @@ def run_target_builder(
         "/request/request.json",
         "/output/target-payload",
     ]
-    result = _run(argv, runner=runner, timeout=7200)
+    try:
+        result = _run(argv, runner=runner, timeout=7200)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        destination, receipt = create_failure(forge_root, request, image, engine, error=error)
+        # No execution result exists: leave uncertain output for explicit reconciliation.
+        receipt["cleanup"] = {"status": "not_attempted", "reason": "execution_outcome_uncertain"}
+        write_json(destination / "receipt.json", receipt)
+        uncertain = AirgapError(f"rootless target builder outcome uncertain; failure evidence: {destination}")
+        uncertain.preserve_workspace = True
+        raise uncertain from error
     if result.returncode != 0:
-        if output.is_dir() and not output.is_symlink():
-            shutil.rmtree(output)
-        detail = result.stderr.strip().splitlines()[-1] if result.stderr.strip() else ""
-        raise AirgapError(f"rootless target builder failed: {detail or 'unknown error'}")
+        destination, receipt = create_failure(forge_root, request, image, engine, result=result)
+        cleanup_error = None
+        try:
+            if output.is_dir() and not output.is_symlink():
+                shutil.rmtree(output)
+        except OSError as error:
+            cleanup_error = error
+        finish_cleanup(destination, receipt, cleanup_error)
+        raise AirgapError(
+            f"rootless target builder failed (exit {result.returncode}); "
+            f"failure evidence: {destination}; cleanup={receipt['cleanup']['status']}"
+        )
     payload_root = output / "target-payload"
     resolved = _load_json_record(
         payload_root / "resolved.json",
@@ -2451,10 +2470,7 @@ def build_airgap_bundle_from_request(
     request = load_airgap_request(request_path, forge_root=forge_root)
     source_sha = assert_clean_public_forge(forge_root)
     output.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(
-        prefix="moradin-airgap-build-",
-        dir=output.parent,
-    ) as temporary:
+    with build_workspace(output.parent) as temporary:
         work = Path(temporary)
         builder_root = work / "builder"
         target_builder(

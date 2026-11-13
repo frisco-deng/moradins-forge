@@ -185,8 +185,16 @@ instruction surfaces: [GitHub Copilot repository instructions](https://docs.gith
 
 ## Failure and Recovery
 
-If build fails, its temporary tree is removed and no complete status is
-written. If target validation fails before sudo, no installation occurs. A
+Failed rootless builds retain private diagnostic receipts under
+`artifacts/airgap-failures/<attempt-id>/` outside the disposable build tree.
+Receipts bind the request, target, pinned image and available engine identity;
+bounded redacted stdout/stderr retain their hashes and truncation status.
+Build failure and cleanup failure have separate statuses. Partial output never
+becomes an accepted payload. An uncertain timeout retains its output for
+reconciliation rather than treating cleanup as proof of execution failure.
+The hosted qualification job emits these redacted diagnostics on failure.
+No complete build status is written on failure. If target validation fails
+before sudo, no installation occurs. A
 partial apply automatically rolls back safely reversible root, user, uv, and
 managed-Python changes; ambiguous shared package dependencies are retained and
 reported instead of autoremove or configuration purge.

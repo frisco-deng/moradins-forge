@@ -300,13 +300,22 @@ export function buildFollowOnPrompts({
     session.artifacts?.phase_plan_markdown ||
     `Harness/artifacts/control/discovery_sessions/${session.session_id}/phase_plan.md`;
   const supplied = normalizeSynthesis(session.synthesis ?? {});
+  // Each prompt stays standalone. Reuse an exact fact already inline in its Context;
+  // references to optional files never replace accepted outcomes or constraints.
+  const inlineFacts = new Map(Object.entries(session.intake || {})
+    .filter(([key, value]) => ["project_goal", "users", "constraints", "timeline", "integrations", "compliance", "deployment_target", "other_context"].includes(key) && typeof value === "string" && value.length)
+    .map(([key, value]) => [value, key]));
   const inlineScope = [...new Set([
     ...supplied.must_haves,
     ...supplied.plan.initial_backlog,
     ...supplied.design.components,
     ...supplied.design.data_flows,
     ...supplied.product_spec.constraints,
-  ])].map((item) => `- ${item}`);
+  ])].map((item) => {
+    const key = inlineFacts.get(item);
+    const reference = key ? `See ${key}= in Context above (same accepted fact).` : item;
+    return `- ${reference.length < item.length ? reference : item}`;
+  });
   const phaseLines = phasePlan.phases.flatMap((phase) => [
     `- ${phase.phase_id}: ${phase.title}`,
     `  objective: ${phase.objective}`,
@@ -315,18 +324,9 @@ export function buildFollowOnPrompts({
   ]);
   const alignmentLines = alignmentState
     ? [
-        "Alignment summary:",
-        `- overall_status: ${alignmentState.summary.overall_status}`,
-        `- manual_required_count: ${alignmentState.summary.manual_required_count}`,
-        `- missing_count: ${alignmentState.summary.missing_count}`,
-        `- next_recommended_phase_id: ${alignmentState.next_recommended_phase_id}`,
-        ...(alignmentState.next_recommended_action
-          ? [
-              `- next_recommended_action: ${alignmentState.next_recommended_action.next_action}`,
-              `- next_recommended_route: ${alignmentState.next_recommended_action.route}`,
-            ]
-          : []),
-        `- alignment_artifact: Harness/artifacts/control/discovery_sessions/${session.session_id}/alignment_state.md`,
+        // Status, counts and next action already appear in this prompt's Context.
+        `alignment_next_phase_id=${alignmentState.next_recommended_phase_id}`,
+        `alignment_artifact=${session.artifacts?.alignment_state_markdown || `Harness/artifacts/control/discovery_sessions/${session.session_id}/alignment_state.md`}`,
       ]
     : [];
 

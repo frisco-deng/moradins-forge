@@ -2,7 +2,7 @@
 title: "Codex Run Loop"
 status: approved
 owner: moradin-forge
-last_reviewed: 2026-07-28
+last_reviewed: 2026-11-12
 source_refs:
   - ../../Harness/entrypoints/codex.md
 related_docs:
@@ -12,8 +12,10 @@ related_docs:
 
 # Codex Run Loop
 
-1. Read the Forge entrypoints.
-2. Recover approved workspace roots, onboard and inspect the target repo.
+1. Select the maintenance or target-adoption concern through `AGENTS.md`; expand
+   its matching entrypoint and contract when applicable or changed.
+2. Recover approved workspace roots and current task state. Onboard only when
+   target adoption is part of the accepted scope; inspect the owning repo.
 3. Run explain, readiness, and plan.
 4. Ask for approval only when adopting or applying to a target repo outside
    the scope already accepted in the current task.

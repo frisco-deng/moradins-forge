@@ -14,6 +14,7 @@ const cases = [
   { id: "dependency-change", intake: { project_goal: "Export approved inventory", users: "operators", integrations: "Inventory API v2", constraints: "preserve independent local export", other_context: "API v2 replaces v1; inspect the remote consumer contract" }, answers: {} },
   { id: "agent-label", intake: { project_goal: "Assistant CLI formats a local text file", users: "developers", deployment_target: "single local process", constraints: "no new model provider or orchestration" }, answers: {} },
 ];
+cases.push({ id: "redundant-inline-facts", intake: { project_goal: "Export one approved report", constraints: "Retain offline operation and the existing data ownership contract; preserve every accepted deferred capacity and recovery obligation without introducing external services.", other_context: "Baseline accepted report; later accepted bulk export remains unfinished" }, answers: {}, alignment_fixture: { summary: { overall_status: "partial", manual_required_count: 1, missing_count: 2 }, next_recommended_phase_id: "phase_1", next_recommended_action: { next_action: "verify producer consumer boundary", route: "native validation" } } });
 const options = (session) => ({ session, targetRepo: "fixture-product", workflowType: session.id === "existing" ? "existing_project" : "new_project" });
 function run(api, input) {
   const session = structuredClone(input);
@@ -22,7 +23,7 @@ function run(api, input) {
   session.synthesis = api.deterministicSynthesis(session);
   session.synthesis.must_haves.push("Later accepted outcome: measured batch capacity; deferred remains unfinished");
   const phasePlan = api.buildDeterministicPhasePlan(options(session));
-  const prompts = api.buildFollowOnPrompts({ ...options(session), selectedProfile: session.synthesis.recommended_profile, phasePlan, alignmentState: null });
+  const prompts = api.buildFollowOnPrompts({ ...options(session), selectedProfile: session.synthesis.recommended_profile, phasePlan, alignmentState: session.alignment_fixture || null });
   return { synthesis: session.synthesis, phasePlan, prompts };
 }
 const candidate = { deterministicSynthesis, buildDeterministicPhasePlan, buildFollowOnPrompts };
@@ -79,6 +80,17 @@ describe("product-aware planning", () => {
     expect(JSON.stringify(latest.phasePlan)).not.toContain("Inventory API v1");
     expect(JSON.stringify(latest)).toContain("preserve independent local export");
   });
+  it("deduplicates only facts present in the same standalone prompt", () => {
+    const input = cases.find((c) => c.id === "redundant-inline-facts");
+    const result = run(candidate, input);
+    for (const prompt of result.prompts) expect(prompt.prompt).toContain(input.intake.constraints);
+    const execution = result.prompts.find((p) => p.prompt_id === "run_all_phases").prompt;
+    expect(execution).toContain("Later accepted outcome: measured batch capacity; deferred remains unfinished");
+    expect(execution).toContain("alignment_next_phase_id=phase_1");
+    expect(execution.split("alignment_overall=partial")).toHaveLength(2);
+    expect(execution).not.toContain("- overall_status:");
+    expect(result.prompts.map((p) => p.prompt_id)).toEqual(["bootstrap_hydration", "phase_planning", "phase_1_execution", "run_all_phases"]);
+  });
   it("normalizes legacy synthesis without a new schema or fabricated facts", () => {
     const legacy = { summary: "old", product_spec: { intent: "Existing outcome", constraints: ["retain data"] }, design: { components: ["Existing module"] } };
     const result = normalizeSynthesis(legacy);
@@ -89,19 +101,23 @@ describe("product-aware planning", () => {
   });
 });
 
-if (process.env.PRODUCT_PLAN_BASELINE_SOURCE) {
+if (process.env.PRODUCT_PLAN_BASELINE_SOURCE || process.env.PRODUCT_PLAN_BASELINE_MODULE) {
   it("replays frozen prior and candidate implementations on the same declared cases", () => {
-    const raw = fs.readFileSync(process.env.PRODUCT_PLAN_BASELINE_SOURCE, "utf8");
-    const ast = ts.createSourceFile("baseline.mjs", raw, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
-    const names = ["deterministicSynthesis", "recommendProfile", "normalizeSynthesis", "buildDeterministicPhasePlan", "buildPromptContextSummary", "buildFollowOnPrompts", "splitCsv", "normalizeStringArray"];
-    const declarations = ast.statements.filter((n) => ts.isFunctionDeclaration(n) && names.includes(n.name?.text));
-    expect(declarations).toHaveLength(names.length);
+    const raw = fs.readFileSync(process.env.PRODUCT_PLAN_BASELINE_MODULE || process.env.PRODUCT_PLAN_BASELINE_SOURCE, "utf8");
     const context = vm.createContext({});
-    vm.runInContext(declarations.map((n) => n.getText(ast)).join("\n") + ";this.api={deterministicSynthesis,buildDeterministicPhasePlan,buildFollowOnPrompts};", context, { timeout: 1000 });
+    if (process.env.PRODUCT_PLAN_BASELINE_MODULE) {
+      vm.runInContext(raw.replace(/^export /gm, "") + ";this.api={deterministicSynthesis,buildDeterministicPhasePlan,buildFollowOnPrompts};", context, { timeout: 1000 });
+    } else {
+      const ast = ts.createSourceFile("baseline.mjs", raw, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+      const names = ["deterministicSynthesis", "recommendProfile", "normalizeSynthesis", "buildDeterministicPhasePlan", "buildPromptContextSummary", "buildFollowOnPrompts", "splitCsv", "normalizeStringArray"];
+      const declarations = ast.statements.filter((n) => ts.isFunctionDeclaration(n) && names.includes(n.name?.text));
+      expect(declarations).toHaveLength(names.length);
+      vm.runInContext(declarations.map((n) => n.getText(ast)).join("\n") + ";this.api={deterministicSynthesis,buildDeterministicPhasePlan,buildFollowOnPrompts};", context, { timeout: 1000 });
+    }
     const rows = cases.map((input) => {
       const prior = run(context.api, input), current = run(candidate, input);
       const before = grade(input, prior), after = grade(input, current);
-      return { id: input.id, before, after, improvements: Object.keys(before).filter((k) => !before[k] && after[k]), regressions: Object.keys(before).filter((k) => before[k] && !after[k]), unchanged: Object.keys(before).filter((k) => before[k] === after[k]), output_bytes: { prior: Buffer.byteLength(JSON.stringify(prior)), current: Buffer.byteLength(JSON.stringify(current)) } };
+      return { id: input.id, before, after, improvements: Object.keys(before).filter((k) => !before[k] && after[k]), regressions: Object.keys(before).filter((k) => before[k] && !after[k]), unchanged: Object.keys(before).filter((k) => before[k] === after[k]), selected_prompt_bytes: current.prompts.map((p, i) => ({ prompt_id: p.prompt_id, prior: Buffer.byteLength(prior.prompts[i].prompt), current: Buffer.byteLength(p.prompt) })), output_bytes: { prior: Buffer.byteLength(JSON.stringify(prior)), current: Buffer.byteLength(JSON.stringify(current)) } };
     });
     expect(rows.every((r) => !r.regressions.length)).toBe(true);
     const report = { schema_version: "product-planning-replay-v1", baseline_source_sha256: crypto.createHash("sha256").update(raw).digest("hex"), candidate_source_sha256: crypto.createHash("sha256").update(fs.readFileSync(new URL("../scripts/product-planning.mjs", import.meta.url))).digest("hex"), cases: rows, dimensions: ["product framing", "architecture assumptions", "integrated baseline", "scope retention", "authority boundaries"], limit: "Synthetic deterministic tool replay; not model comprehension, policy causality or task-cost efficiency" };
