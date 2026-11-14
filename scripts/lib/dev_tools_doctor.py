@@ -96,6 +96,12 @@ def ui_check(root, profile, ui_root, node):
     node = node or shutil.which("node")
     if not node or not ui_root:
         return {"status": "missing_runtime_or_profile", "execution": "not_run"}
+    if not Path(ui_root).is_dir():
+        return {
+            "status": "selected_profile_not_activated_or_unavailable",
+            "execution": "not_run",
+            "first_action": "Inspect the approved cohort receipt and scoped blockers; absence of activation does not establish a missing SDK.",
+        }
     try:
         ui_root = Path(ui_root).resolve()
         env = dict(os.environ)

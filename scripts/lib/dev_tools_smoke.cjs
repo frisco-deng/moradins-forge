@@ -48,7 +48,6 @@ async function stage(id, fn) {
     const r = spawnSync(registry.findExecutable('ffmpeg').executablePath(), ['-version'], { encoding: 'utf8' });
     assert.equal(r.status, 0); assert.match(r.stdout + r.stderr, /ffmpeg version/i);
   });
-  const escape = s => s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;');
-  fs.writeFileSync(path.join(out, 'browsers.xml'), '<testsuite name="native-ui" tests="7" failures="' + stages.filter(s => s.status !== 'pass').length + '">' + stages.map(s => '<testcase name="' + s.id + '">' + (s.status === 'pass' ? '' : '<failure message="' + escape(s.error) + '"/>') + '</testcase>').join('') + '</testsuite>');
+  fs.writeFileSync(path.join(out, 'browsers.xml'), '<testsuite name="native-ui" tests="7" failures="' + stages.filter(s => s.status !== 'pass').length + '">' + stages.map(s => '<testcase name="' + s.id + '">' + (s.status === 'pass' ? '' : '<failure message="See the separate native JSON diagnostics"/>') + '</testcase>').join('') + '</testsuite>');
   console.log(JSON.stringify({ status: stages.every(s => s.status === 'pass') ? 'pass' : 'fail', stages }));
 })().catch(e => { console.error(e.message); process.exitCode = 1; });

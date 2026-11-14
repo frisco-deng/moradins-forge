@@ -28,6 +28,8 @@ include_paths:
   - scripts/lib/dev_tools_catalog.py
   - scripts/lib/dev_tools_doctor.py
   - scripts/lib/dev_tools_ui.py
+  - scripts/lib/dev_tools_runtime.py
+  - scripts/lib/dev_tools_acceptance.py
   - scripts/lib/dev_tools_launcher.py
   - scripts/lib/dev_tools_probe.cjs
   - scripts/lib/dev_tools_smoke.cjs

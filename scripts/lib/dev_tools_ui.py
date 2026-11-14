@@ -1,138 +1,23 @@
-"""Focused UI-cohort actions for Forge's existing tooling entrypoint.
-
-Uses native npm/Playwright acquisition and Forge-owned generation pointers.
-It never installs OS packages, edits project manifests, or changes global Node.
-"""
+"""Focused UI-cohort plans and Forge-owned transaction lifecycle."""
 
 from pathlib import Path
-from urllib.request import urlopen
 import json
 import os
 import platform
-import shutil
-import subprocess
-import tarfile
-import tempfile
-import xml.etree.ElementTree as ET
 import re
-import base64
-
-from dev_tools_catalog import load, save, sha, PAYLOAD, digest
-
-
-def inputs(root):
-    names = PAYLOAD + [
-        n
-        for n in ["scripts/moradin_tooling_suite.py", "scripts/moradin_workstation.py"]
-        if (Path(root) / n).is_file()
-    ]
-    return {name: sha(Path(root) / name) for name in names}
-
-
-def environment(node, cache):
-    # No inherited credentials, npm config, loader options or browser sessions.
-    return {
-        "HOME": str(Path.home()),
-        "PATH": str(Path(node).parent) + ":/usr/bin:/bin",
-        "LANG": "C.UTF-8",
-        "PLAYWRIGHT_BROWSERS_PATH": str(cache),
-        "NPM_CONFIG_USERCONFIG": str(Path(cache).parent / "npm-userconfig"),
-        "NPM_CONFIG_GLOBALCONFIG": str(Path(cache).parent / "npm-globalconfig"),
-        "NPM_CONFIG_REGISTRY": "https://registry.npmjs.org/",
-        "NPM_CONFIG_IGNORE_SCRIPTS": "true",
-    }
-
-
-def npm_configs(env):
-    for key in ["NPM_CONFIG_USERCONFIG", "NPM_CONFIG_GLOBALCONFIG"]:
-        path = Path(env[key])
-        if path.is_symlink() or (path.exists() and path.read_bytes()):
-            raise ValueError("npm_configuration_conflict")
-        if not path.exists():
-            with path.open("x") as stream:
-                stream.write("")
-            path.chmod(0o600)
-
-
-def run(argv, cwd, env, *, timeout=900, log=None):
-    result = subprocess.run(
-        [str(x) for x in argv],
-        cwd=cwd,
-        env=env,
-        text=True,
-        capture_output=True,
-        timeout=timeout,
-    )
-    if log:
-        Path(log).write_text((result.stdout + "\n" + result.stderr)[-100000:])
-        Path(log).chmod(0o600)
-    if result.returncode:
-        raise ValueError(
-            "ui_command_failed:"
-            + Path(str(argv[0])).name
-            + ":"
-            + str(result.returncode)
-        )
-    return result
-
-
-def validate_lock(lock, expected):
-    if (
-        lock.get("lockfileVersion") != 3
-        or lock.get("packages", {}).get("", {}).get("dependencies") != expected
-    ):
-        raise ValueError("ui_lock_direct_requirements_mismatch")
-    for name, row in lock["packages"].items():
-        if not name:
-            continue
-        integrity = row.get("integrity", "")
-        try:
-            encoded = integrity.removeprefix("sha512-")
-            decoded = base64.b64decode(encoded, validate=True)
-            valid_integrity = (
-                integrity.startswith("sha512-")
-                and len(decoded) == 64
-                and base64.b64encode(decoded).decode() == encoded
-            )
-        except (ValueError, TypeError):
-            valid_integrity = False
-        if (
-            not row.get("resolved", "").startswith("https://registry.npmjs.org/")
-            or not valid_integrity
-            or row.get("link")
-        ):
-            raise ValueError("ui_lock_unverified_asset:" + name)
-
-
-def node_archive(asset, destination):
-    destination = Path(destination)
-    if destination.exists():
-        if destination.is_symlink() or sha(destination) != asset["sha256"]:
-            raise ValueError("node_staged_asset_drift")
-        return destination
-    cached = Path(asset.get("cache_path", destination))
-    if cached.exists() and cached != destination:
-        if cached.is_symlink() or sha(cached) != asset["sha256"]:
-            raise ValueError("node_staged_asset_drift")
-        shutil.copyfile(cached, destination)
-        return destination
-    with urlopen(asset["url"], timeout=60) as response:
-        if response.url != asset["url"]:
-            raise ValueError("node_asset_redirect")
-        with destination.open("xb") as stream:
-            shutil.copyfileobj(response, stream)
-    if sha(destination) != asset["sha256"]:
-        raise ValueError("node_asset_hash_mismatch")
-    return destination
-
-
-def extract_node(archive, destination):
-    with tarfile.open(archive) as bundle:
-        prefix = Path(archive).name.removesuffix(".tar.xz")
-        if any(m.name.split("/")[0] != prefix for m in bundle.getmembers()):
-            raise ValueError("node_archive_root_mismatch")
-        bundle.extractall(destination, filter="data")
-    return Path(destination) / prefix
+import shutil
+from dev_tools_catalog import load, inputs, save, sha, digest
+from dev_tools_runtime import (
+    environment,
+    npm_configs,
+    run,
+    validate_lock,
+    node_archive,
+    node_https,
+    extract_node,
+    resolve_lock,
+)
+from dev_tools_acceptance import smoke, junit_count as junit_count
 
 
 def plan(root, profile, output, *, reuse_receipt=None, prior_plan=None):
@@ -145,9 +30,7 @@ def plan(root, profile, output, *, reuse_receipt=None, prior_plan=None):
         raise ValueError("ui_runtime_platform_unverified")
     archive = f"node-v{selected['node']}-linux-{arch}.tar.xz"
     url = f"https://nodejs.org/dist/v{selected['node']}/"
-    with urlopen(url + "SHASUMS256.txt", timeout=20) as response:
-        if response.url != url + "SHASUMS256.txt":
-            raise ValueError("node_checksum_redirect")
+    with node_https(selected["node"], "SHASUMS256.txt") as response:
         checksums = response.read(1024 * 1024).decode()
     matches = [
         line.split()[0]
@@ -223,39 +106,6 @@ def plan(root, profile, output, *, reuse_receipt=None, prior_plan=None):
         "plan_sha256": value["plan_sha256"],
         "profile": profile,
     }
-
-
-def resolve_lock(staged, output, dependencies):
-    with tempfile.TemporaryDirectory(prefix="ui-lock-", dir=output.parent) as temporary:
-        work = Path(temporary)
-        package = {
-            "name": "forge-ui-toolchain",
-            "version": "1.0.0",
-            "private": True,
-            "dependencies": dependencies,
-        }
-        runtime = extract_node(staged, work)
-        node = runtime / "bin/node"
-        (work / "package.json").write_text(json.dumps(package))
-        env = environment(node, work / "unused")
-        npm_configs(env)
-        run(
-            [
-                node,
-                runtime / "lib/node_modules/npm/bin/npm-cli.js",
-                "install",
-                "--package-lock-only",
-                "--ignore-scripts",
-                "--no-audit",
-                "--no-fund",
-            ],
-            work,
-            env,
-            log=output.with_suffix(".resolve.log"),
-        )
-        lock = json.loads((work / "package-lock.json").read_text())
-    validate_lock(lock, dependencies)
-    return package, lock
 
 
 def checked_plan(root, path, approval):
@@ -527,89 +377,3 @@ def rollback(path, expected, native):
     r["state"] = "rolled_back_evidence_retained"
     save(path, r)
     return {"status": r["state"], "receipt_sha256": sha(path)}
-
-
-def junit_count(path):
-    junit = ET.parse(path).getroot()
-    cases = junit.findall(".//testcase")
-    if (
-        not cases
-        or not any(c.find("skipped") is None for c in cases)
-        or junit.findall(".//failure")
-        or junit.findall(".//error")
-    ):
-        raise ValueError("vitest_empty_skipped_or_failed")
-    return sum(c.find("skipped") is None for c in cases)
-
-
-def smoke(root, ui_root, node, output, *, env=None):
-    ui_root, output = Path(ui_root), Path(output)
-    output.mkdir(parents=True, exist_ok=True)
-    env = env or environment(node, ui_root / "browsers")
-    result = run(
-        [node, Path(root) / "scripts/lib/dev_tools_smoke.cjs", ui_root, output],
-        ui_root,
-        env,
-        log=output / "browser-smoke.log",
-    )
-    browser = json.loads(result.stdout)
-    # Native Vitest reports must contain executed passing cases.
-    workspace = output / "vitest-workspace"
-    workspace.mkdir(exist_ok=True)
-    modules = workspace / "node_modules"
-    if modules.exists() or modules.is_symlink():
-        if (
-            not modules.is_symlink()
-            or modules.resolve() != (ui_root / "node_modules").resolve()
-        ):
-            raise ValueError("vitest_workspace_conflict")
-    else:
-        modules.symlink_to(ui_root / "node_modules", target_is_directory=True)
-    tests = workspace / "tooling-smoke"
-    tests.mkdir(exist_ok=True)
-    (tests / "smoke.browser.test.js").write_text(
-        "import {it,expect} from 'vitest'; it('real browser click',()=>{document.body.innerHTML='<button>Go</button><output>waiting</output>';document.querySelector('button').onclick=()=>document.querySelector('output').textContent='clicked';document.querySelector('button').click();expect(document.querySelector('output').textContent).toBe('clicked')});\n"
-    )
-    config = (
-        "import {defineConfig} from 'vitest/config';import {playwright} from '@vitest/browser-playwright';export default defineConfig({server:{host:'127.0.0.1'},test:{include:['tooling-smoke/*.test.js'],reporters:['default','junit'],outputFile:{junit:"
-        + json.dumps(str(output / "vitest.xml"))
-        + "},browser:{enabled:true,provider:playwright(),headless:true,api:{host:'127.0.0.1'},instances:[{browser:'chromium'}]}}});"
-    )
-    config = config.replace(
-        "defineConfig({server:",
-        "defineConfig({cacheDir:" + json.dumps(str(workspace / ".vite")) + ",server:",
-    )
-    (workspace / "tooling-smoke.config.mjs").write_text(config)
-    run(
-        [
-            node,
-            ui_root / "node_modules/vitest/vitest.mjs",
-            "run",
-            "--configLoader",
-            "native",
-            "--config",
-            "tooling-smoke.config.mjs",
-        ],
-        workspace,
-        env,
-        log=output / "vitest.log",
-    )
-    executed = junit_count(output / "vitest.xml")
-    complete = not (
-        browser["status"] != "pass"
-        or len(browser["stages"]) != 7
-        or any(s["status"] != "pass" for s in browser["stages"])
-    )
-    save(
-        output / "execution.json",
-        {
-            "status": "pass" if complete else "partial",
-            "browser": browser,
-            "vitest_executed_cases": executed,
-            "source_sha256": inputs(root),
-            "config_sha256": sha(workspace / "tooling-smoke.config.mjs"),
-        },
-    )
-    if not complete:
-        raise ValueError("ui_browser_execution_incomplete")
-    return {"status": "pass", "receipt": str(output / "execution.json")}

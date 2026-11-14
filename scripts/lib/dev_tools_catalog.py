@@ -77,6 +77,8 @@ PAYLOAD = [
     "scripts/lib/dev_tools_catalog.py",
     "scripts/lib/dev_tools_doctor.py",
     "scripts/lib/dev_tools_ui.py",
+    "scripts/lib/dev_tools_runtime.py",
+    "scripts/lib/dev_tools_acceptance.py",
     "scripts/lib/dev_tools_probe.cjs",
     "scripts/lib/dev_tools_smoke.cjs",
     "scripts/lib/dev_tools_launcher.py",
@@ -176,3 +178,12 @@ def materialize(source, target, *, apply=False):
         else "drift",
         "files": rows,
     }
+
+
+def inputs(root):
+    names = PAYLOAD + [
+        n
+        for n in ["scripts/moradin_tooling_suite.py", "scripts/moradin_workstation.py"]
+        if (Path(root) / n).is_file()
+    ]
+    return {name: sha(Path(root) / name) for name in names}

@@ -3,6 +3,8 @@
 from pathlib import Path
 import copy
 import base64
+import tarfile
+import io
 import json
 import os
 import subprocess
@@ -131,6 +133,19 @@ class Probes(unittest.TestCase):
             self.assertEqual(result["repository"]["versions"]["vitest"], "4.1.12")
             self.assertEqual(catalog.sha(p / "package.json"), before)
 
+    def test_missing_activation_does_not_claim_missing_sdk(self):
+        with (
+            tempfile.TemporaryDirectory() as name,
+            patch.object(doctor.subprocess, "run") as runner,
+        ):
+            result = doctor.ui_check(
+                ROOT, "laneweaver", Path(name) / "not-activated", sys.executable
+            )
+            self.assertEqual(
+                result["status"], "selected_profile_not_activated_or_unavailable"
+            )
+            runner.assert_not_called()
+
     def test_ui_absent_is_not_ready(self):
         self.assertEqual(
             doctor.ui_check(ROOT, "laneweaver", None, None)["status"],
@@ -255,6 +270,18 @@ class Locks(unittest.TestCase):
             p.write_text("<testsuites><testsuite><testcase/></testsuite></testsuites>")
             self.assertEqual(ui.junit_count(p), 1)
 
+    def test_dtd_entities_and_oversized_junit_are_rejected(self):
+        with tempfile.TemporaryDirectory() as name:
+            p = Path(name) / "junit.xml"
+            p.write_text(
+                '<!DOCTYPE testsuite [<!ENTITY x SYSTEM "file:///etc/passwd">]><testsuite><testcase>&x;</testcase></testsuite>'
+            )
+            with self.assertRaisesRegex(ValueError, "dtd_or_entity"):
+                ui.junit_count(p)
+            p.write_bytes(b" " * (512 * 1024 + 1))
+            with self.assertRaisesRegex(ValueError, "read_bound"):
+                ui.junit_count(p)
+
     def test_existing_plan_is_not_replaced(self):
         with tempfile.TemporaryDirectory() as name:
             p = Path(name) / "plan.json"
@@ -269,6 +296,60 @@ class Locks(unittest.TestCase):
             p.write_bytes(b"changed")
             with self.assertRaisesRegex(ValueError, "asset_drift"):
                 ui.node_archive({"sha256": "0" * 64}, p)
+
+    def test_explicit_archive_paths_and_links_are_bounded(self):
+        with tempfile.TemporaryDirectory() as name:
+            base = Path(name)
+            archive = base / "node-v1.0.0-linux-x64.tar.xz"
+            for path, link in [
+                ("node-v1.0.0-linux-x64/../../outside", None),
+                ("node-v1.0.0-linux-x64/link", "/etc/passwd"),
+            ]:
+                with tarfile.open(archive, "w:xz") as bundle:
+                    member = tarfile.TarInfo(path)
+                    if link:
+                        member.type = tarfile.SYMTYPE
+                        member.linkname = link
+                        bundle.addfile(member)
+                    else:
+                        member.size = 3
+                        bundle.addfile(member, io.BytesIO(b"bad"))
+                target = base / "target"
+                target.mkdir(exist_ok=True)
+                with self.assertRaisesRegex(ValueError, "node_archive"):
+                    ui.extract_node(archive, target)
+            self.assertFalse((base / "outside").exists())
+
+    def test_official_transport_rejects_file_scheme_before_request(self):
+        with tempfile.TemporaryDirectory() as name:
+            with self.assertRaisesRegex(ValueError, "source_mismatch"):
+                ui.node_archive(
+                    {
+                        "url": "file:///etc/passwd",
+                        "archive": "node-v24.19.0-linux-x64.tar.xz",
+                        "sha256": "0" * 64,
+                    },
+                    Path(name) / "new-archive",
+                )
+
+    def test_regular_archive_and_internal_symlink_extract_and_reuse(self):
+        with tempfile.TemporaryDirectory() as name:
+            base = Path(name)
+            archive = base / "node-v1.0.0-linux-x64.tar.xz"
+            with tarfile.open(archive, "w:xz") as bundle:
+                member = tarfile.TarInfo("node-v1.0.0-linux-x64/bin/node")
+                member.size = 4
+                member.mode = 0o755
+                bundle.addfile(member, io.BytesIO(b"test"))
+                link = tarfile.TarInfo("node-v1.0.0-linux-x64/bin/alias")
+                link.type = tarfile.SYMTYPE
+                link.linkname = "node"
+                bundle.addfile(link)
+            target = base / "target"
+            target.mkdir()
+            runtime = ui.extract_node(archive, target)
+            self.assertEqual((runtime / "bin/alias").read_bytes(), b"test")
+            self.assertEqual(ui.extract_node(archive, target), runtime)
 
     def test_wrong_approval_rejected_before_any_mutation(self):
         with tempfile.TemporaryDirectory() as name:
