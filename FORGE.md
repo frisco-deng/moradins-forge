@@ -24,7 +24,9 @@ If the user sent you here as Codex, Claude Code, or another coding agent:
    - it will not patch root workflow files by default,
    - it will not inspect outside approved workspace roots,
    - an agent will not invoke privileged installation or enter credentials.
-5. Ask the user for explicit consent before running any apply command.
+5. Require explicit consent for the target, write scope and each protected
+   operation. Reuse consent already supplied in this task; ask only for scope
+   not yet approved. Keep exact tooling-digest and provider-file approvals.
 6. After consent, Forge may execute verified user-level installers. Adaptive
    privileged work is emitted as a reviewable script for the user to run. The
    separate human-run Linux suite may request sudo only after the user reviews
@@ -84,12 +86,12 @@ make verify-fast
 make review-ready
 ```
 
-Use `tpl context-primer --repo moradins-forge --concern auto --detail compact`
-after a new session, compaction, long resume, or repeated broad reads. Prefer
-current summaries and named artifacts before reopening source or long logs. Use
-`tpl session-supervisor --mode steering-advisory --watch --live --latest-session --repo moradins-forge`
-when work starts looping, and `tpl rerun-advice moradins-forge -- <command>`
-before repeating long deterministic commands. Use the Python route reported by
+Use `scripts/moradin_forge.sh context-primer --target .` after a new session,
+compaction, long resume, or repeated broad reads. Prefer current summaries and
+named artifacts before reopening source or long logs. Use the standalone
+`diagnostic-brief` and `rerun-advice --target . -- <command>` routes when work
+starts looping. Recovery stays bound to the current target and task; global
+latest-session selection is diagnostic only. Use the Python route reported by
 `make repo-brief`; Forge is a `uv` repo and raw `python` is not the runtime
 contract.
 
@@ -123,3 +125,7 @@ evidence must not contain raw home paths, usernames, hostnames, Windows user
 paths, WSL UNC paths, Codex session paths, SSH clone URLs, raw temp paths, or
 machine-origin markers. Use placeholders such as `<forge-root>`,
 `<target-repo>`, `<temp-dir>`, and `<workbench-port>`.
+
+Use [the current execution contract](docs/11_ops/codex_run_loop.md) for stage
+prerequisites, integration and recovery. Optional shared commands require an
+installed deck; the portable first route remains `make repo-brief`.

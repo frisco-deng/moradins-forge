@@ -25,6 +25,9 @@ from typing import Any, Callable, Iterable, Iterator, Sequence
 
 try:
     from scripts import public_export
+    from scripts.moradin_airgap_archive import resolve_pacman_archive
+    from scripts.moradin_airgap_preflight import qualification_preflight as qualification_preflight
+    from scripts.moradin_airgap_evidence import create_failure, finish_cleanup, build_workspace
     from scripts.moradin_tooling_suite import (
         BOOTSTRAP_UV_BINARY_SHA256,
         BOOTSTRAP_UV_VERSION,
@@ -64,6 +67,9 @@ try:
     )
 except ModuleNotFoundError:  # pragma: no cover - direct script execution
     import public_export  # type: ignore[no-redef]
+    from moradin_airgap_archive import resolve_pacman_archive
+    from moradin_airgap_preflight import qualification_preflight as qualification_preflight
+    from moradin_airgap_evidence import create_failure, finish_cleanup, build_workspace
     from moradin_tooling_suite import (  # type: ignore[no-redef]
         BOOTSTRAP_UV_BINARY_SHA256,
         BOOTSTRAP_UV_VERSION,
@@ -1348,21 +1354,47 @@ def _download_previous_pacman_package(
     *,
     package: str,
     version: str,
+    package_arch: str,
     output: Path,
     runner: Callable[..., subprocess.CompletedProcess[str]],
 ) -> tuple[Path, Path]:
+    if package_arch not in {"x86_64", "aarch64", "any"}:
+        raise AirgapError("rollback Pacman package architecture is unavailable")
+    # -Sw resolves the current sync version, not the target's installed version.
+    # Bind the remote archive filename exactly; metadata and signatures still
+    # have to prove the requested identity before anything enters the kit.
+    filename_version = version
+    if ":" in version:
+        epoch, filename_version = version.split(":", 1)
+        if not epoch.isdecimal() or ":" in filename_version:
+            raise AirgapError("rollback Pacman version epoch is malformed")
+    if not re.fullmatch(r"[A-Za-z0-9@._+-]+", package) or not filename_version or any(c in filename_version for c in "/\\"):
+        raise AirgapError("rollback Pacman archive identity is malformed")
+    # Current package architecture does not establish the installed version's
+    # architecture (tzdata moved from x86_64 to any). Resolve the finite compatible
+    # archive identities before downloading; never retry a failed installation.
+    # Frozen Arch requests currently support amd64 only; retain the private
+    # helper's explicit aarch64 identity without selecting a different native ISA.
+    native_arch = "aarch64" if package_arch == "aarch64" else "x86_64"
+    try:
+        url, archive_arch = resolve_pacman_archive(
+            package, filename_version, native_arch,
+            run=lambda argv, **kwargs: _run(argv, runner=runner, **kwargs),
+        )
+    except ValueError as error:
+        raise AirgapError(str(error)) from error
     with _pacman_download_cache(runner=runner) as cache:
         result = _run(
             [
                 "pacman",
-                "-Sw",
+                "-Uw",
                 "--nodeps",
                 "--nodeps",
                 "--cachedir",
                 cache.as_posix(),
                 "--noconfirm",
                 "--",
-                package,
+                url,
             ],
             runner=runner,
             timeout=900,
@@ -1382,14 +1414,14 @@ def _download_previous_pacman_package(
         source_signature = source.with_name(source.name + ".sig")
         if not source_signature.is_file() or source_signature.is_symlink():
             raise AirgapError(
-                f"rollback package does not match {package} at {version}"
+                f"rollback Pacman signature is missing: {package} at {version}"
             )
         fields = _pacman_package_fields(
             source,
-            ["pkgname", "pkgver"],
+            ["pkgname", "pkgver", "arch"],
             runner=runner,
         )
-        if fields != [package, version]:
+        if fields != [package, version, archive_arch]:
             raise AirgapError(
                 f"rollback package does not match {package} at {version}"
             )
@@ -1419,6 +1451,7 @@ def _download_previous_package(
     package: str,
     version: str,
     output: Path,
+    package_arch: str = "",
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> tuple[Path, Path | None]:
     output.mkdir(parents=True, exist_ok=False)
@@ -1447,6 +1480,7 @@ def _download_previous_package(
         return _download_previous_pacman_package(
             package=package,
             version=version,
+            package_arch=package_arch,
             output=output,
             runner=runner,
         )
@@ -1533,6 +1567,7 @@ def _attach_rollback_closure(
                 manager=manager,
                 package=str(record["package"]),
                 version=previous,
+                package_arch=str(record["arch"]),
                 output=Path(temporary) / "download",
                 runner=runner,
             )
@@ -2009,12 +2044,29 @@ def run_target_builder(
         "/request/request.json",
         "/output/target-payload",
     ]
-    result = _run(argv, runner=runner, timeout=7200)
+    try:
+        result = _run(argv, runner=runner, timeout=7200)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        destination, receipt = create_failure(forge_root, request, image, engine, error=error)
+        # No execution result exists: leave uncertain output for explicit reconciliation.
+        receipt["cleanup"] = {"status": "not_attempted", "reason": "execution_outcome_uncertain"}
+        write_json(destination / "receipt.json", receipt)
+        uncertain = AirgapError(f"rootless target builder outcome uncertain; failure evidence: {destination}")
+        uncertain.preserve_workspace = True
+        raise uncertain from error
     if result.returncode != 0:
-        if output.is_dir() and not output.is_symlink():
-            shutil.rmtree(output)
-        detail = result.stderr.strip().splitlines()[-1] if result.stderr.strip() else ""
-        raise AirgapError(f"rootless target builder failed: {detail or 'unknown error'}")
+        destination, receipt = create_failure(forge_root, request, image, engine, result=result)
+        cleanup_error = None
+        try:
+            if output.is_dir() and not output.is_symlink():
+                shutil.rmtree(output)
+        except OSError as error:
+            cleanup_error = error
+        finish_cleanup(destination, receipt, cleanup_error)
+        raise AirgapError(
+            f"rootless target builder failed (exit {result.returncode}); "
+            f"failure evidence: {destination}; cleanup={receipt['cleanup']['status']}"
+        )
     payload_root = output / "target-payload"
     resolved = _load_json_record(
         payload_root / "resolved.json",
@@ -2451,10 +2503,7 @@ def build_airgap_bundle_from_request(
     request = load_airgap_request(request_path, forge_root=forge_root)
     source_sha = assert_clean_public_forge(forge_root)
     output.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(
-        prefix="moradin-airgap-build-",
-        dir=output.parent,
-    ) as temporary:
+    with build_workspace(output.parent) as temporary:
         work = Path(temporary)
         builder_root = work / "builder"
         target_builder(
@@ -3388,6 +3437,8 @@ def _git_output(
 
 
 def assert_clean_public_forge(forge_root: Path) -> str:
+    if Path(_git_output(forge_root, ["rev-parse", "--show-toplevel"])).resolve() != forge_root.resolve():
+        raise AirgapError("air-gap source must be the canonical repository root")
     head = _git_output(forge_root, ["rev-parse", "HEAD"])
     if not re.fullmatch(r"[0-9a-f]{40}", head):
         raise AirgapError("Forge source commit is malformed")

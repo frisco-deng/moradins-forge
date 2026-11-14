@@ -185,8 +185,37 @@ instruction surfaces: [GitHub Copilot repository instructions](https://docs.gith
 
 ## Failure and Recovery
 
-If build fails, its temporary tree is removed and no complete status is
-written. If target validation fails before sudo, no installation occurs. A
+Native qualification calls `airgap-build --preflight --target-image <exact-pin>
+--target-platform <platform> --output <receipt.json>` before provisioning the
+disposable consumer. It checks the canonical clean public source and existing
+rootless Podman, preserves exact registered digests and returns a fully qualified
+image name. A missing local image is named as an authorised qualification pull,
+not permission to alter registry configuration or install a runtime. Readiness
+is not qualification acceptance; the disconnected lifecycle must still pass.
+
+Failed rootless builds retain private diagnostic receipts under
+`artifacts/airgap-failures/<attempt-id>/` outside the disposable build tree.
+Receipts bind the request, target, pinned image and available engine identity;
+bounded redacted stdout/stderr retain their hashes and truncation status.
+Build failure and cleanup failure have separate statuses. Partial output never
+becomes an accepted payload. An uncertain timeout retains its output for
+reconciliation rather than treating cleanup as proof of execution failure.
+The hosted qualification job emits these redacted diagnostics on failure.
+Pacman rollback preparation retrieves the exact installed version from the
+official archive using download-only URL mode, rather than selecting the current
+sync version. Epochs remain part of the verified version identity; archive
+filenames omit the epoch. Package name, full version, architecture and detached
+signature must all verify before copying a rollback asset into the kit.
+Current package architecture does not establish an older version's architecture.
+Preparation reads the bounded official package index, requires one exact compatible
+archive name (native or `any`), then downloads and verifies that identity. Redirects
+from missing package URLs do not establish existence or authorize fallback hosts.
+Missing, conflicting or unavailable discovery fails without an installation retry.
+The existing private `alpm` cache and download sandbox remain enabled. No package
+is installed by this preparation step. See the
+[Pacman upgrade/download-only contract](https://man.archlinux.org/man/pacman.8.en).
+No complete build status is written on failure. If target validation fails
+before sudo, no installation occurs. A
 partial apply automatically rolls back safely reversible root, user, uv, and
 managed-Python changes; ambiguous shared package dependencies are retained and
 reported instead of autoremove or configuration purge.

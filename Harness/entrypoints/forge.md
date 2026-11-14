@@ -13,8 +13,8 @@ without breaking that repo's current workflows.
 2. Ask the user to run `./install/tooling-suite.sh`; the agent explains and
    verifies, while the user owns every interactive and sudo approval.
 3. Read `FORGE.md`, `README.md`, and this entrypoint.
-4. Ask the user which workspace roots Forge may inspect and which agent
-   providers they use.
+4. Recover approved workspace roots and agent providers; ask only for missing
+   scope rather than repeating consent already supplied in the current task.
 5. Run `scripts/moradin_forge.sh onboard --workspace <workspace-root>` and show
    the discovered repositories before broader inspection.
 6. Inspect only standard guidance, manifest, CI, container, and deployment
@@ -22,8 +22,9 @@ without breaking that repo's current workflows.
    rollback.
 7. Show each fixed-path provider proposal and ask separately before that file
    is created or patched.
-8. Ask for explicit, scoped user consent before applying tools or repository
-   changes. For a complete Linux baseline, offer `install/tooling-suite.sh` and
+8. Require explicit, scoped user consent before applying tools or repository
+   changes; reuse existing consent for the accepted scope. Exact tooling-digest
+   and provider-file approvals remain binding. For a complete Linux baseline, offer `install/tooling-suite.sh` and
    require the human to launch and approve it personally.
 9. Run `scripts/moradin_forge.sh plan --target <target-repo>` or the PowerShell
    wrapper to produce a dry-run plan.

@@ -1,3 +1,4 @@
+# Canonical shared source; Moradin receives a generated, standalone copy.
 schema_version = 1
 
 # One public catalog drives adaptive recommendations, the interactive Linux
@@ -922,3 +923,43 @@ category = "specialized-service"
 reason = "STIG and RKE2 controls requiring a dedicated operator runbook"
 manual_only = true
 service_impact = true
+
+[validated_versions]
+actionlint = "1.7.11"
+hadolint = "2.14.0"
+conftest = "0.66.0"
+act = "0.2.84"
+cosign = "3.0.5"
+scorecard = "5.4.0"
+trivy = "0.69.3"
+uv = "0.10.12"
+zizmor = "1.23.1"
+semgrep = "1.156.0"
+pip_audit = "2.10.0"
+syft = "1.42.3"
+grype = "0.110.0"
+osv_scanner = "2.3.3"
+kubectl = "1.35.3"
+kind = "0.31.0"
+helm = "4.1.3"
+kubeconform = "0.7.0"
+sops = "3.12.2"
+just = "1.47.1"
+watchexec = "2.5.0"
+maestro = "2.6.1"
+
+[ui_profiles.laneweaver]
+node = "24.19.0"
+playwright = "1.62.0"
+vitest = "4.1.10"
+provider = "4.1.10"
+axe = "4.14.0"
+browsers = ["chromium", "firefox", "webkit"]
+
+[ui_profiles.moradin_legacy]
+node = "24.19.0"
+playwright = "1.58.2"
+vitest = "4.1.12"
+provider = "4.1.12"
+axe = "4.14.0"
+browsers = ["chromium", "firefox", "webkit"]

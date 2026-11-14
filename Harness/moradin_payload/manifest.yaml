@@ -24,6 +24,17 @@ include_paths:
   - pyproject.toml
   - uv.lock
   - catalog/workstation-tools.toml
+  - scripts/setup-dev-tools
+  - scripts/lib/dev_tools_catalog.py
+  - scripts/lib/dev_tools_doctor.py
+  - scripts/lib/dev_tools_ui.py
+  - scripts/lib/dev_tools_runtime.py
+  - scripts/lib/dev_tools_acceptance.py
+  - scripts/lib/dev_tools_launcher.py
+  - scripts/lib/dev_tools_probe.cjs
+  - scripts/lib/dev_tools_smoke.cjs
+  - catalog/templates-tooling-source.json
+  - tests/scripts/test_shared_dev_tools.py
   - Harness/moradin_payload/manifest.yaml
   - docs/engineer_entry
   - docs/00_overview
@@ -52,6 +63,9 @@ include_paths:
   - scripts/moradin_workstation.py
   - scripts/moradin_tooling_suite.py
   - scripts/moradin_airgap.py
+  - scripts/moradin_airgap_archive.py
+  - scripts/moradin_airgap_preflight.py
+  - scripts/moradin_airgap_evidence.py
   - scripts/moradin_airgap_request.py
   - scripts/moradin_airgap_bootstrap.py
   - scripts/generate_readme_figures.py
@@ -81,6 +95,8 @@ include_paths:
   - tests/scripts/test_moradin_workstation.py
   - tests/scripts/test_moradin_tooling_suite.py
   - tests/scripts/test_moradin_airgap.py
+  - tests/scripts/test_moradin_airgap_preflight.py
+  - tests/scripts/test_moradin_airgap_evidence.py
   - tests/scripts/test_moradin_airgap_bootstrap.py
   - tests/scripts/airgap_kit_lifecycle.sh
   - tests/scripts/tooling_suite_distro_smoke.sh

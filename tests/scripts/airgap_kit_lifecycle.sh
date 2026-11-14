@@ -21,6 +21,14 @@ target_image=${TARGET_IMAGE:?TARGET_IMAGE is required}
 target_platform=${TARGET_PLATFORM:?TARGET_PLATFORM is required}
 target_kind=${TARGET_KIND:?TARGET_KIND is required}
 scratch_root=$(mktemp -d "${RUNNER_TEMP:-/tmp}/moradin-airgap-qualification.XXXXXXXX")
+(
+	cd "$forge_root"
+	"$uv_command" run python scripts/moradin_tooling_suite.py --forge-root "$forge_root" \
+		airgap-build --preflight --target-image "$target_image" \
+		--target-platform "$target_platform" --output "$scratch_root/preflight.json" >/dev/null
+)
+target_image=$("$uv_command" run --project "$forge_root" python -c \
+	'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["target_image"])' "$scratch_root/preflight.json")
 container_name=moradin-airgap-${target_kind}-${target_platform##*/}-$$
 consumer_home=/var/lib/moradin-consumer
 

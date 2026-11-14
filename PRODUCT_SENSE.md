@@ -10,6 +10,8 @@ any root workflow patch.
 
 Product references:
 
+- Use the [current product framing and execution contract](docs/11_ops/codex_run_loop.md#current-working-baseline-contract)
+  to ground the user journey and baseline acceptance before component choices.
 - `README.md`
 - `FORGE.md`
 - `docs/product_specs/index.md`

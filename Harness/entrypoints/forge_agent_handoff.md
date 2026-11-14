@@ -42,3 +42,10 @@ scripts/moradin_forge.sh onboard --workspace <approved-workspace>
 For disconnected Linux, follow docs/11_ops/air_gapped_tooling_suite.md and use
 onboard --offline only after exact kit verification and offline apply.
 ```
+
+## Accepted Scope And Product Delivery
+
+Reuse explicit consent already supplied for the current target and write scope.
+Ask only for unapproved scope; retain exact tooling-digest, provider-file,
+privileged-operation and promotion approvals. Product framing, dependency impact
+and staged delivery follow the [current run loop](../../docs/11_ops/codex_run_loop.md).

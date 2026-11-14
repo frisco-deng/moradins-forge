@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import subprocess
 
 import pytest
 
@@ -32,6 +33,25 @@ from scripts.moradin_forge import (
     write_upgrade_plan_artifacts,
     write_install_request_artifacts,
 )
+
+
+def test_real_payload_carries_product_planning_and_current_routes(tmp_path: Path) -> None:
+    source = Path(__file__).resolve().parents[2]
+    sidecar = tmp_path / "sidecar"
+    copy_payload_to_sidecar(source, sidecar)
+    guide = sidecar / "docs/11_ops/codex_run_loop.md"
+    assert guide.is_file()
+    for name in ["PRODUCT_SENSE.md", "ARCHITECTURE.md", "PLANS.md"]:
+        assert "docs/11_ops/codex_run_loop.md" in (sidecar / name).read_text()
+    code = '''import {deterministicSynthesis,buildDeterministicPhasePlan} from './dev_tracker/ui/scripts/product-planning.mjs';
+const session={intake:{project_goal:'Export local reports',users:'operators',deployment_target:'CLI',constraints:'offline only'},answers:{}};
+session.synthesis=deterministicSynthesis(session);
+console.log(JSON.stringify(buildDeterministicPhasePlan({session,targetRepo:'fixture',workflowType:'new_project'})));'''
+    run = subprocess.run(["node", "--input-type=module", "-e", code], cwd=sidecar, text=True, capture_output=True, check=True)
+    plan = json.loads(run.stdout)
+    assert "Export local reports" in plan["phases"][0]["objective"]
+    assert "offline only" in json.dumps(plan)
+    assert plan["next_recommended_phase_id"] == "phase_1"
 
 
 def write(path: Path, content: str = "ok\n") -> None:

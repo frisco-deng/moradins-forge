@@ -17,8 +17,10 @@ run onboarding with `--offline`.
 
 ## Change Rules
 
-1. Read `README.md`, `FORGE.md`, `AGENTS.md`, and
-   `Harness/entrypoints/forge.md`.
+1. For Forge maintenance, use `README.md`, `AGENTS.md` and the matching concern
+   contract. For target adoption, also read `FORGE.md`,
+   `Harness/entrypoints/forge.md` and the target's own guidance. Refresh changed
+   or newly applicable sources; reuse unchanged evidence.
 2. Inspect the target repo before proposing adoption.
 3. Prefer deterministic Forge commands over ad hoc shell chains.
 4. Build an adaptive tooling plan from user-approved workspace roots.

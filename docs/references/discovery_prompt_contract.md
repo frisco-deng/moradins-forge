@@ -43,3 +43,21 @@ Define stable prompt and output-shape requirements for discovery question and sy
 ## Fallback Rule
 
 If configured LLM backend is unavailable or response validation fails, deterministic local synthesis is mandatory.
+
+## Product-Aware Planning
+
+Retain the existing synthesis fields and saved-session contracts. Ground the
+product intent, users, constraints and declared integrations in supplied facts;
+name missing evidence and its affected decision instead of using answer counts.
+Unrelated responses do not become product constraints. Existing answer records
+remain available for targeted review.
+
+New phase plans retain `phase_1`, `phase_2` and `phase_3`: working product baseline,
+normal-path integration/repeatability, then automation and target-driven
+refinement. These are dependency-aware slices of the accepted product, not
+automatic services, branches or new approval gates. Existing discovery/adoption
+approval and protected operations remain binding; old generated artifacts retain
+their historical scope and are not silently rewritten.
+
+Follow-on prompt IDs remain stable. Native entrypoints wire the pure planning
+module; generation cannot execute a plan, approve adoption or change a model.
