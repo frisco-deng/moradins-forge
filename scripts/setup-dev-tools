@@ -1,0 +1,246 @@
+#!/usr/bin/env python3
+"""Audit-first developer setup; privileged work stays in the existing Forge suite."""
+
+from pathlib import Path
+import argparse
+import json
+import os
+import subprocess
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts/lib"))
+from dev_tools_catalog import load, materialize  # noqa: E402 - portable checkout bootstrap
+from dev_tools_doctor import doctor  # noqa: E402 - portable checkout bootstrap
+from dev_tools_ui import plan, apply, verify, rollback, smoke  # noqa: E402 - portable checkout bootstrap
+
+
+def native():
+    if not (ROOT / "scripts/moradin_tooling_suite.py").is_file():
+        raise ValueError(
+            "installation_requires_portable_forge_payload; use --forge-root with an existing Forge checkout"
+        )
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import moradin_tooling_suite
+
+    return moradin_tooling_suite
+
+
+def main(argv=None):
+    os.umask(0o077)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "action",
+        nargs="?",
+        default="guided",
+        choices=[
+            "guided",
+            "doctor",
+            "plan",
+            "apply",
+            "verify",
+            "rollback",
+            "ui-plan",
+            "ui-apply",
+            "ui-verify",
+            "ui-rollback",
+            "ui-smoke",
+            "materialize",
+            "install-launcher",
+            "launcher-rollback",
+        ],
+    )
+    parser.add_argument("--forge-root", type=Path)
+    parser.add_argument("--ui-profile", choices=tuple(load(ROOT)["ui_profiles"]))
+    parser.add_argument("--ui-root", type=Path)
+    parser.add_argument("--node", type=Path)
+    parser.add_argument("--repo-root", type=Path)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--plan", type=Path)
+    parser.add_argument("--approve-plan-sha256")
+    parser.add_argument("--receipt", type=Path)
+    parser.add_argument("--reuse-receipt", type=Path)
+    parser.add_argument("--prior-plan", type=Path)
+    parser.add_argument("--approve-receipt-sha256")
+    parser.add_argument("--target-root", type=Path)
+    parser.add_argument("--destination", type=Path)
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    args, rest = parser.parse_known_args(argv)
+    if args.forge_root and args.action != "materialize":
+        target = args.forge_root.resolve() / "scripts/setup-dev-tools"
+        if not target.is_file() or target.resolve() == Path(__file__).resolve():
+            raise ValueError("invalid_forge_delegate")
+        forwarded = list(argv or sys.argv[1:])
+        index = forwarded.index("--forge-root")
+        del forwarded[index : index + 2]
+        return subprocess.run([sys.executable, str(target), *forwarded]).returncode
+    if args.action in ("plan", "apply", "verify", "rollback"):
+        native()
+        # Preserve native plan/apply/receipt flags, rather than reinterpret them.
+        forwarded = list(argv or sys.argv[1:])
+        index = forwarded.index(args.action)
+        del forwarded[index]
+        return subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts/moradin_tooling_suite.py"),
+                *(["--json"] if args.json else []),
+                args.action,
+                *[x for x in forwarded if x != "--json"],
+            ]
+        ).returncode
+    if rest:
+        parser.error("unrecognized arguments: " + " ".join(rest))
+
+    def need(*names):
+        for name in names:
+            if getattr(args, name) is None:
+                parser.error("--" + name.replace("_", "-") + " is required")
+
+    if args.action == "materialize":
+        need("target_root")
+        result = materialize(ROOT, args.target_root, apply=args.apply)
+    elif args.action == "ui-plan":
+        need("ui_profile", "output")
+        native()
+        result = plan(
+            ROOT,
+            args.ui_profile,
+            args.output,
+            reuse_receipt=args.reuse_receipt,
+            prior_plan=args.prior_plan,
+        )
+    elif args.action == "ui-apply":
+        need("plan", "approve_plan_sha256")
+        result = apply(ROOT, args.plan, args.approve_plan_sha256, native())
+    elif args.action == "ui-verify":
+        need("receipt")
+        result = verify(args.receipt)
+    elif args.action == "ui-rollback":
+        need("receipt", "approve_receipt_sha256")
+        result = rollback(args.receipt, args.approve_receipt_sha256, native())
+    elif args.action == "ui-smoke":
+        need("ui_root", "node", "output")
+        result = smoke(ROOT, args.ui_root, args.node, args.output)
+    elif args.action == "install-launcher":
+        from dev_tools_launcher import install
+
+        result = install(ROOT, native(), args.destination)
+    elif args.action == "launcher-rollback":
+        from dev_tools_launcher import rollback as rollback_launcher
+
+        need("receipt", "approve_receipt_sha256")
+        result = rollback_launcher(args.receipt, args.approve_receipt_sha256, native())
+    else:
+        ui_root = args.ui_root
+        if args.ui_profile and not ui_root:
+            ui_root = (
+                Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+                / "moradins-forge/ui"
+                / args.ui_profile
+            )
+        node = args.node
+        if ui_root and not node and ui_root.is_dir():
+            runtimes = list(ui_root.glob("node-v*/bin/node"))
+            node = runtimes[0] if len(runtimes) == 1 else None
+        result = doctor(
+            ROOT,
+            profile=args.ui_profile,
+            ui_root=ui_root,
+            node=node,
+            repo_root=args.repo_root,
+        )
+        if args.action == "guided" and sys.stdin.isatty():
+            print(json.dumps(result["summary"], indent=2))
+            print(
+                "1: existing host tooling setup; 2: selected UI cohort; Enter: audit only",
+                file=sys.stderr,
+            )
+            choice = input("Select: ").strip()
+            if choice == "1":
+                native()
+                return subprocess.run(
+                    [str(ROOT / "install/tooling-suite.sh")]
+                ).returncode
+            if choice == "2":
+                if not args.ui_profile:
+                    profiles = list(load(ROOT)["ui_profiles"])
+                    print(
+                        "Available UI profiles: " + ", ".join(profiles), file=sys.stderr
+                    )
+                    args.ui_profile = input("UI profile: ").strip()
+                    if args.ui_profile not in profiles:
+                        raise ValueError("unknown_ui_profile")
+                output = (
+                    args.output
+                    or Path.home()
+                    / ".local/state/moradins-forge/ui"
+                    / ("selected-plan-" + __import__("uuid").uuid4().hex + ".json")
+                )
+                result = plan(ROOT, args.ui_profile, output)
+                print(json.dumps(result, indent=2))
+                if (
+                    input("Apply this exact displayed plan? [y/N] ").strip().lower()
+                    == "y"
+                ):
+                    result = apply(ROOT, output, result["plan_sha256"], native())
+    if args.action in ("doctor", "guided") and not args.json:
+        print("Developer tools: " + result["status"])
+        print(json.dumps(result["summary"], sort_keys=True))
+        print(
+            "UI: "
+            + result["ui"]["status"]
+            + "; functional proof and upstream freshness remain separate."
+        )
+        print("Full inventory: setup-dev-tools doctor --json")
+    else:
+        print(json.dumps(result, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    # Installed snapshots retain portable read-only checks and delegate native writes explicitly.
+    origin = ROOT / "scripts/forge-root.json"
+    if (
+        origin.exists()
+        and "--forge-root" not in sys.argv
+        and (
+            len(sys.argv) == 1
+            or any(
+                x in sys.argv[1:]
+                for x in [
+                    "guided",
+                    "plan",
+                    "apply",
+                    "verify",
+                    "rollback",
+                    "ui-plan",
+                    "ui-apply",
+                    "ui-rollback",
+                    "install-launcher",
+                ]
+            )
+        )
+    ):
+        sys.argv.extend(["--forge-root", json.loads(origin.read_text())])
+    try:
+        raise SystemExit(main())
+    except (
+        ValueError,
+        RuntimeError,
+        OSError,
+        KeyError,
+        subprocess.SubprocessError,
+    ) as error:
+        print(
+            json.dumps(
+                {
+                    "status": "unavailable_or_conflict",
+                    "reason": str(error),
+                    "whole_operation_success": False,
+                }
+            ),
+            file=sys.stderr,
+        )
+        raise SystemExit(2)

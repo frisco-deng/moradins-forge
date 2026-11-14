@@ -41,6 +41,12 @@ then a human-approved digest enters the sealed root phase. Receipts and
 rollback follow installation; agent-file links have a separate consent
 boundary. This is an architecture explanation, not a quantitative claim.
 
+### Developer Tool Audit
+
+Use `scripts/setup-dev-tools doctor --json` to audit installed tools and optional
+UI cohorts. The [developer setup runbook](docs/11_ops/setup_dev_tools.md) explains
+the audit-first launcher, isolated browser profiles and existing installation gates.
+
 ### Air-Gapped Alternative
 
 The complete offline path is target-specific: create a sanitized request on

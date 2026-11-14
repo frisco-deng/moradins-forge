@@ -102,6 +102,14 @@ INSTALLER_FILES = (
     Path("scripts/moradin_tooling_suite.py"),
     Path("scripts/moradin_workstation.py"),
     Path("catalog/workstation-tools.toml"),
+    Path("scripts/setup-dev-tools"),
+    Path("scripts/lib/dev_tools_catalog.py"),
+    Path("scripts/lib/dev_tools_doctor.py"),
+    Path("scripts/lib/dev_tools_ui.py"),
+    Path("scripts/lib/dev_tools_launcher.py"),
+    Path("scripts/lib/dev_tools_probe.cjs"),
+    Path("scripts/lib/dev_tools_smoke.cjs"),
+    Path("catalog/templates-tooling-source.json"),
 )
 ROOT_RUNNER_BOOTSTRAP = r"""
 import hashlib
@@ -123,6 +131,14 @@ FILES = (
     "scripts/moradin_tooling_suite.py",
     "scripts/moradin_workstation.py",
     "catalog/workstation-tools.toml",
+    "scripts/setup-dev-tools",
+    "scripts/lib/dev_tools_catalog.py",
+    "scripts/lib/dev_tools_doctor.py",
+    "scripts/lib/dev_tools_ui.py",
+    "scripts/lib/dev_tools_launcher.py",
+    "scripts/lib/dev_tools_probe.cjs",
+    "scripts/lib/dev_tools_smoke.cjs",
+    "catalog/templates-tooling-source.json",
 )
 if len(sys.argv) < 7:
     raise SystemExit("root runner bootstrap arguments are incomplete")

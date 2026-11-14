@@ -1052,3 +1052,16 @@ def test_bootstrap_rollback_removes_only_owned_unchanged_state(
         / airgap.sha256_file(python_manifest)
     ).exists()
     assert not (data / receipt["uv_relative"]).exists()
+
+
+def test_python39_catalog_extensions_do_not_contaminate_tool_rows(tmp_path):
+    from scripts import moradin_airgap_request as compat
+
+    p = tmp_path / "catalog.toml"
+    p.write_text(
+        'schema_version = 1\n[[tools]]\nid = "git"\n[validated_versions]\ngit = "2.0.0"\n[ui_profiles.laneweaver]\nid = "not-a-tool"\n'
+    )
+    assert compat.load_catalog(p) == [{"id": "git"}]
+    p.write_text(p.read_text() + "[unreviewed_extension]\n")
+    with pytest.raises(compat.RequestError, match="unsupported section"):
+        compat.load_catalog(p)

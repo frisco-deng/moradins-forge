@@ -1524,3 +1524,13 @@ def test_interactive_approved_rollback_uses_the_exact_receipt_digest(
         "approved_sha256": "a" * 64,
         "forge_root": suite.REPO_ROOT.as_posix(),
     }
+
+
+def test_root_bootstrap_and_python39_inventory_match_native_installer():
+    import ast
+    from scripts import moradin_airgap_request
+    tree = ast.parse(suite.ROOT_RUNNER_BOOTSTRAP)
+    assignment = next(n for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "FILES" for t in n.targets))
+    expected = tuple(str(p) for p in suite.INSTALLER_FILES)
+    assert ast.literal_eval(assignment.value) == expected
+    assert moradin_airgap_request.INSTALLER_FILES == expected

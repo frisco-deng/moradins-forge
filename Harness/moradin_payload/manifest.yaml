@@ -24,6 +24,15 @@ include_paths:
   - pyproject.toml
   - uv.lock
   - catalog/workstation-tools.toml
+  - scripts/setup-dev-tools
+  - scripts/lib/dev_tools_catalog.py
+  - scripts/lib/dev_tools_doctor.py
+  - scripts/lib/dev_tools_ui.py
+  - scripts/lib/dev_tools_launcher.py
+  - scripts/lib/dev_tools_probe.cjs
+  - scripts/lib/dev_tools_smoke.cjs
+  - catalog/templates-tooling-source.json
+  - tests/scripts/test_shared_dev_tools.py
   - Harness/moradin_payload/manifest.yaml
   - docs/engineer_entry
   - docs/00_overview
