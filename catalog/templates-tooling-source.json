@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "source_repository": "templates-deck",
-  "source_revision": "dba3253e557ff1679212ef58467dbeb016ac66b5",
-  "source_revision_state": "dirty_hash_bound_candidate",
+  "source_revision": "b3cc86634cead1a04ed54e1da28992ebf877304c",
+  "source_revision_state": "clean",
   "files": {
     "catalog/workstation-tools.toml": "930dbd9a066d91b7ee18eedb574eed5fc24e61b421d14688b2fe4a3d8dc039aa",
     "scripts/setup-dev-tools": "baa8dfef576c2ec9151d043698f532203ab5b164c1142a0c02cf4eafa904e68f",
