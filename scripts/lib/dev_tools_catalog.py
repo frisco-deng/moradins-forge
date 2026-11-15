@@ -48,12 +48,16 @@ def load(root):
     return data
 
 
-def save(path, value):
+def save(path, value, *, mode=0o600):
     """Private atomic state; checkpoint content and parent directory durably."""
     path = Path(path)
+    if mode not in {0o600, 0o644}:
+        raise ValueError("unsupported_checkpoint_permissions")
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, name = tempfile.mkstemp(prefix="." + path.name, dir=path.parent)
     try:
+        if os.name == "posix":
+            os.fchmod(fd, mode)
         with os.fdopen(fd, "w") as stream:
             json.dump(value, stream, indent=2, allow_nan=False)
             stream.write("\n")
@@ -82,6 +86,10 @@ PAYLOAD = [
     "scripts/lib/dev_tools_probe.cjs",
     "scripts/lib/dev_tools_smoke.cjs",
     "scripts/lib/dev_tools_launcher.py",
+    "scripts/lib/dev_tools_dependencies.py",
+    "scripts/lib/dev_tools_review.py",
+    "scripts/lib/dev_tools_workflow.py",
+    "scripts/lib/dev_tools_environments.py",
 ]
 
 
@@ -169,6 +177,7 @@ def materialize(source, target, *, apply=False):
                 "files": {r["path"]: r["sha256"] for r in rows},
                 "authority": "Shared definitions; Forge retains native installation and trust gates.",
             },
+            mode=0o644,
         )
     return {
         "status": "applied"

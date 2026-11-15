@@ -39,6 +39,12 @@ class Catalog(unittest.TestCase):
             (target / "scripts").mkdir()
             (target / "scripts/moradin_tooling_suite.py").touch()
             catalog.materialize(ROOT, target, apply=True)
+            if os.name == "posix":
+                self.assertEqual(
+                    (target / "catalog/templates-tooling-source.json").stat().st_mode
+                    & 0o777,
+                    0o644,
+                )
             self.assertEqual(catalog.materialize(ROOT, target)["status"], "match")
             p = target / "scripts/setup-dev-tools"
             p.write_text("external drift")

@@ -34,9 +34,7 @@ def completed(
 
 
 def test_root_rpm_signature_verification_requires_verbose_signature_proof() -> None:
-    verified = completed(
-        stdout="Header V4 RSA/SHA256 Signature, key ID 350d275d: OK\n"
-    )
+    verified = completed(stdout="Header V4 RSA/SHA256 Signature, key ID 350d275d: OK\n")
 
     assert suite._rpm_signature_verified(verified)
     assert not suite._rpm_signature_verified(
@@ -104,10 +102,7 @@ def test_offline_apt_trust_verifies_compressed_signed_index(
             ],
         }
     }
-    sealed = {
-        f"offline-trust:{path.name}": path
-        for path in (keyring, release, index)
-    }
+    sealed = {f"offline-trust:{path.name}": path for path in (keyring, release, index)}
 
     suite._verify_offline_apt_trust(
         plan,
@@ -1529,8 +1524,118 @@ def test_interactive_approved_rollback_uses_the_exact_receipt_digest(
 def test_root_bootstrap_and_python39_inventory_match_native_installer():
     import ast
     from scripts import moradin_airgap_request
+
     tree = ast.parse(suite.ROOT_RUNNER_BOOTSTRAP)
-    assignment = next(n for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "FILES" for t in n.targets))
+    assignment = next(
+        n
+        for n in tree.body
+        if isinstance(n, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "FILES" for t in n.targets)
+    )
     expected = tuple(str(p) for p in suite.INSTALLER_FILES)
     assert ast.literal_eval(assignment.value) == expected
     assert moradin_airgap_request.INSTALLER_FILES == expected
+
+
+def test_ui_library_plan_is_platform_catalog_and_version_bound(
+    isolated_planner: None,
+) -> None:
+    plan = suite.build_suite_plan(
+        forge_root=suite.REPO_ROOT,
+        profile="custom",
+        include_tools=["ui_dep_libenchant_2_2"],
+        facts=APT_FACTS,
+    )
+    assert plan["status"] == "ready"
+    action = plan["root_actions"][0]
+    assert action["package"] == "libenchant-2-2"
+    assert action["version"] == "1.0.0"
+    assert action["kind"] == "system-package"
+    action["package"] = "unregistered-package"
+    with pytest.raises(suite.ToolingSuiteError, match="catalog-owned"):
+        suite.validate_suite_plan_contents(plan)
+
+
+def test_ui_library_rejects_unsupported_platform(isolated_planner: None) -> None:
+    with pytest.raises(suite.ToolingSuiteError, match="unverified"):
+        suite.build_suite_plan(
+            forge_root=suite.REPO_ROOT,
+            profile="custom",
+            include_tools=["ui_dep_libenchant_2_2"],
+            facts={**APT_FACTS, "os_id": "debian", "os_version": "12"},
+        )
+
+
+def test_ui_library_real_native_transaction_and_rollback(tmp_path: Path) -> None:
+    installed = {"value": False}
+
+    def runner(argv, **kwargs):
+        if argv[0] == "dpkg-query":
+            if not installed["value"]:
+                return completed(1)
+            return completed(
+                stdout="install ok installed\t1.0.0"
+                if any("${Status}" in x for x in argv)
+                else "ii \t1.0.0"
+            )
+        if argv[:2] == ["apt-cache", "policy"]:
+            return completed(stdout="Candidate: 1.0.0\n")
+        if argv[:2] == ["apt-get", "install"]:
+            installed["value"] = True
+        if argv[:2] == ["dpkg", "--remove"]:
+            installed["value"] = False
+        return completed()
+
+    plan = suite.build_suite_plan(
+        forge_root=suite.REPO_ROOT,
+        profile="custom",
+        include_tools=["ui_dep_libenchant_2_2"],
+        facts=APT_FACTS,
+        runner=runner,
+    )
+    stage = tmp_path / "stage"
+    suite.stage_suite_assets(plan, output=stage)
+    receipt = suite.apply_root_transaction(
+        plan,
+        stage_root=stage,
+        runner=runner,
+        require_root=False,
+        root_prefix=tmp_path / "root",
+    )
+    assert installed["value"]
+    assert receipt["operations"][0]["tool_id"] == "ui_dep_libenchant_2_2"
+    restored = suite.rollback_root_receipt(
+        Path(receipt["receipt"]),
+        approved_sha256=receipt["receipt_sha256"],
+        runner=runner,
+        require_root=False,
+        root_prefix=tmp_path / "root",
+    )
+    assert restored["status"] == "pass"
+    assert not installed["value"]
+
+
+def test_ui_library_target_verification_requires_exact_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        suite, "_package_versions", lambda *args, **kwargs: ("1.0", "2.0")
+    )
+    plan = {
+        "platform": {"package_manager": "apt"},
+        "tools": [
+            {
+                "id": "ui_dep_libenchant_2_2",
+                "verification_command": [],
+                "install_action": {
+                    "kind": "system-package",
+                    "version": "2.0",
+                    "package": "libenchant-2-2",
+                },
+            }
+        ],
+    }
+    with pytest.raises(
+        suite.ToolingSuiteError, match="target-user package verification failed"
+    ):
+        suite._verify_root_actions_as_user(plan)

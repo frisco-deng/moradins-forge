@@ -75,6 +75,18 @@ except ModuleNotFoundError:  # pragma: no cover - direct script execution
     )
 
 
+# This module is copied into the sealed runner with the catalog it validates.
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+from dev_tools_dependencies import (  # noqa: E402 - sealed portable helper
+    package_specs as ui_package_specs,
+    validate_platform as validate_ui_package_platform,
+)
+
+
+def suite_catalog():
+    return (*TOOL_CATALOG, *ui_package_specs(REPO_ROOT, ToolSpec))
+
+
 SUITE_PLAN_VERSION = "MoradinForgeToolingSuitePlanV1"
 SUITE_RECEIPT_VERSION = "MoradinForgeToolingSuiteReceiptV1"
 ROOT_RECEIPT_VERSION = "MoradinForgeRootToolingReceiptV1"
@@ -111,6 +123,10 @@ INSTALLER_FILES = (
     Path("scripts/lib/dev_tools_launcher.py"),
     Path("scripts/lib/dev_tools_probe.cjs"),
     Path("scripts/lib/dev_tools_smoke.cjs"),
+    Path("scripts/lib/dev_tools_dependencies.py"),
+    Path("scripts/lib/dev_tools_review.py"),
+    Path("scripts/lib/dev_tools_workflow.py"),
+    Path("scripts/lib/dev_tools_environments.py"),
     Path("catalog/templates-tooling-source.json"),
 )
 ROOT_RUNNER_BOOTSTRAP = r"""
@@ -142,6 +158,10 @@ FILES = (
     "scripts/lib/dev_tools_launcher.py",
     "scripts/lib/dev_tools_probe.cjs",
     "scripts/lib/dev_tools_smoke.cjs",
+    "scripts/lib/dev_tools_dependencies.py",
+    "scripts/lib/dev_tools_review.py",
+    "scripts/lib/dev_tools_workflow.py",
+    "scripts/lib/dev_tools_environments.py",
     "catalog/templates-tooling-source.json",
 )
 if len(sys.argv) < 7:
@@ -1128,7 +1148,7 @@ def _selected_specs(
 ) -> list[ToolSpec]:
     if profile not in SUPPORTED_PROFILES:
         raise ToolingSuiteError(f"unsupported tooling-suite profile: {profile}")
-    catalog = {spec.id: spec for spec in TOOL_CATALOG}
+    catalog = {spec.id: spec for spec in suite_catalog()}
     unknown = sorted((set(include_tools) | set(exclude_tools)) - set(catalog))
     if unknown:
         raise ToolingSuiteError("unknown tooling ids: " + ", ".join(unknown))
@@ -1366,6 +1386,7 @@ def _tool_row(
     elif (
         package
         and package_candidate
+        and not _command_is_forge_owned(spec)
         and not (
             manager == "dnf"
             and spec.dnf_repository == "epel"
@@ -1780,7 +1801,7 @@ def validate_suite_plan_contents(plan: dict[str, Any]) -> None:
         installer_files, list
     ) or installer_files != installer_file_records(REPO_ROOT):
         raise ToolingSuiteError("tooling-suite installer file manifest is malformed")
-    catalog = {spec.id: spec for spec in TOOL_CATALOG}
+    catalog = {spec.id: spec for spec in suite_catalog()}
     rows = plan.get("tools", [])
     if not isinstance(rows, list):
         raise ToolingSuiteError("tooling-suite rows are malformed")
@@ -1791,6 +1812,10 @@ def validate_suite_plan_contents(plan: dict[str, Any]) -> None:
         or selected != [row.get("id") for row in rows if isinstance(row, dict)]
     ):
         raise ToolingSuiteError("selected tool list does not match plan rows")
+    try:
+        validate_ui_package_platform(REPO_ROOT, platform_row, selected)
+    except ValueError as error:
+        raise ToolingSuiteError(str(error)) from error
     expected_root_actions: list[dict[str, Any]] = []
     direct_python: set[str] = set()
     for row in rows:
@@ -2768,7 +2793,7 @@ def _apply_user_actions(
     generation_root = data_root / "tools" / generation
     owned_root = data_root / "tools"
     operations: list[dict[str, Any]] = []
-    catalog = {spec.id: spec for spec in TOOL_CATALOG}
+    catalog = {spec.id: spec for spec in suite_catalog()}
     if generation_root.exists() or generation_root.is_symlink():
         raise ToolingSuiteError(
             "this exact user transaction already has state; create and approve a fresh plan"
@@ -2897,7 +2922,7 @@ def _rollback_user_operations(
     bin_root: Path | None = None,
 ) -> list[dict[str, str]]:
     bin_root = bin_root or _user_roots()[2]
-    catalog = {spec.id: spec for spec in TOOL_CATALOG}
+    catalog = {spec.id: spec for spec in suite_catalog()}
     results: list[dict[str, str]] = []
     for operation in reversed(operations):
         tool_id = str(operation.get("tool_id", ""))
@@ -3003,7 +3028,7 @@ def _verify_root_actions_as_user(
             installed, _candidate = _package_versions(
                 str(action.get("package", "")), manager, runner=runner
             )
-            if installed:
+            if installed == str(action.get("version", "")):
                 continue
             raise ToolingSuiteError(
                 f"target-user package verification failed: {row['id']}"
@@ -3946,7 +3971,7 @@ def apply_root_transaction(
         ]
     operations: list[dict[str, Any]] = []
     skipped: list[dict[str, str]] = []
-    catalog = {spec.id: spec for spec in TOOL_CATALOG}
+    catalog = {spec.id: spec for spec in suite_catalog()}
     try:
         offline_enabled = isinstance(plan.get("offline"), dict)
         if offline_enabled:
@@ -4211,7 +4236,7 @@ def _validate_root_receipt(
         )
     ):
         raise ToolingSuiteError("root receipt sealed Python binding is malformed")
-    catalog = {spec.id: spec for spec in TOOL_CATALOG}
+    catalog = {spec.id: spec for spec in suite_catalog()}
     tools_root = _root_path(root_prefix, "opt/moradins-forge/tools").resolve()
     bin_root = _root_path(root_prefix, "usr/local/bin").resolve()
     backup_root = _root_path(root_prefix, "var/backups/moradins-forge").resolve()
@@ -4719,7 +4744,7 @@ def verify_suite_receipt(
                 str(plan["platform"]["package_manager"]),
                 runner=runner,
             )
-            passed = bool(installed)
+            passed = installed == str(action.get("version", ""))
             exit_code = 0 if passed else 1
         else:
             result = _run(argv, runner=runner, timeout=30, env=environment)

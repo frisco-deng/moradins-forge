@@ -42,6 +42,10 @@ INSTALLER_FILES = (
     "scripts/lib/dev_tools_launcher.py",
     "scripts/lib/dev_tools_probe.cjs",
     "scripts/lib/dev_tools_smoke.cjs",
+    "scripts/lib/dev_tools_dependencies.py",
+    "scripts/lib/dev_tools_review.py",
+    "scripts/lib/dev_tools_workflow.py",
+    "scripts/lib/dev_tools_environments.py",
     "catalog/templates-tooling-source.json",
 )
 SAFE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -171,6 +175,7 @@ def load_catalog(path):
         if line.startswith("["):
             if line not in {
                 "[validated_versions]",
+                "[ui_system_dependencies.ubuntu_24_04]",
                 "[ui_profiles.laneweaver]",
                 "[ui_profiles.moradin_legacy]",
             }:

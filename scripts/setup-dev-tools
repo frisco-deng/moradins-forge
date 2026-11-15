@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Audit-first developer setup; privileged work stays in the existing Forge suite."""
+"""Review tool versions or upgrade with one confirmation and automatic verification."""
 
 from pathlib import Path
 import argparse
@@ -32,8 +32,10 @@ def main(argv=None):
     parser.add_argument(
         "action",
         nargs="?",
-        default="guided",
+        default=None,
         choices=[
+            "review",
+            "upgrade",
             "guided",
             "doctor",
             "plan",
@@ -49,6 +51,17 @@ def main(argv=None):
             "install-launcher",
             "launcher-rollback",
         ],
+    )
+    simple = parser.add_mutually_exclusive_group()
+    simple.add_argument(
+        "--review",
+        action="store_true",
+        help="Show installed and available versions in a compact table.",
+    )
+    simple.add_argument(
+        "--upgrade",
+        action="store_true",
+        help="Review changes once, then install and verify automatically.",
     )
     parser.add_argument("--forge-root", type=Path)
     parser.add_argument("--ui-profile", choices=tuple(load(ROOT)["ui_profiles"]))
@@ -67,6 +80,9 @@ def main(argv=None):
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--json", action="store_true")
     args, rest = parser.parse_known_args(argv)
+    if (args.review or args.upgrade) and args.action:
+        parser.error("choose --review, --upgrade, or an advanced action")
+    args.action = args.action or ("upgrade" if args.upgrade else "review")
     if args.forge_root and args.action != "materialize":
         target = args.forge_root.resolve() / "scripts/setup-dev-tools"
         if not target.is_file() or target.resolve() == Path(__file__).resolve():
@@ -98,7 +114,28 @@ def main(argv=None):
             if getattr(args, name) is None:
                 parser.error("--" + name.replace("_", "-") + " is required")
 
-    if args.action == "materialize":
+    if args.action == "review":
+        from dev_tools_review import review, display
+
+        result = review(ROOT, native())
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            display(result)
+        return 0 if result["status"] == "reviewed" else 2
+    elif args.action == "upgrade":
+        from dev_tools_workflow import upgrade
+
+        if args.json:
+            from contextlib import redirect_stdout
+
+            with redirect_stdout(sys.stderr):
+                result = upgrade(ROOT, native())
+            print(json.dumps(result, indent=2))
+        else:
+            result = upgrade(ROOT, native())
+        return 0 if result["status"] in {"pass", "unchanged", "cancelled"} else 2
+    elif args.action == "materialize":
         need("target_root")
         result = materialize(ROOT, args.target_root, apply=args.apply)
     elif args.action == "ui-plan":
@@ -185,7 +222,7 @@ def main(argv=None):
                     == "y"
                 ):
                     result = apply(ROOT, output, result["plan_sha256"], native())
-    if args.action in ("doctor", "guided") and not args.json:
+    if args.action in ("doctor", "guided") and not args.json and "summary" in result:
         print("Developer tools: " + result["status"])
         print(json.dumps(result["summary"], sort_keys=True))
         print(
@@ -194,6 +231,10 @@ def main(argv=None):
             + "; functional proof and upstream freshness remain separate."
         )
         print("Full inventory: setup-dev-tools doctor --json")
+    elif args.action == "guided" and not args.json:
+        print("UI setup: " + result["status"])
+        if result.get("receipt"):
+            print("Execution record: " + result["receipt"])
     else:
         print(json.dumps(result, indent=2))
     return 0
@@ -211,6 +252,10 @@ if __name__ == "__main__":
                 x in sys.argv[1:]
                 for x in [
                     "guided",
+                    "review",
+                    "upgrade",
+                    "--review",
+                    "--upgrade",
                     "plan",
                     "apply",
                     "verify",
@@ -233,6 +278,14 @@ if __name__ == "__main__":
         KeyError,
         subprocess.SubprocessError,
     ) as error:
+        if "--json" not in sys.argv and (
+            len(sys.argv) == 1
+            or any(
+                x in sys.argv for x in ["--review", "--upgrade", "review", "upgrade"]
+            )
+        ):
+            print("Developer tools: " + str(error), file=sys.stderr)
+            raise SystemExit(2)
         print(
             json.dumps(
                 {

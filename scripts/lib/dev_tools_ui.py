@@ -192,6 +192,7 @@ def apply(root, path, approval, native):
         "stages": [],
     }
     save(receipt, record)  # Durable intent precedes all installation mutations.
+    save(receipt.with_suffix(".plan.json"), value)
     generation.mkdir(mode=0o700)
     try:
         reuse = value.get("reuse")

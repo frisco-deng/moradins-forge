@@ -31,10 +31,15 @@ include_paths:
   - scripts/lib/dev_tools_runtime.py
   - scripts/lib/dev_tools_acceptance.py
   - scripts/lib/dev_tools_launcher.py
+  - scripts/lib/dev_tools_dependencies.py
+  - scripts/lib/dev_tools_review.py
+  - scripts/lib/dev_tools_workflow.py
+  - scripts/lib/dev_tools_environments.py
   - scripts/lib/dev_tools_probe.cjs
   - scripts/lib/dev_tools_smoke.cjs
   - catalog/templates-tooling-source.json
   - tests/scripts/test_shared_dev_tools.py
+  - tests/scripts/test_shared_dev_tools_simple.py
   - Harness/moradin_payload/manifest.yaml
   - docs/engineer_entry
   - docs/00_overview
