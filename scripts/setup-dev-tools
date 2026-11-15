@@ -83,6 +83,32 @@ def main(argv=None):
     if (args.review or args.upgrade) and args.action:
         parser.error("choose --review, --upgrade, or an advanced action")
     args.action = args.action or ("upgrade" if args.upgrade else "review")
+    if args.action in {"review", "upgrade"}:
+        advanced = [
+            name
+            for name in [
+                "ui_profile",
+                "ui_root",
+                "node",
+                "repo_root",
+                "output",
+                "plan",
+                "approve_plan_sha256",
+                "receipt",
+                "reuse_receipt",
+                "prior_plan",
+                "approve_receipt_sha256",
+                "target_root",
+                "destination",
+                "apply",
+            ]
+            if getattr(args, name)
+        ]
+        if advanced:
+            parser.error(
+                "advanced options require their explicit action: "
+                + ", ".join("--" + x.replace("_", "-") for x in advanced)
+            )
     if args.forge_root and args.action != "materialize":
         target = args.forge_root.resolve() / "scripts/setup-dev-tools"
         if not target.is_file() or target.resolve() == Path(__file__).resolve():

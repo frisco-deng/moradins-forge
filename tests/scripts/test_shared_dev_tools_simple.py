@@ -181,6 +181,17 @@ class SimpleCLI(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 2)
 
+    def test_simple_upgrade_never_silently_ignores_an_explicit_plan(self):
+        result = subprocess.run(
+            self.command + ["--upgrade", "--plan", "foreign.json"],
+            env=self.env,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("explicit action", result.stderr)
+        self.assertFalse((self.home / "installed-tool").exists())
+
 
 @unittest.skipUnless(os.name == "posix", "Linux native execution boundary")
 class ExecutionBoundaries(unittest.TestCase):
