@@ -12,33 +12,29 @@ Profile: local agent-first integration kit.
 - If deeper Forge contracts conflict with this file, follow the deeper contract.
 - Keep this root file compact; durable detail belongs in docs and contracts.
 
-## Read First
+## Concern Routes
 
-- `README.md`
-- `FORGE.md`
-- `Harness/entrypoints/forge.md`
-- `Harness/entrypoints/forge_agent_handoff.md`
-- `Harness/entrypoints/agent.md`
-- `Harness/moradin_payload/manifest.yaml`
-- `docs/references/moradin_payload_contract_v1.md`
-- `docs/references/moradin_forge_agent_integration_contract_v1.md`
-- `docs/references/moradin_forge_installer_bootstrap_contract_v1.md`
-- `docs/references/moradin_forge_public_export_contract_v1.md`
-- `docs/references/moradin_forge_release_artifact_contract_v1.md`
-- `docs/references/moradin_forge_upgrade_contract_v1.md`
-- `docs/references/moradin_agent_efficiency_contract_v1.md`
-- `docs/references/repo_operating_model_v1.md`
-- `docs/references/tooling_readiness_install_execution_contract_v2.md`
-- `docs/references/moradin_forge_tooling_suite_contract_v1.md`
-- `docs/11_ops/air_gapped_tooling_suite.md`
-- `Harness/README.md`
+- Forge maintenance: `make repo-brief`, then `Harness/entrypoints/agent.md`.
+- Target adoption: `FORGE.md`, `Harness/entrypoints/forge.md`, then the target's
+  own guidance and `docs/references/moradin_forge_agent_integration_contract_v1.md`.
+- Payload changes: `Harness/moradin_payload/manifest.yaml` and
+  `docs/references/moradin_payload_contract_v1.md`.
+- Bootstrap/export: the matching installer or public-export contract under
+  `docs/references/`; run `make public-portability-check`.
+- Tooling, onboarding and offline installation: the matching tooling execution,
+  upgrade or air-gap contract under `docs/references/` and `docs/11_ops/`.
+- Product framing, resume and integration: `docs/11_ops/codex_run_loop.md`.
+- Public validation: `docs/references/repo_operating_model_v1.md`.
 
 ## Agent Adoption Rules
 
 - Inspect Forge and the target repo before proposing changes.
 - Explain benefits, risks, proposed writes, rollback, install requests, and
   validation before apply.
-- Ask for explicit user consent before mutating a target repo.
+- Ask for explicit user consent only before adopting or mutating a target repo
+  outside the target scope already accepted in the current task. Once the target
+  and plan are accepted, continue authorized reversible work through validation
+  and review.
 - Keep adoption local unless the user explicitly requests external tooling.
 - Run user-level installers only from a digest-bound tooling plan after explicit
   user approval.
@@ -178,6 +174,71 @@ those as the target repo's source of truth.
 
 ## When Uncertain
 
-- Stop at the dry-run plan and ask the user before applying changes.
+- Stop at the dry-run plan only when cross-repository target adoption remains
+  unapproved. For an accepted target and plan, continue authorized reversible
+  apply, validation, rollback preparation, and review work.
 - If a change affects long-lived architecture or path contracts, update the
   appropriate contract before treating the behavior as stable.
+
+<!-- tpl:repo-followthrough:start -->
+
+## Scoped Execution And Completion
+
+Policy version: `repo-completion-v9-2026-09-25`.
+Repository-specific security, data, integration, and promotion restrictions
+remain authoritative within the task.
+
+- Action requests mean finish, not acknowledgment of capability; honor
+  planning-only requests. Keep accepted outcomes across checkpoints. An
+  intermediate milestone or tests do not prove a requested
+  practical run; require observed acceptance evidence.
+- Accepted plans include reversible gate repair, preservation, and review-branch
+  publication. For multi-step work run the installed completion/handoff check,
+  or use the linked policy's manual checklist, before voluntary closeout.
+- If effective user policy activates a native Goal, bind its ignored v3 manifest
+  before mutation and keep it active across turns and compaction. Continue
+  independent authorized work behind scoped blockers; investigate unknowns.
+- A plan does not itself grant live-action authority. Prepare exact approvals
+  for live, security, and promotion gates while continuing other work.
+- Whole-task blocked wait requires the same exact blocker across three Goal
+  turns, every remaining outcome affected, and no independent action left.
+  Otherwise continue. A justified wait names the outcome, evidence, owner,
+  alternatives, next action, and completion proof. Do not invent approvals.
+- Reuse unchanged evidence. Add or repeat a check only for a native gate,
+  changed behavior, or a named uncertainty; do not add generic stopping points.
+- Native security and promotion gates bind. Higher-priority instructions beat a
+  skill. Delegation stays off unless I explicitly request it in the
+  current prompt.
+
+<!-- tpl:quality-review-v1 -->
+
+- Consequential changes need inspected assumptions, independent evidence, and
+  one bounded false-pass check. Profiles are review candidates, not gates.
+- Reread effective policy after a policy change. Compaction is continuity, not
+  completion. Keep hooks retired and delegation request-only.
+
+First policy/state route (from the project root):
+`make repo-brief`.
+Shared policy reference:
+`docs/11_ops/codex_run_loop.md`.
+
+<!-- tpl:context-efficiency-v1 -->
+
+- Bind recovery to the current task/thread; global latest-session selection is diagnostic.
+- Refresh changed or newly applicable guidance; reuse unchanged evidence and retain required gates.
+
+<!-- tpl:repo-followthrough:end -->
+
+<!-- tpl:repo-navigation:start -->
+
+## Files And CLI Progress
+
+Before adding or moving a file, start at the project root and read the repo README and inspect its layout.
+Use the repo layout and `Harness/moradin_payload/manifest.yaml` for payload ownership and placement.
+If rendered, use `repo.folder_organization` for specific placement; section routes apply only where declared.
+
+For a long-running CLI, consult the rendered `repo.cli_output` profile, when installed.
+See `docs/11_ops/codex_run_loop.md` for progress behavior. Reuse repo-native progress
+when available; keep progress on stderr and final results on stdout.
+
+<!-- tpl:repo-navigation:end -->

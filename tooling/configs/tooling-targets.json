@@ -165,6 +165,7 @@
       "manager": "uv",
       "source": "repo_files_or_commands",
       "markers": [
+        ".venv/bin/python",
         "pyproject.toml",
         "uv.lock"
       ],
@@ -214,6 +215,398 @@
       "reference_image": "artifacts/ui-reference-renders/latest/reference.png",
       "measure_summary": "artifacts/ui-visual-measure/latest/summary.json",
       "measurements": "artifacts/ui-visual-measure/latest/measurements.csv"
+    },
+    "ui_design_contract": {},
+    "quality_contract": {
+      "version": 2,
+      "project_profiles": [
+        "shared_tooling"
+      ],
+      "review_applicability": "explicit_per_task",
+      "scope_review_required": true,
+      "automatic_execution": false,
+      "completion_proof": "accepted_outcome_not_test_count"
+    },
+    "folder_organization": {
+      "schema_version": 2,
+      "policy_id": "templates.folder-organization.v2",
+      "repo_id": "moradins-forge",
+      "status": "declared",
+      "mode": "warn",
+      "profile": "evaluation-harness",
+      "archetype": "uv-harness",
+      "repo_path": "projects/moradins-forge",
+      "audit_only": false,
+      "directories": [
+        {
+          "path": ".github",
+          "purpose": "Repository configuration, automation, deployment, and operational policy",
+          "class": "configuration",
+          "owner": "repository",
+          "lifecycle": "durable",
+          "tracking": "tracked",
+          "responsibility": "configuration",
+          "allow_shared_responsibility": true,
+          "legacy_exception": {},
+          "qualified": true,
+          "required": false,
+          "canonical_target": "",
+          "generator": ""
+        },
+        {
+          "path": "Harness",
+          "purpose": "Reusable validation harness implementation",
+          "class": "tests",
+          "owner": "repository",
+          "lifecycle": "durable",
+          "tracking": "tracked",
+          "responsibility": "validation_harness",
+          "legacy_exception": {},
+          "qualified": true,
+          "required": false,
+          "canonical_target": "",
+          "generator": "",
+          "allow_shared_responsibility": false
+        },
+        {
+          "path": "catalog",
+          "purpose": "Public workstation tool registry consumed by native onboarding and suite planning",
+          "class": "configuration",
+          "owner": "moradin-forge",
+          "lifecycle": "durable",
+          "tracking": "tracked",
+          "responsibility": "workstation_tool_registry",
+          "allow_shared_responsibility": true,
+          "legacy_exception": {},
+          "qualified": true,
+          "required": false,
+          "canonical_target": "",
+          "generator": ""
+        },
+        {
+          "path": "dev_tracker",
+          "purpose": "Durable documentation, plans, examples, and learning material",
+          "class": "docs",
+          "owner": "repository",
+          "lifecycle": "durable",
+          "tracking": "tracked",
+          "responsibility": "documentation",
+          "allow_shared_responsibility": true,
+          "legacy_exception": {},
+          "qualified": true,
+          "required": false,
+          "canonical_target": "",
+          "generator": ""
+        },
+        {
+          "path": "docs",
+          "purpose": "Durable documentation, plans, examples, and learning material",
+          "class": "docs",
+          "owner": "repository",
+          "lifecycle": "durable",
+          "tracking": "tracked",
+          "responsibility": "documentation",
+          "allow_shared_responsibility": true,
+          "legacy_exception": {},
+          "qualified": true,
+          "required": false,
+          "canonical_target": "",
+          "generator": ""
+        },
+        {
+          "path": "install",
+          "purpose": "Installation assets and operator bootstrap entrypoints",
+          "class": "configuration",
+          "owner": "repository",
+          "lifecycle": "durable",
+          "tracking": "tracked",
+          "responsibility": "installation",
+          "legacy_exception": {},
+          "qualified": true,
+          "required": false,
+          "canonical_target": "",
+          "generator": "",
+          "allow_shared_responsibility": false
+        },
+        {
+          "path": "scripts",
+          "purpose": "Repository automation and repeatable operator scripts",
+          "class": "configuration",
+          "owner": "repository",
+          "lifecycle": "durable",
+          "tracking": "tracked",
+          "responsibility": "repo_automation",
+          "legacy_exception": {},
+          "qualified": true,
+          "required": false,
+          "canonical_target": "",
+          "generator": "",
+          "allow_shared_responsibility": false
+        },
+        {
+          "path": "skills",
+          "purpose": "Agent, AI, and reusable skill definitions",
+          "class": "source",
+          "owner": "repository",
+          "lifecycle": "durable",
+          "tracking": "tracked",
+          "responsibility": "agent_assets",
+          "allow_shared_responsibility": true,
+          "legacy_exception": {},
+          "qualified": true,
+          "required": false,
+          "canonical_target": "",
+          "generator": ""
+        },
+        {
+          "path": "tests",
+          "purpose": "Deterministic tests and their maintained fixtures",
+          "class": "tests",
+          "owner": "repository",
+          "lifecycle": "durable",
+          "tracking": "tracked",
+          "responsibility": "validation",
+          "allow_shared_responsibility": true,
+          "legacy_exception": {},
+          "qualified": true,
+          "required": false,
+          "canonical_target": "",
+          "generator": ""
+        },
+        {
+          "path": "tooling",
+          "purpose": "Rendered shared-tooling adapter, target contracts, and local gate wrappers",
+          "class": "configuration",
+          "owner": "templates",
+          "lifecycle": "durable",
+          "tracking": "tracked",
+          "responsibility": "shared_tooling_adapter",
+          "legacy_exception": {},
+          "qualified": true,
+          "required": false,
+          "canonical_target": "",
+          "generator": "",
+          "allow_shared_responsibility": false
+        }
+      ],
+      "legacy_exceptions": [],
+      "legacy_root_hashes": [],
+      "legacy_hash_owner": "",
+      "legacy_hash_expires": "",
+      "standard_transients": [
+        ".cache",
+        ".expo",
+        ".hypothesis",
+        ".lighthouseci",
+        ".roddenberry-state",
+        ".mypy_cache",
+        ".next",
+        ".nox",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".schemathesis",
+        ".tmp",
+        ".turbo",
+        ".venv",
+        ".vscode-test",
+        "_compat_backups",
+        "__pycache__",
+        "artifacts",
+        "android",
+        "build",
+        "coverage",
+        "claim_src",
+        "data",
+        "dist",
+        "media",
+        "jobs",
+        "learn_rag.egg-info",
+        "node_modules",
+        "outputs",
+        ".runtime",
+        ".data",
+        "staticfiles",
+        "target",
+        "templates.egg-info",
+        "test-results",
+        "venv"
+      ],
+      "generic_names": [
+        "archive",
+        "artifacts",
+        "assets",
+        "baselines",
+        "data",
+        "models",
+        "outputs",
+        "reports",
+        "results",
+        "runs"
+      ],
+      "root_file_routes": [
+        {
+          "pattern": "*.md",
+          "category": "root_documentation"
+        },
+        {
+          "pattern": "LICENSE",
+          "category": "root_documentation"
+        },
+        {
+          "pattern": "*.toml",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": "*.json",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": "*.yaml",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": "*.yml",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": "*.lock",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": "Makefile",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": "Dockerfile*",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": ".gitignore",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": ".python-version",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": ".nvmrc",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": "*.py",
+          "category": "source"
+        },
+        {
+          "pattern": "character",
+          "category": "source"
+        },
+        {
+          "pattern": "character-sheet",
+          "category": "source"
+        },
+        {
+          "pattern": "*.sh",
+          "category": "source"
+        },
+        {
+          "pattern": "*.tsx",
+          "category": "source"
+        },
+        {
+          "pattern": "index.ts",
+          "category": "source"
+        },
+        {
+          "pattern": "*.ps1",
+          "category": "source"
+        },
+        {
+          "pattern": "*.config.ts",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": "*.config.js",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": "*.config.mjs",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": ".env*example",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": ".dockerignore",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": ".gitattributes",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": ".rgignore",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": ".gitleaksignore",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": ".semgrepignore",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": ".actrc",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": "*.ini",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": "requirements.txt",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": "lighthouserc.cjs",
+          "category": "build_configuration"
+        },
+        {
+          "pattern": "*.d.ts",
+          "category": "source"
+        },
+        {
+          "pattern": "*.ipynb",
+          "category": "docs"
+        },
+        {
+          "pattern": "*.cff",
+          "category": "root_documentation"
+        }
+      ],
+      "sections": [],
+      "file_routes": [],
+      "contract_fingerprint": "964c8f6f6e504fa92bfa2a15a4d44cc785b4de8dd928e160e3d44e05489060b5",
+      "placement_rule": "use the matching section and declared root, or update the folder contract before adding a new category"
+    },
+    "cli_output": {
+      "schema_version": 1,
+      "policy_id": "templates.cli-output.v1",
+      "profile": "pipeline",
+      "implementation": "repo_native_or_tpl_cli_progress",
+      "purpose": "Long validation, build, media, or model pipeline with phases",
+      "reason": "Long validation, build, media, or model pipeline with phases",
+      "default_mode": "auto",
+      "supported_modes": [
+        "auto",
+        "plain",
+        "json",
+        "off"
+      ],
+      "event_protocol": "TPL_PROGRESS_V1",
+      "output_contract": "progress_stderr_final_result_stdout",
+      "automatic_wrapping": false
     },
     "cad": {
       "enabled": false,
@@ -410,7 +803,7 @@
             "secrets"
           ],
           "gate": "required",
-          "command": "gitleaks detect --no-git --no-banner --redact --max-target-megabytes 10 --report-format json --report-path \"{artifact_root}/gitleaks.json\" --config tooling/configs/gitleaks/gitleaks.toml --source .",
+          "command": "python3 tooling/bin/source_secret_scan.py --repo-root . --output-dir \"{artifact_root}/source-secrets\" --report \"{artifact_root}/gitleaks.json\"",
           "tool": "gitleaks"
         },
         {
@@ -501,7 +894,7 @@
             "sca"
           ],
           "gate": "advisory",
-          "command": "if [ -f 'dev_tracker/ui/package-lock.json' ]; then cd 'dev_tracker/ui' && npm audit --audit-level=high; elif [ -f 'dev_tracker/ui/pnpm-lock.yaml' ]; then cd 'dev_tracker/ui' && corepack pnpm audit --audit-level high; elif [ -f 'dev_tracker/ui/yarn.lock' ]; then cd 'dev_tracker/ui' && yarn npm audit --severity high; else echo 'node dependency audit not_applicable: no supported lockfile'; fi"
+          "command": "if [ -f 'dev_tracker/ui/package-lock.json' ]; then cd 'dev_tracker/ui' && npm audit --audit-level=high; elif [ -f 'dev_tracker/ui/pnpm-lock.yaml' ]; then cd 'dev_tracker/ui' && audit_output=$(mktemp); if corepack pnpm audit --audit-level high >\"$audit_output\" 2>&1; then cat \"$audit_output\"; rm -f \"$audit_output\"; else audit_status=$?; cat \"$audit_output\" >&2; if grep -Eqi 'ERR_PNPM_AUDIT_BAD_RESPONSE|responded with 410|audit endpoint.*retir' \"$audit_output\"; then rm -f \"$audit_output\"; if command -v osv-scanner >/dev/null 2>&1; then osv-scanner scan source --lockfile pnpm-lock.yaml; else echo 'pnpm audit endpoint unavailable and osv-scanner is not installed' >&2; exit \"$audit_status\"; fi; else rm -f \"$audit_output\"; exit \"$audit_status\"; fi; fi; elif [ -f 'dev_tracker/ui/yarn.lock' ]; then cd 'dev_tracker/ui' && yarn npm audit --severity high; else echo 'node dependency audit not_applicable: no supported lockfile'; fi"
         },
         {
           "name": "syft",

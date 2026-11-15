@@ -33,6 +33,20 @@ INSTALLER_FILES = (
     "scripts/moradin_tooling_suite.py",
     "scripts/moradin_workstation.py",
     "catalog/workstation-tools.toml",
+    "scripts/setup-dev-tools",
+    "scripts/lib/dev_tools_catalog.py",
+    "scripts/lib/dev_tools_doctor.py",
+    "scripts/lib/dev_tools_ui.py",
+    "scripts/lib/dev_tools_runtime.py",
+    "scripts/lib/dev_tools_acceptance.py",
+    "scripts/lib/dev_tools_launcher.py",
+    "scripts/lib/dev_tools_probe.cjs",
+    "scripts/lib/dev_tools_smoke.cjs",
+    "scripts/lib/dev_tools_dependencies.py",
+    "scripts/lib/dev_tools_review.py",
+    "scripts/lib/dev_tools_workflow.py",
+    "scripts/lib/dev_tools_environments.py",
+    "catalog/templates-tooling-source.json",
 )
 SAFE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 PACKAGE_RE = re.compile(r"[A-Za-z0-9@._+:-]+")
@@ -157,6 +171,18 @@ def load_catalog(path):
             if current is not None:
                 tools.append(current)
             current = {}
+            continue
+        if line.startswith("["):
+            if line not in {
+                "[validated_versions]",
+                "[ui_system_dependencies.ubuntu_24_04]",
+                "[ui_profiles.laneweaver]",
+                "[ui_profiles.moradin_legacy]",
+            }:
+                raise RequestError("workstation catalog contains unsupported section")
+            if current is not None:
+                tools.append(current)
+                current = None
             continue
         if current is None:
             continue

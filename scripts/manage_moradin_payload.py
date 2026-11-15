@@ -1015,8 +1015,9 @@ def main(argv: list[str] | None = None) -> int:
             from scripts.public_export import sidecar_smoke
 
             smoke_root = (
-                repo_root.parent
-                / "moradin_tmp_runs"
+                repo_root
+                / "artifacts"
+                / "payload-smoke"
                 / f"public_payload_smoke_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             )
             smoke_payload = sidecar_smoke(repo_root, smoke_root, force=True)

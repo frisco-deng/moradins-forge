@@ -139,3 +139,10 @@ The reviewed paths match the providers' public conventions for
 ownership-hash mismatches, unowned sidecar content, and owned agent-marker
 mismatches. Public release validation additionally proves payload, leak,
 portability, security, SBOM, fresh-clone, and context-preservation contracts.
+
+## Accepted Scope And Product Delivery
+
+Reuse explicit consent already supplied for the current target and write scope.
+Ask only for unapproved scope; retain exact tooling-digest, provider-file,
+privileged-operation and promotion approvals. Product framing, dependency impact
+and staged delivery follow the [current run loop](../11_ops/codex_run_loop.md).

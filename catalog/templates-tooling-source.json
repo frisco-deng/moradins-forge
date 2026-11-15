@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "source_repository": "templates-deck",
+  "source_revision": "d68d72e8bdcf3c251f217c217c91aed6131df843",
+  "source_revision_state": "clean",
+  "files": {
+    "catalog/workstation-tools.toml": "0ee216527ed85447033cafeb2fa1fb48750e94e09eb1f02dc6e9463d10eb8ece",
+    "scripts/setup-dev-tools": "ffa2ae063014bea4c09690f2bf5ec4ce7fabc6e766b6c341ad7805a4f65dedb7",
+    "scripts/lib/dev_tools_catalog.py": "d8b1aa794f4c0bfbd248c4b62da142e2e766976b58d71eaf63ca37e1c536c5ae",
+    "scripts/lib/dev_tools_doctor.py": "1057ceba3a277c93365e9cd801c0a4199706cc9c6f41ad6645fce7aa68ced503",
+    "scripts/lib/dev_tools_ui.py": "9b2a9c6c815178ccbcfcffb877160aec6d65b41b55e54b5eea9bdbdf3f4e3e9f",
+    "scripts/lib/dev_tools_runtime.py": "52b196cf5be558fa31e90a89489f7622f84754c5ae20f267d7e85d89733dd548",
+    "scripts/lib/dev_tools_acceptance.py": "daaccadea7b7aceb5985d7c6daf7bdc0e8a768fefa491258e3ecdeb87f699aaf",
+    "scripts/lib/dev_tools_probe.cjs": "9dd7b00aab88b99cf22d38e9f92cda65fe1bd8cd39ca321c87edaf66c12ac898",
+    "scripts/lib/dev_tools_smoke.cjs": "d0ba22c36bd861292d39c66a7f138f1ce6ead63fa24037c1b1fb33e4f0790caa",
+    "scripts/lib/dev_tools_launcher.py": "da64665bfe3d4efe86b856dcd3beec8684da0988635ccab29a1920ac63c447c2",
+    "scripts/lib/dev_tools_dependencies.py": "d38cb2fcebabf7f02dd580d9cad00c2562c39b5e8863cc21c8a88de0a9dff9c2",
+    "scripts/lib/dev_tools_review.py": "f1d0f3282849c6287458f618a94b0cc9c3940054ccab435a5871f9cf94feafa9",
+    "scripts/lib/dev_tools_workflow.py": "2045e1fe3f312d18c13021ab73b0b3ed7ae4901dd303e821b7139df884be9d8f",
+    "scripts/lib/dev_tools_environments.py": "5739117b8044c609538726be4df34b22296cfc471e9fe01bd38f7b401e5c36ac"
+  },
+  "authority": "Shared definitions; Forge retains native installation and trust gates."
+}

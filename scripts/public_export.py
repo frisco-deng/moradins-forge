@@ -203,7 +203,7 @@ lint-py:
 \tUV_CACHE_DIR=/tmp/uv-cache uv run ruff check .
 
 lint-md:
-\tUV_CACHE_DIR=/tmp/uv-cache uv run pymarkdownlnt --enable-extensions front-matter --disable-rules "*" --enable-rules md022 scan --recurse --exclude .git --exclude .venv --exclude node_modules --exclude dist .
+\tUV_CACHE_DIR=/tmp/uv-cache uv run pymarkdownlnt --enable-extensions front-matter --disable-rules "*" --enable-rules md022 scan --recurse --exclude .git --exclude .venv --exclude node_modules --exclude dist --exclude artifacts .
 
 test-py:
 \tPYTHONPATH=. UV_CACHE_DIR=/tmp/uv-cache uv run pytest
@@ -859,6 +859,22 @@ def write_public_workbench_stubs(export_root: Path) -> list[str]:
 
 def scan_tree(root: Path) -> list[ScanHit]:
     hits: list[ScanHit] = []
+    agents = root / "AGENTS.md"
+    if agents.is_file():
+        # Sanitizing a private route is insufficient if its replacement is fictitious.
+        text = agents.read_text(encoding="utf-8")
+        for match in re.finditer(
+            r"(?:Shared|Portable) policy reference(?: \(from the project root\))?:\s*`([^`]+)`",
+            text,
+        ):
+            reference = Path(match.group(1))
+            target = root / reference
+            if reference.is_absolute() or not target.resolve().is_relative_to(root.resolve()) or not target.is_file():
+                hits.append(ScanHit(
+                    path="AGENTS.md", pattern="unresolved_policy_reference",
+                    line=text.count("\n", 0, match.start()) + 1,
+                    excerpt=match.group(0)[:180],
+                ))
     for scan_root, dirnames, filenames in os.walk(root):
         root_path = Path(scan_root)
         relative_root = "" if root_path == root else as_relative(root_path, root)

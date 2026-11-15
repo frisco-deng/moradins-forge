@@ -131,6 +131,25 @@ def test_scan_tree_reports_forbidden_references(tmp_path: Path) -> None:
     }
 
 
+def test_export_requires_resolvable_policy_route(tmp_path: Path) -> None:
+    source = make_source_repo(tmp_path)
+    write(source / "AGENTS.md", "Shared policy reference:\n`docs/current-policy.md`.\n")
+    write(source / "docs/current-policy.md", "# Current policy\n")
+    export = tmp_path / "public"
+    assert export_public_tree(source, export, force=True)["status"] == "pass"
+    assert not any(h.pattern == "unresolved_policy_reference" for h in scan_tree(export))
+    (export / "docs/current-policy.md").unlink()
+    assert any(h.pattern == "unresolved_policy_reference" for h in scan_tree(export))
+
+
+def test_sanitized_workspace_route_is_not_portability_proof(tmp_path: Path) -> None:
+    source = make_source_repo(tmp_path)
+    write(source / "AGENTS.md", f"Shared policy reference:\n`../../{SHARED_TEMPLATES_TOKEN}/docs/policy.md`.\n")
+    export = tmp_path / "public"
+    export_public_tree(source, export, force=True)
+    assert any(h.pattern == "unresolved_policy_reference" for h in scan_tree(export))
+
+
 def test_export_public_tree_excludes_history_and_sanitizes_text(tmp_path: Path) -> None:
     source = make_source_repo(tmp_path)
     export = tmp_path / "public"

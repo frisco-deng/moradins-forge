@@ -264,9 +264,17 @@ def atomic_write_text(path: Path, payload: str) -> None:
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
             stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
         if path.is_file() and not path.is_symlink():
             os.chmod(temporary, path.stat().st_mode & 0o777)
         os.replace(temporary, path)
+        if hasattr(os, "O_DIRECTORY"):
+            directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
     finally:
         temporary.unlink(missing_ok=True)
 

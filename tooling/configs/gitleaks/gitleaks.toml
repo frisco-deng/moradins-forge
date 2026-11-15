@@ -1,9 +1,11 @@
 title = "workspace-tooling-gitleaks"
 
+[extend]
+useDefault = true
+
 [allowlist]
-description = "Ignore archive and generated workspace trees"
+description = "Ignore named archives and dependency/build caches; observations remain scanned"
 paths = [
-  '''artifacts/''',
   '''archive/''',
   '''.data/''',
   '''outputs/''',
@@ -18,3 +20,34 @@ paths = [
   '''build/''',
   '''coverage/''',
 ]
+
+[[rules]]
+id = "generic-api-key"
+
+  [[rules.allowlists]]
+  description = "Schema-v3 pseudonymous session joins, not authentication keys"
+  condition = "AND"
+  regexTarget = "match"
+  paths = ['''^artifacts/observability/current/codex-usage/advice-followthrough/summary\.json$''', '''^docs/observability/generated/codex-usage/advice-followthrough/summary\.json$''']
+  regexes = ['''source_session_key"\s*:\s*"[a-f0-9]{24}"''']
+
+  [[rules.allowlists]]
+  description = "SHA256-derived raw-source path watermark, not an authentication key"
+  condition = "AND"
+  regexTarget = "match"
+  paths = ['''^artifacts/observability/current/codex-usage/summary\.json$''', '''^docs/observability/generated/codex-usage/summary\.json$''']
+  regexes = ['''newest_path_key"\s*:\s*"[a-f0-9]{24}"''']
+
+  [[rules.allowlists]]
+  description = "Reviewed Forge ownership-manifest file checksums, not credential fields"
+  condition = "AND"
+  regexTarget = "line"
+  paths = ['''(?:^|/)Harness/artifacts/control/forge_integration/ownership\.json$''']
+  regexes = ['''^\s*"(?:dev_tracker/ui/scripts/control-api\.mjs|dev_tracker/ui/src/styles/tokens\.css|dev_tracker/ui/tests/control-api-backend\.test\.ts|docs/assets/readme/token-saving-start\.svg|docs/design_docs/project_builder_control_api\.md|scripts/generate_openapi_snapshots\.py)"\s*:\s*"[a-f0-9]{64}",?\s*$''']
+
+  [[rules.allowlists]]
+  description = "Reviewed native runner cache identity in current and frozen security summaries"
+  condition = "AND"
+  regexTarget = "line"
+  paths = ['''^(?:artifacts/moradin-beta3-(?:draft|published)-verify\.[^/]+/extracted(?:-clean)?/moradins-forge-0\.2\.0-beta\.3/)?artifacts/tooling/(?:latest/(?:repo-brief|verify(?:-fast|-ci|-security|-container|-ui-cli)?|review-ready|release-gate-local|ci-local|sbom|push-gate)\.json|(?:repo-brief|verify(?:-fast|-ci|-security|-container|-ui-cli)?|review-ready|release-gate-local|ci-local|sbom|push-gate)/(?:latest/)?summary\.json)$''']
+  regexes = ['''^\s*"step_cache_key"\s*:\s*"[a-f0-9]{16}",?\s*$''']

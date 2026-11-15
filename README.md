@@ -41,6 +41,12 @@ then a human-approved digest enters the sealed root phase. Receipts and
 rollback follow installation; agent-file links have a separate consent
 boundary. This is an architecture explanation, not a quantitative claim.
 
+### Developer Tool Audit
+
+Use `scripts/setup-dev-tools doctor --json` to audit installed tools and optional
+UI cohorts. The [developer setup runbook](docs/11_ops/setup_dev_tools.md) explains
+the audit-first launcher, isolated browser profiles and existing installation gates.
+
 ### Air-Gapped Alternative
 
 The complete offline path is target-specific: create a sanitized request on
@@ -92,7 +98,7 @@ disabled, receipts the result, and onboards offline.
 ![Measured Benefits — Measured](docs/assets/readme/measured-benefits.svg)
 
 <!-- measured-benefits-text:start -->
-Text equivalent — **Measured release-dogfood fixtures:** startup context was 18,242 raw bytes versus 484 primer bytes; repeated output was 1,606 raw bytes versus 136 rerun-advice bytes. These checked-in fixture results are not a universal token-reduction guarantee.
+Text equivalent — **Measured release-dogfood fixtures:** startup context was 22,149 raw bytes versus 484 primer bytes; repeated output was 1,606 raw bytes versus 136 rerun-advice bytes. These checked-in fixture results are not a universal token-reduction guarantee.
 <!-- measured-benefits-text:end -->
 
 The evidence is checked in at
@@ -562,3 +568,10 @@ The UI may create install-request artifacts but does not execute host
 installers; consented execution is a native CLI boundary.
 
 Current beta release target: `v0.2.0-beta.3`.
+
+## Accepted Scope And Product Delivery
+
+Reuse explicit consent already supplied for the current target and write scope.
+Ask only for unapproved scope; retain exact tooling-digest, provider-file,
+privileged-operation and promotion approvals. Product framing, dependency impact
+and staged delivery follow the [current run loop](docs/11_ops/codex_run_loop.md).

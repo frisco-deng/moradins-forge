@@ -210,3 +210,19 @@ jobs:
           TARGET_KIND: ${{ matrix.kind }}
           TARGET_PLATFORM: ${{ matrix.platform }}
         run: tests/scripts/airgap_kit_lifecycle.sh
+      - name: Retain redacted air-gap failure diagnostics in job evidence
+        if: failure()
+        run: |
+          python3 - <<'PYTHON'
+          from pathlib import Path
+          root = Path("artifacts/airgap-failures")
+          for receipt in sorted(root.glob("*/receipt.json")):
+              if receipt.is_symlink():
+                  continue
+              print(receipt.read_text())
+              for name in ("stdout.log", "stderr.log"):
+                  log = receipt.parent / name
+                  if log.is_file() and not log.is_symlink() and log.stat().st_size < 66000:
+                      print(name + ":")
+                      print(log.read_text())
+          PYTHON
