@@ -124,7 +124,7 @@ those as the target repo's source of truth.
 ## Operating Rules
 
 - Treat this public repo as the active product source for normal Forge work.
-- Create feature, docs, fix, and release branches from public `main`.
+- Use public `dev` for development integration and protected `main` for releases.
 - Keep compatibility language out of first-read docs; compatibility details
   belong in contracts and payload manifests.
 - `Harness/moradin_payload/manifest.yaml` is the canonical sidecar payload

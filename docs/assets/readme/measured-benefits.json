@@ -3,9 +3,9 @@
   "disclaimer": "Release-dogfood fixture evidence only; results are not a universal token-reduction or performance guarantee.",
   "inputs": [
     {
-      "bytes": 12349,
+      "bytes": 12361,
       "path": "AGENTS.md",
-      "sha256": "e8a6171e25dcd238fdc520cc6a446097dbe182d493ea2d0b815c39ed5b594350"
+      "sha256": "6454a96faed4385dcccd8453dd1a75e77abfd5bb9ed983f8ed4f5bbeac8ff2be"
     },
     {
       "bytes": 5687,
@@ -41,9 +41,9 @@
       "without_reuse_bytes": 1606
     },
     "startup_context": {
-      "avoided_bytes": 21665,
+      "avoided_bytes": 21677,
       "with_summary_bytes": 484,
-      "without_summary_bytes": 22149
+      "without_summary_bytes": 22161
     }
   },
   "scope": "release-dogfood-fixtures",

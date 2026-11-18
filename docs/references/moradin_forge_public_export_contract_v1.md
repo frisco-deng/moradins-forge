@@ -27,6 +27,12 @@ paths or generated local evidence.
   paths, SSH clone URLs, hostnames, usernames, or raw temp paths.
 - Generated sidecars must not include local caches, audit output, install
   request history, or previous adoption records.
+- Checkout exports and sidecars take their file inventory from the owning Git
+  index. Local ignored and untracked files are outside that inventory. Builds
+  for publication use a clean checkout of the selected commit.
+- Git-free portable source archives support re-export and sidecar adoption.
+  Credential files, local agent state, and session logs are excluded from those
+  paths too. Portability checks inspect UTF-8 text regardless of extension.
 - Bootstrap start cards under `artifacts/bootstrap/` are local generated
   evidence and must not be included in public exports or sidecar payloads.
 - `make public-portability-check` must pass before release.

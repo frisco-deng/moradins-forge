@@ -75,8 +75,10 @@ except ModuleNotFoundError:  # pragma: no cover - direct script execution path
 
 try:
     from scripts.moradin_tooling_suite import latest_suite_receipt_status
+    from scripts.public_export import is_local_source_path, tracked_source_files
 except ModuleNotFoundError:  # pragma: no cover - direct script execution path
     from moradin_tooling_suite import latest_suite_receipt_status  # type: ignore[no-redef]
+    from public_export import is_local_source_path, tracked_source_files  # type: ignore[no-redef]
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -828,7 +830,7 @@ def normalize_sidecar_dir(value: str) -> str:
 
 def is_payload_path_excluded(relative_path: str, manifest: dict[str, Any]) -> bool:
     normalized = normalize_payload_relative_path(relative_path)
-    if LEGACY_DISCOVERY_DOC_RE.match(normalized):
+    if LEGACY_DISCOVERY_DOC_RE.match(normalized) or is_local_source_path(normalized):
         return True
     if normalized in SIDECAR_ALWAYS_EXCLUDE_EXACT:
         return True
@@ -924,8 +926,12 @@ def copy_payload_path(
     relative_path: str,
     manifest: dict[str, Any],
     copied_files: list[str],
+    tracked: set[str] | None,
+    tracked_dirs: set[str],
 ) -> None:
     if is_payload_path_excluded(relative_path, manifest):
+        return
+    if tracked is not None and relative_path not in tracked and relative_path not in tracked_dirs:
         return
     stat = source.lstat()
     if stat and source.is_symlink():
@@ -936,7 +942,10 @@ def copy_payload_path(
             if child.name in SKIP_DIR_NAMES or child.name.endswith(".tsbuildinfo"):
                 continue
             child_relative = normalize_payload_relative_path(f"{relative_path}/{child.name}")
-            copy_payload_path(child, destination / child.name, child_relative, manifest, copied_files)
+            copy_payload_path(
+                child, destination / child.name, child_relative, manifest,
+                copied_files, tracked, tracked_dirs,
+            )
         return
     if not source.is_file():
         return
@@ -946,6 +955,8 @@ def copy_payload_path(
 
 def copy_payload_to_sidecar(forge_root: Path, sidecar_root: Path) -> list[str]:
     manifest = load_payload_manifest(forge_root)
+    tracked = tracked_source_files(forge_root)
+    tracked_dirs = {parent.as_posix() for name in tracked or () for parent in Path(name).parents}
     copied_files: list[str] = []
     for relative_path in manifest["include_paths"]:
         if is_payload_path_excluded(relative_path, manifest):
@@ -953,7 +964,12 @@ def copy_payload_to_sidecar(forge_root: Path, sidecar_root: Path) -> list[str]:
         source = forge_root / relative_path
         if not source.exists():
             raise ForgeError(f"payload include path is missing: {relative_path}")
-        copy_payload_path(source, sidecar_root / relative_path, relative_path, manifest, copied_files)
+        if tracked is not None and relative_path not in tracked and relative_path not in tracked_dirs:
+            raise ForgeError(f"payload include path is not tracked: {relative_path}")
+        copy_payload_path(
+            source, sidecar_root / relative_path, relative_path, manifest,
+            copied_files, tracked, tracked_dirs,
+        )
     return copied_files
 
 

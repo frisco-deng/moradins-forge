@@ -99,6 +99,8 @@ SKIP_FILE_SUFFIXES = {
 SKIP_FILE_PREFIXES = {
     ".codex_pr_body_",
 }
+LOCAL_SOURCE_DIRS = {".codex", ".ssh", SHARED_TEMPLATES_TOKEN, "moradins-" + "harness"}
+LOCAL_SOURCE_FILES = {".env", ".netrc", ".npmrc", ".pypirc", ".python_history"}
 
 EXPORT_SKIP_PREFIXES = {
     "_archive",
@@ -782,7 +784,7 @@ def sanitize_public_text(relative: str, text: str) -> str:
 
 def should_skip_relative(relative: str, is_dir: bool) -> bool:
     parts = relative.split("/")
-    if any(part in SKIP_DIR_NAMES for part in parts):
+    if any(part in SKIP_DIR_NAMES for part in parts) or is_local_source_path(relative):
         return True
     if not is_dir and LEGACY_DISCOVERY_DOC_RE.match(relative):
         return True
@@ -796,6 +798,33 @@ def should_skip_relative(relative: str, is_dir: bool) -> bool:
         relative == prefix or relative.startswith(f"{prefix}/")
         for prefix in EXPORT_SKIP_PREFIXES
     )
+
+
+def is_local_source_path(relative: str) -> bool:
+    parts = relative.split("/")
+    name = parts[-1].lower()
+    return (
+        any(part.lower() in LOCAL_SOURCE_DIRS for part in parts)
+        or name in LOCAL_SOURCE_FILES
+        or (name.startswith(".env.") and not name.endswith((".example", ".sample", ".template")))
+        or name.endswith((".key", ".pem", ".p12", ".pfx", ".jsonl"))
+    )
+
+
+def tracked_source_files(root: Path) -> set[str] | None:
+    """Use the native index for checkouts and allow Git-free source archives."""
+    metadata = root / ".git"
+    if not metadata.exists() and not metadata.is_symlink():
+        return None
+    identity = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"], cwd=root, capture_output=True, check=True,
+    )
+    if Path(os.fsdecode(identity.stdout).rstrip("\r\n")).resolve() != root.resolve():
+        raise ValueError("public source must be the root of its own Git checkout")
+    files = subprocess.run(
+        ["git", "ls-files", "--cached", "-z"], cwd=root, capture_output=True, check=True,
+    )
+    return {os.fsdecode(name) for name in files.stdout.split(b"\0") if name}
 
 
 def copy_sanitized_file(relative: str, source: Path, destination: Path) -> None:
@@ -819,6 +848,11 @@ def write_public_file_override(relative: str, source: Path, destination: Path) -
 
 
 def copy_public_tree(source_root: Path, export_root: Path) -> list[str]:
+    tracked = tracked_source_files(source_root)
+    tracked_dirs = (
+        {parent.as_posix() for name in tracked for parent in Path(name).parents}
+        if tracked is not None else None
+    )
     copied: list[str] = []
     for root, dirnames, filenames in os.walk(source_root):
         root_path = Path(root)
@@ -826,7 +860,8 @@ def copy_public_tree(source_root: Path, export_root: Path) -> list[str]:
         dirnames[:] = [
             dirname
             for dirname in sorted(dirnames)
-            if not should_skip_relative(
+            if (tracked_dirs is None or f"{relative_root}/{dirname}".strip("/") in tracked_dirs)
+            and not should_skip_relative(
                 f"{relative_root}/{dirname}".strip("/"),
                 is_dir=True,
             )
@@ -834,9 +869,11 @@ def copy_public_tree(source_root: Path, export_root: Path) -> list[str]:
         for filename in sorted(filenames):
             source = root_path / filename
             relative = as_relative(source, source_root)
+            if tracked is not None and relative not in tracked:
+                continue
             if should_skip_relative(relative, is_dir=False):
                 continue
-            if source.is_symlink():
+            if source.is_symlink() or not source.is_file():
                 continue
             destination = export_root / relative
             if not write_public_file_override(relative, source, destination):
@@ -859,6 +896,7 @@ def write_public_workbench_stubs(export_root: Path) -> list[str]:
 
 def scan_tree(root: Path) -> list[ScanHit]:
     hits: list[ScanHit] = []
+    patterns = forbidden_patterns()
     agents = root / "AGENTS.md"
     if agents.is_file():
         # Sanitizing a private route is insufficient if its replacement is fictitious.
@@ -889,14 +927,18 @@ def scan_tree(root: Path) -> list[ScanHit]:
         ]
         for filename in sorted(filenames):
             path = root_path / filename
-            if is_binary_or_unreadable(path):
-                continue
             relative = as_relative(path, root)
-            if should_skip_relative(relative, is_dir=False):
+            if should_skip_relative(relative, is_dir=False) or path.is_symlink() or not path.is_file():
                 continue
-            text = path.read_text(encoding="utf-8")
+            content = path.read_bytes()
+            if b"\x00" in content:
+                continue
+            try:
+                text = content.decode("utf-8")
+            except UnicodeDecodeError:
+                continue
             for index, line in enumerate(text.splitlines(), start=1):
-                for pattern_name, pattern in forbidden_patterns():
+                for pattern_name, pattern in patterns:
                     if pattern.search(line):
                         hits.append(
                             ScanHit(
@@ -1057,13 +1099,13 @@ def export_public_tree(
         "status": "pass" if not hits else "fail",
         "fresh_git": {"initialized": False},
     }
-    if init_git and shutil.which("git"):
+    if init_git and not hits and shutil.which("git"):
         payload["fresh_git"] = {"initialized": True, "commit_count": 1}
         payload["audit"] = write_public_audit(export_root, payload)
         payload["manifest"] = write_export_manifest(export_root, payload)
         payload["fresh_git"] = init_fresh_git_repo(export_root)
     else:
-        if init_git:
+        if init_git and not hits:
             payload["fresh_git"] = {"initialized": False, "reason": "git not found"}
         payload["audit"] = write_public_audit(export_root, payload)
         payload["manifest"] = write_export_manifest(export_root, payload)
@@ -1165,13 +1207,13 @@ def check_public_export(
     }
     if payload["status"] != "pass" or sidecar_payload["status"] != "pass":
         payload["status"] = "fail"
-    if init_git and shutil.which("git"):
+    if init_git and payload["status"] == "pass" and shutil.which("git"):
         payload["fresh_git"] = {"initialized": True, "commit_count": 1}
         payload["audit"] = write_public_audit(export_root, payload)
         payload["manifest"] = write_export_manifest(export_root, payload)
         payload["fresh_git"] = init_fresh_git_repo(export_root)
     else:
-        if init_git:
+        if init_git and payload["status"] == "pass":
             payload["fresh_git"] = {"initialized": False, "reason": "git not found"}
         payload["audit"] = write_public_audit(export_root, payload)
         payload["manifest"] = write_export_manifest(export_root, payload)

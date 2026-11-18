@@ -27,7 +27,8 @@ branches in this repo.
 
 ## Public Work Rules
 
-- Create public branches from `main` for normal product work.
+- Use `dev` for shared development integration and `main` for the protected
+  release baseline. Validate development commits before pushing them.
 - Keep `main` protected with required `verify`, `security`, and
   `submit-dependencies` checks.
 - Keep dependency graph, Dependabot security updates, secret scanning, and push

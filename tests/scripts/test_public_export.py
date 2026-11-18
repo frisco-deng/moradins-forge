@@ -93,7 +93,6 @@ def make_source_repo(tmp_path: Path) -> Path:
         source / "docs/product_specs/discovery_disc_20260101_000000_abc123_project_spec.md",
         "excluded discovery history\n",
     )
-    write(source / ".git/config", "hidden history\n")
     write(source / ".codex_pr_body_mh004.md", "old pr body\n")
     write(source / "main.py", "print('placeholder')\n")
     write(source / "ui_audit/current_routes.md", "old ui audit\n")
@@ -200,6 +199,12 @@ def test_export_public_tree_excludes_history_and_sanitizes_text(tmp_path: Path) 
 def test_export_can_initialize_fresh_single_commit_repo(tmp_path: Path) -> None:
     source = make_source_repo(tmp_path)
     export = tmp_path / "public"
+    subprocess.run(["git", "init", "--quiet", str(source)], check=True)
+    subprocess.run(["git", "-C", str(source), "add", "--all"], check=True)
+    subprocess.run(
+        ["git", "-C", str(source), "add", "--force", "Harness/artifacts/control/current_guidance.md"],
+        check=True,
+    )
 
     payload = export_public_tree(source, export, force=True, init_git=True)
 
@@ -220,6 +225,48 @@ def test_export_can_initialize_fresh_single_commit_repo(tmp_path: Path) -> None:
     assert payload["fresh_git"]["initialized"]
     assert commit_count == "1"
     assert tracked_payload_file == "Harness/artifacts/control/current_guidance.md"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is required")
+def test_checkout_exports_and_sidecars_exclude_local_source(tmp_path: Path) -> None:
+    source = make_source_repo(tmp_path)
+    write(source / ".gitignore", "*.local\n")
+    write(source / "install/.env", "local settings\n")
+    subprocess.run(["git", "init", "--quiet", str(source)], check=True)
+    subprocess.run(["git", "-C", str(source), "add", "--all"], check=True)
+    write(source / "install/operator-notes.local", "private ignored source\n")
+    write(source / "install/operator-notes", "private untracked source\n")
+    write(source / "install/bootstrap-linux.sh", "#!/usr/bin/env sh\n# tracked edit\n")
+
+    export = tmp_path / "public"
+    payload = check_public_export(source, export, tmp_path / "smoke")
+
+    assert payload["status"] == "pass"
+    for tree in (export, tmp_path / "smoke/target/.moradins-harness"):
+        assert "tracked edit" in (tree / "install/bootstrap-linux.sh").read_text(encoding="utf-8")
+        assert not (tree / "install/operator-notes.local").exists()
+        assert not (tree / "install/operator-notes").exists()
+        assert not (tree / "install/.env").exists()
+
+
+def test_archive_reexport_excludes_local_credentials_and_checks_extensionless_text(
+    tmp_path: Path,
+) -> None:
+    source = make_source_repo(tmp_path)
+    write(source / "install/.env.local", "private runtime configuration\n")
+    write(source / "install/.env.example", "EXAMPLE=placeholder\n")
+    write(source / "install/session.jsonl", "private session data\n")
+    write(source / "install/wrapper", forbidden_reference_samples()[0])
+
+    export = tmp_path / "public"
+    payload = export_public_tree(source, export, init_git=True)
+
+    assert payload["status"] == "fail"
+    assert any(hit["path"] == "install/wrapper" for hit in payload["forbidden_hits"])
+    assert not (export / ".git").exists()
+    assert not (export / "install/.env.local").exists()
+    assert not (export / "install/session.jsonl").exists()
+    assert (export / "install/.env.example").is_file()
 
 
 def test_sidecar_smoke_preserves_root_files_and_scans_sidecar(tmp_path: Path) -> None:

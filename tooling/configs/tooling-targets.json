@@ -165,7 +165,6 @@
       "manager": "uv",
       "source": "repo_files_or_commands",
       "markers": [
-        ".venv/bin/python",
         "pyproject.toml",
         "uv.lock"
       ],

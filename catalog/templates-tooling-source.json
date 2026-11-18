@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "source_repository": "templates-deck",
-  "source_revision": "d68d72e8bdcf3c251f217c217c91aed6131df843",
+  "source_revision": "631fb49d90f63d9b7daa8bc888e5cf5b1a550164",
   "source_revision_state": "clean",
   "files": {
     "catalog/workstation-tools.toml": "0ee216527ed85447033cafeb2fa1fb48750e94e09eb1f02dc6e9463d10eb8ece",

@@ -55,7 +55,5 @@ provenance; other dependency platforms remain unverified. User-owned Node code
 is never executed as root. Missing or partial execution is not readiness. Rollback preserves failed-generation evidence and
 refuses unexpected destination drift.
 
-GB10's local control plane and frozen release intake remain owner-controlled.
-Pulling this review branch alone does not change a vendored release or authorize
-privileged activation. Publish verified commits and digests for that session's
-native intake.
+Managed fleets can qualify a pinned Forge commit using their own release intake
+and approval process. A developer branch is suitable for review and testing.
