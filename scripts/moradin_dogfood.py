@@ -268,13 +268,14 @@ def write_spdx_sbom(
     source_sha: str,
     *,
     created_at: str | None = None,
+    release_version: str = RELEASE_VERSION,
 ) -> dict[str, Any]:
     root_id = "SPDXRef-Package-moradins-forge"
     packages: list[dict[str, Any]] = [
         {
             "SPDXID": root_id,
             "name": "moradins-forge",
-            "versionInfo": RELEASE_VERSION.removeprefix("v"),
+            "versionInfo": release_version.removeprefix("v"),
             "downloadLocation": "NOASSERTION",
             "filesAnalyzed": False,
             "licenseConcluded": "NOASSERTION",
@@ -319,7 +320,7 @@ def write_spdx_sbom(
         "spdxVersion": "SPDX-2.3",
         "dataLicense": "CC0-1.0",
         "SPDXID": "SPDXRef-DOCUMENT",
-        "name": f"moradins-forge-{RELEASE_VERSION}",
+        "name": f"moradins-forge-{release_version}",
         "documentNamespace": f"https://github.com/frisco-deng/moradins-forge/sbom/{source_sha}",
         "creationInfo": {
             "created": created_at or utc_now(),
@@ -333,9 +334,9 @@ def write_spdx_sbom(
     return {"path": output_path.name, "sha256": sha256_file(output_path), "package_count": len(packages)}
 
 
-def create_deterministic_archive(source_root: Path, archive_path: Path) -> str:
+def create_deterministic_archive(source_root: Path, archive_path: Path, *, release_version: str = RELEASE_VERSION) -> str:
     archive_path.parent.mkdir(parents=True, exist_ok=True)
-    prefix = f"moradins-forge-{RELEASE_VERSION.removeprefix('v')}"
+    prefix = f"moradins-forge-{release_version.removeprefix('v')}"
 
     def normalize(info: tarfile.TarInfo) -> tarfile.TarInfo:
         info.uid = 0
@@ -367,10 +368,11 @@ def write_release_artifacts(
     *,
     created_at: str | None = None,
     evidence_path: str = "../operator-result.json",
+    release_version: str = RELEASE_VERSION,
 ) -> dict[str, Any]:
     release_root.mkdir(parents=True, exist_ok=True)
-    archive_path = release_root / f"moradins-forge-{RELEASE_VERSION.removeprefix('v')}.tar.gz"
-    sbom_path = release_root / f"moradins-forge-{RELEASE_VERSION.removeprefix('v')}.spdx.json"
+    archive_path = release_root / f"moradins-forge-{release_version.removeprefix('v')}.tar.gz"
+    sbom_path = release_root / f"moradins-forge-{release_version.removeprefix('v')}.spdx.json"
     with tempfile.TemporaryDirectory(prefix="moradin-public-export-") as temporary:
         export_root = Path(temporary) / "public-tree"
         export = export_public_tree(repo_root, export_root, force=False, init_git=False)
@@ -379,18 +381,41 @@ def write_release_artifacts(
         audit_root = export_root / PUBLIC_AUDIT_DIRNAME
         if audit_root.exists():
             shutil.rmtree(audit_root)
-        archive_sha = create_deterministic_archive(export_root, archive_path)
+        tooling_source = export_root / "catalog/templates-tooling-source.json"
+        shared_tooling = None
+        if tooling_source.is_file():
+            from scripts.lib.dev_tools_catalog import PAYLOAD
+
+            receipt = json.loads(tooling_source.read_bytes())
+            if (receipt.get("source_repository") != "templates-deck"
+                    or set(receipt.get("files", {})) != set(PAYLOAD)
+                    or any(not (export_root / name).is_file()
+                           or (export_root / name).is_symlink()
+                           or sha256_file(export_root / name) != receipt["files"][name] for name in PAYLOAD)):
+                raise ForgeError("portable shared tooling payload differs from its source receipt")
+            if release_version != RELEASE_VERSION and (receipt.get("source_revision_state") != "clean"
+                         or not re.fullmatch(r"[a-f0-9]{40}", receipt.get("source_revision") or "")):
+                raise ForgeError("review candidate requires clean shared tooling source provenance")
+            shared_tooling = {"source_revision": receipt.get("source_revision"),
+                              "source_receipt_sha256": sha256_file(tooling_source),
+                              "file_count": len(PAYLOAD)}
+        elif release_version != RELEASE_VERSION:
+            raise ForgeError("review candidate lacks shared tooling provenance")
+        archive_sha = create_deterministic_archive(export_root, archive_path, release_version=release_version)
         copied_file_count = export["copied_file_count"]
     sbom = write_spdx_sbom(
         repo_root,
         sbom_path,
         source_sha,
         created_at=created_at,
+        release_version=release_version,
     )
     manifest_path = release_root / "release-manifest.json"
     manifest = {
         "schema_version": 1,
-        "release": RELEASE_VERSION,
+        "release": release_version,
+        **({"shared_tooling": shared_tooling} if shared_tooling else {}),
+        **({"review_candidate": True} if release_version != RELEASE_VERSION else {}),
         "source_sha": source_sha,
         "previous_release": ROLLBACK_ANCHOR,
         "archive": {"path": archive_path.name, "sha256": archive_sha},
@@ -423,11 +448,15 @@ def run_dogfood(
     *,
     release_output: Path | None = None,
     allow_dirty: bool = False,
+    review_candidate: bool = False,
 ) -> dict[str, Any]:
     repo_root = repo_root.resolve()
     output_root = output_root.resolve()
     release_root, separate_release_output = resolve_release_output(output_root, release_output)
     git = git_identity(repo_root)
+    if review_candidate and (allow_dirty or not separate_release_output):
+        raise ForgeError("review candidate requires clean source and an explicit release output directory")
+    release_version = f"{RELEASE_VERSION}.review.{git['head_sha']}" if review_candidate else RELEASE_VERSION
     if not git["clean"] and not allow_dirty:
         raise ForgeError("dogfood evidence requires a clean worktree")
     validate_owned_output(
@@ -469,6 +498,7 @@ def run_dogfood(
         git["head_sha"],
         created_at=git_commit_timestamp(repo_root, git["head_sha"]),
         evidence_path=evidence_path,
+        release_version=release_version,
     )
     shutil.rmtree(work_root)
     cleanup_passed = not work_root.exists()
@@ -539,6 +569,7 @@ def build_parser() -> argparse.ArgumentParser:
             "the default keeps a nested copy under the dogfood output."
         ),
     )
+    parser.add_argument("--review-candidate", action="store_true", help="Build a commit-identified review artifact in a separate output directory.")
     parser.add_argument("--allow-dirty", action="store_true", help="Write diagnostic, non-promotable evidence.")
     parser.add_argument("--json", action="store_true")
     return parser
@@ -552,6 +583,7 @@ def main(argv: list[str] | None = None) -> int:
             args.output,
             release_output=args.release_output,
             allow_dirty=args.allow_dirty,
+            review_candidate=args.review_candidate,
         )
     except (ForgeError, OSError, subprocess.CalledProcessError, ValueError) as error:
         print(f"moradin-dogfood: {error}")

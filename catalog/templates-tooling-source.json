@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source_repository": "templates-deck",
-  "source_revision": "631fb49d90f63d9b7daa8bc888e5cf5b1a550164",
+  "source_revision": "e6380faf58884fab90af6ad1fdc9a7d12bb3b3c3",
   "source_revision_state": "clean",
   "files": {
     "catalog/workstation-tools.toml": "0ee216527ed85447033cafeb2fa1fb48750e94e09eb1f02dc6e9463d10eb8ece",
-    "scripts/setup-dev-tools": "ffa2ae063014bea4c09690f2bf5ec4ce7fabc6e766b6c341ad7805a4f65dedb7",
-    "scripts/lib/dev_tools_catalog.py": "d8b1aa794f4c0bfbd248c4b62da142e2e766976b58d71eaf63ca37e1c536c5ae",
-    "scripts/lib/dev_tools_doctor.py": "1057ceba3a277c93365e9cd801c0a4199706cc9c6f41ad6645fce7aa68ced503",
+    "scripts/setup-dev-tools": "ca9cdc959bfeb6b55c5dff2c7a599eb72357c02af44e2a1e03083afeae7c4a5c",
+    "scripts/lib/dev_tools_catalog.py": "b1da42055435b02d628ff133d0a897e324944f7a22567f528274555f6ac560b4",
+    "scripts/lib/dev_tools_doctor.py": "b73bcfec8949b7852e634bd816c89e5fc87da86553d1cd617e48f3c79c7caade",
     "scripts/lib/dev_tools_ui.py": "9b2a9c6c815178ccbcfcffb877160aec6d65b41b55e54b5eea9bdbdf3f4e3e9f",
     "scripts/lib/dev_tools_runtime.py": "52b196cf5be558fa31e90a89489f7622f84754c5ae20f267d7e85d89733dd548",
     "scripts/lib/dev_tools_acceptance.py": "daaccadea7b7aceb5985d7c6daf7bdc0e8a768fefa491258e3ecdeb87f699aaf",

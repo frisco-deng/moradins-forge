@@ -72,6 +72,18 @@ def test_archive_is_deterministic_and_has_portable_root(tmp_path: Path) -> None:
     assert docs.mode == 0o755
 
 
+def test_review_candidate_rejects_dirty_override_and_missing_explicit_output(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(dogfood, "git_identity", lambda _: {"clean": True, "head_sha": "a" * 40})
+    with pytest.raises(ForgeError, match="explicit release output"):
+        dogfood.run_dogfood(tmp_path, tmp_path / "dogfood", review_candidate=True)
+    with pytest.raises(ForgeError, match="clean source"):
+        dogfood.run_dogfood(
+            tmp_path, tmp_path / "dogfood", release_output=tmp_path / "release",
+            allow_dirty=True, review_candidate=True,
+        )
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_spdx_sbom_uses_exact_lockfile_versions(tmp_path: Path) -> None:
     (tmp_path / "dev_tracker/ui").mkdir(parents=True)
     (tmp_path / "uv.lock").write_text(

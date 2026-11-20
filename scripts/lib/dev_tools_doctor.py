@@ -34,6 +34,8 @@ def command_check(spec, pins, timeout=5):
         "upstream_freshness": "unverified",
         "runtime_execution": "not_tested",
         "integrity": "not_established_by_version_probe",
+        "feed_freshness": "not_assessed" if spec["id"] in {"trivy", "grype", "osv_scanner", "semgrep", "conftest"} else "not_applicable",
+        "execution_coverage": "version_probe_only" if executable else "unavailable",
     }
     row["remediation_command"] = (
         "setup-dev-tools plan --custom --select "
