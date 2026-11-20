@@ -10,7 +10,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts/lib"))
-from dev_tools_catalog import load, materialize  # noqa: E402 - portable checkout bootstrap
+from dev_tools_catalog import distribution_status, load, materialize  # noqa: E402 - portable checkout bootstrap
 from dev_tools_doctor import doctor  # noqa: E402 - portable checkout bootstrap
 from dev_tools_ui import plan, apply, verify, rollback, smoke  # noqa: E402 - portable checkout bootstrap
 
@@ -48,6 +48,7 @@ def main(argv=None):
             "ui-rollback",
             "ui-smoke",
             "materialize",
+            "distribution-status",
             "install-launcher",
             "launcher-rollback",
         ],
@@ -76,6 +77,9 @@ def main(argv=None):
     parser.add_argument("--prior-plan", type=Path)
     parser.add_argument("--approve-receipt-sha256")
     parser.add_argument("--target-root", type=Path)
+    parser.add_argument("--release-manifest", type=Path)
+    parser.add_argument("--downstream-lock", type=Path)
+    parser.add_argument("--intake-evidence", type=Path)
     parser.add_argument("--destination", type=Path)
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--json", action="store_true")
@@ -83,6 +87,8 @@ def main(argv=None):
     if (args.review or args.upgrade) and args.action:
         parser.error("choose --review, --upgrade, or an advanced action")
     args.action = args.action or ("upgrade" if args.upgrade else "review")
+    if args.action != "distribution-status" and (args.release_manifest or args.downstream_lock or args.intake_evidence):
+        parser.error("release comparison options require distribution-status")
     if args.action in {"review", "upgrade"}:
         advanced = [
             name
@@ -164,6 +170,9 @@ def main(argv=None):
     elif args.action == "materialize":
         need("target_root")
         result = materialize(ROOT, args.target_root, apply=args.apply)
+    elif args.action == "distribution-status":
+        need("release_manifest")
+        result = distribution_status(ROOT, args.release_manifest, args.downstream_lock, args.intake_evidence)
     elif args.action == "ui-plan":
         need("ui_profile", "output")
         native()

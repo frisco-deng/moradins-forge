@@ -43,6 +43,20 @@ The beta.3 release directory contains exactly:
 The hidden `.moradin-release-output.json` ownership marker is not part of the
 checksummed release set.
 
+For an isolated downstream intake review, build an artifact from a clean
+candidate commit with an explicit output directory:
+
+```sh
+PYTHONPATH=. uv run python scripts/moradin_dogfood.py --review-candidate \
+  --output artifacts/candidate-dogfood --release-output artifacts/candidate-release
+```
+
+The package appends `.review.<commit>` to the release identity and marks it as a
+review candidate in the manifest. The public export must contain the complete
+shared tooling payload and its hash-bound Templates source receipt. Review
+packages are for staged intake and portability checks. Published release pins
+and facility promotion retain their native approval and acceptance paths.
+
 ## Ownership and Reproducibility
 
 Forge replaces output only when the expected ownership marker is valid.
